@@ -142,6 +142,21 @@ app.add_middleware(
 def startup_init_store():
     ensure_db()
 
+def _cors_json_response(request: Request, status_code: int, detail: str) -> JSONResponse:
+    resp = JSONResponse(status_code=status_code, content={"detail": detail})
+    origin = (request.headers.get("origin") or "").strip()
+    if not origin:
+        return resp
+    if "*" in allow_origins:
+        resp.headers.setdefault("Access-Control-Allow-Origin", "*")
+        resp.headers.setdefault("Access-Control-Allow-Credentials", "true")
+        return resp
+    if origin in allow_origins:
+        resp.headers.setdefault("Access-Control-Allow-Origin", origin)
+        resp.headers.setdefault("Access-Control-Allow-Credentials", "true")
+        resp.headers.setdefault("Vary", "Origin")
+    return resp
+
 def _has_valid_admin_token(request: Request) -> bool:
     expected = os.getenv("OPCLAB_ADMIN_TOKEN", "").strip()
     if not expected:
@@ -169,15 +184,9 @@ async def auth_identity_middleware(request: Request, call_next):
     if enforce_allowlist and not _should_bypass_allowlist(request):
         email = (identity.email or "").strip().lower()
         if not email:
-            return JSONResponse(
-                status_code=403,
-                content={"detail": "Invite-only mode requires email identity."},
-            )
+            return _cors_json_response(request, 403, "Invite-only mode requires email identity.")
         if not is_invite_allowed(email):
-            return JSONResponse(
-                status_code=403,
-                content={"detail": "This account is not allowlisted for staging."},
-            )
+            return _cors_json_response(request, 403, "This account is not allowlisted for staging.")
         invite = get_invite_allowlist(email)
         if invite is not None:
             existing = get_user_entitlement(identity.user_id)
