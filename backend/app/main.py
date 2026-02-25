@@ -140,11 +140,18 @@ app.add_middleware(
 def startup_init_store():
     ensure_db()
 
+def _should_bypass_allowlist(request: Request) -> bool:
+    # Keep CORS preflight and liveness probe reachable regardless of invite state.
+    if request.method.upper() == "OPTIONS":
+        return True
+    normalized_path = request.url.path.rstrip("/") or "/"
+    return normalized_path == "/health"
+
 @app.middleware("http")
 async def auth_identity_middleware(request: Request, call_next):
     identity = resolve_auth_identity(request)
     enforce_allowlist = os.getenv("AUTH_ENFORCE_ALLOWLIST", "0").strip() == "1"
-    if enforce_allowlist:
+    if enforce_allowlist and not _should_bypass_allowlist(request):
         email = (identity.email or "").strip().lower()
         if not email:
             raise HTTPException(status_code=403, detail="Invite-only mode requires email identity.")
