@@ -1115,6 +1115,16 @@ export function ControlPanel(props: {
           <div className="trust-links-row" style={{ marginTop: 8 }}>
             <a href="/opclab/revenue-dashboard" className="trust-link-mini">Revenue Dashboard</a>
           </div>
+          <div className="creator-credit-card">
+            <div className="creator-credit-head">© 2026 Min-Cheol Lee</div>
+            <div className="creator-credit-links">
+              <a href="mailto:mincheol.chris.lee@gmail.com">email</a>
+              <span className="creator-credit-sep" aria-hidden="true">/</span>
+              <a href="https://www.linkedin.com/in/min-cheol-lee/" target="_blank" rel="noreferrer">linkedin</a>
+              <span className="creator-credit-sep" aria-hidden="true">/</span>
+              <a href="https://mincheollee.com" target="_blank" rel="noreferrer">mincheollee.com</a>
+            </div>
+          </div>
         </div>
       </div>
     </div>

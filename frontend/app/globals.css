@@ -515,27 +515,27 @@ select:focus {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(245, 249, 255, 0.86));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
   padding: 7px 8px;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
-  gap: 8px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  gap: 0;
   font-size: 11px;
   color: rgba(22, 36, 56, 0.8);
 }
 
-
-
 .plan-metrics-inline span {
+  display: inline-flex;
+  align-items: center;
   min-width: 0;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .plan-metrics-inline span + span {
   position: relative;
-  padding-left: 11px;
+  margin-left: 7px;
+  padding-left: 10px;
 }
 
 .plan-metrics-inline span + span::before {
@@ -1538,6 +1538,51 @@ input[type="range"] {
 .trust-link-mini:hover {
   border-color: rgba(10, 132, 255, 0.5);
   background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(224, 240, 255, 0.96));
+}
+
+.creator-credit-card {
+  margin: 10px 2px 0;
+  border: 1px solid rgba(30, 46, 70, 0.18);
+  border-radius: 11px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(246, 250, 255, 0.9));
+  padding: 8px 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.creator-credit-head {
+  font-size: 11px;
+  font-weight: 640;
+  color: rgba(17, 34, 56, 0.82);
+  letter-spacing: 0.01em;
+}
+
+.creator-credit-links {
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.creator-credit-links a {
+  color: rgba(32, 58, 94, 0.86);
+  font-size: 11px;
+  font-weight: 560;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(32, 58, 94, 0.2);
+}
+
+.creator-credit-links a:hover {
+  color: #0a5ac4;
+  border-bottom-color: rgba(10, 90, 196, 0.45);
+}
+
+.creator-credit-sep {
+  color: rgba(44, 62, 90, 0.42);
+  font-size: 10px;
+  line-height: 1;
 }
 
 .analysis-wrap {
