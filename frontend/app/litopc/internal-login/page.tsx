@@ -1,36 +1,37 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { getAccessToken, getDevEmail, getDevUserId, setAccessToken, setDevEmail, setDevUserId } from "../../../lib/auth";
 
 export default function InternalLoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [userId, setUserId] = useState("");
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [returnTo, setReturnTo] = useState("/litopc");
 
   useEffect(() => {
     setUserId(getDevUserId() ?? "");
     setEmail(getDevEmail() ?? "");
     setToken(getAccessToken() ?? "");
-    const reason = (searchParams.get("reason") || "").trim();
+    const params = new URLSearchParams(window.location.search);
+    const reason = (params.get("reason") || "").trim();
+    const nextUrl = (params.get("return_to") || "/litopc").trim();
+    setReturnTo(nextUrl.startsWith("/") ? nextUrl : "/litopc");
     if (reason === "billing_email_required") {
       setMessage("Billing checkout requires a tester email. Save an email identity to continue.");
     }
-  }, [searchParams]);
+  }, []);
 
   function saveAndContinue() {
     const uid = userId.trim();
-    const returnTo = (searchParams.get("return_to") || "/litopc").trim();
-    const nextUrl = returnTo.startsWith("/") ? returnTo : "/litopc";
     setDevUserId(uid);
     setDevEmail(email.trim());
     setAccessToken(token.trim());
     setMessage("Saved. Redirecting to simulator...");
-    window.setTimeout(() => router.push(nextUrl), 240);
+    window.setTimeout(() => router.push(returnTo), 240);
   }
 
   function clearSession() {
