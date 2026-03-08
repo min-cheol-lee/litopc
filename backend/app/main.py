@@ -3,6 +3,7 @@ import math
 import re
 import json
 import hmac
+import hashlib
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from urllib import error as urlerror, request as urlrequest
