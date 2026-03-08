@@ -1422,6 +1422,13 @@ export default function Page() {
     return url.toString();
   }
 
+  function redirectToInternalLogin(reason?: string) {
+    const url = new URL(`${window.location.origin}/litopc/internal-login`);
+    url.searchParams.set("return_to", `${window.location.pathname}${window.location.search}`);
+    if (reason) url.searchParams.set("reason", reason);
+    window.location.assign(url.toString());
+  }
+
   async function openBillingPortal(source: string) {
     setAccountError(null);
     try {
@@ -1438,6 +1445,14 @@ export default function Page() {
 
   async function startUpgradeCheckout(source: string) {
     setAccountError(null);
+    const currentUserId = currentEntitlement?.user_id ?? null;
+    const hasStoredDevEmail = Boolean(getDevEmail());
+    const hasAccessToken = Boolean(getAccessToken());
+    const isAnonymousSession = Boolean(currentUserId?.startsWith("cid:")) && !hasStoredDevEmail && !hasAccessToken;
+    if (isAnonymousSession) {
+      redirectToInternalLogin("billing_email_required");
+      return;
+    }
     try {
       const successUrl = buildLitopcReturnUrl({
         litopc_checkout: "success",
@@ -1450,7 +1465,12 @@ export default function Page() {
       const session = await createCheckoutSession(successUrl, cancelUrl);
       window.location.assign(session.url);
     } catch (err) {
-      setAccountError(err instanceof Error ? err.message : "Failed to start checkout.");
+      const message = err instanceof Error ? err.message : "Failed to start checkout.";
+      if (message.toLowerCase().includes("email identity")) {
+        redirectToInternalLogin("billing_email_required");
+        return;
+      }
+      setAccountError(message);
     }
   }
 
@@ -1473,6 +1493,7 @@ export default function Page() {
   const compareB = runHistory.find((r) => r.id === compareBId) ?? null;
   const compareActive = compareEnabled && !!compareA && !!compareB && compareA.id !== compareB.id;
   const templateOptions = (plan === "FREE" ? FREE_TEMPLATES : PRO_TEMPLATES).map((id) => ({ id, label: templateLabel(id) }));
+  const upgradeRequiresIdentity = Boolean(currentEntitlement?.user_id?.startsWith("cid:")) && !getDevEmail() && !getAccessToken();
 
   const touchDistance = (a: { clientX: number; clientY: number }, b: { clientX: number; clientY: number }) => {
     const dx = a.clientX - b.clientX;
@@ -1736,6 +1757,7 @@ export default function Page() {
         billingStatus={billingStatus?.subscription_status ?? null}
         billingRenewalAt={billingStatus?.current_period_end_utc ?? null}
         billingPortalAvailable={Boolean(billingStatus?.stripe_customer_id && billingStatus?.source === "stripe")}
+        upgradeRequiresIdentity={upgradeRequiresIdentity}
         accountError={accountError}
         onUpgradeIntent={(source) => { void startUpgradeCheckout(source); }}
         onManageBillingIntent={(source) => { void openBillingPortal(source); }}

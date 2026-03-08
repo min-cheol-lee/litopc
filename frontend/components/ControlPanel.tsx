@@ -146,6 +146,7 @@ export function ControlPanel(props: {
   billingStatus: string | null;
   billingRenewalAt: string | null;
   billingPortalAvailable: boolean;
+  upgradeRequiresIdentity: boolean;
   accountError: string | null;
   onUpgradeIntent: (source: string) => void;
   onManageBillingIntent: (source: string) => void;
@@ -258,12 +259,13 @@ export function ControlPanel(props: {
     accountUserId,
     accountSource,
     accountProExpiresAt,
-    billingStatus,
-    billingRenewalAt,
-    billingPortalAvailable,
-    accountError,
-    onUpgradeIntent,
-    onManageBillingIntent,
+  billingStatus,
+  billingRenewalAt,
+  billingPortalAvailable,
+  upgradeRequiresIdentity,
+  accountError,
+  onUpgradeIntent,
+  onManageBillingIntent,
   } = props;
 
   const [maskPresetName, setMaskPresetName] = useState("");
@@ -511,12 +513,14 @@ export function ControlPanel(props: {
                   title={
                     manageBillingVisible
                       ? "Open Stripe billing portal"
+                      : upgradeRequiresIdentity
+                        ? "Sign in with an email identity before starting checkout."
                       : upgradeLocked
                         ? "Pro is active. Billing portal is not available for this entitlement."
                         : "Start upgrade flow"
                   }
                 >
-                  {manageBillingVisible ? "Manage Billing" : upgradeLocked ? "Pro Active" : "Upgrade"}
+                  {manageBillingVisible ? "Manage Billing" : upgradeLocked ? "Pro Active" : upgradeRequiresIdentity ? "Sign in to upgrade" : "Upgrade"}
                 </button>
               </div>
 
