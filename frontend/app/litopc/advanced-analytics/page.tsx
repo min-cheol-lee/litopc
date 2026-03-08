@@ -55,7 +55,7 @@ export default function AdvancedAnalyticsPage() {
           }}
         >
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(20,34,54,0.64)" }}>
-            Controls (Skeleton)
+            Set-up (Skeleton)
           </div>
           <label>
             <div style={labelStyle}>Mode</div>

@@ -562,6 +562,7 @@ def _resolve_billing_status_for_user(user_id: str) -> BillingStatusResponse:
         stripe_customer_id=(sub["stripe_customer_id"] if sub else None) or (customer["stripe_customer_id"] if customer else None),
         stripe_subscription_id=sub["stripe_subscription_id"] if sub else None,
         subscription_status=sub["status"] if sub else None,
+        cancel_at_period_end=sub["cancel_at_period_end"] if sub else False,
         current_period_end_utc=sub["current_period_end_utc"] if sub else None,
         source=_billing_mode(),
     )
@@ -793,6 +794,7 @@ def _apply_billing_state(
     customer_id: str | None,
     subscription_id: str | None,
     status: str | None,
+    cancel_at_period_end: bool = False,
     period_end: str | None,
     email: str | None = None,
 ) -> None:
@@ -804,6 +806,7 @@ def _apply_billing_state(
             stripe_subscription_id=subscription_id,
             stripe_customer_id=customer_id,
             status=status,
+            cancel_at_period_end=cancel_at_period_end,
             current_period_end_utc=period_end,
         )
     if status in {"active", "trialing", "past_due"}:
@@ -818,6 +821,7 @@ def _handle_stripe_event(event_type: str, obj: dict[str, object]) -> None:
     subscription_id: str | None = None
     email: str | None = None
     status: str | None = None
+    cancel_at_period_end = False
     period_end: str | None = None
 
     if event_type == "checkout.session.completed":
@@ -836,6 +840,7 @@ def _handle_stripe_event(event_type: str, obj: dict[str, object]) -> None:
     elif event_type == "customer.subscription.updated":
         subscription_id = obj.get("id") if isinstance(obj.get("id"), str) else None
         status = str(obj.get("status") or "").strip().lower() or None
+        cancel_at_period_end = bool(obj.get("cancel_at_period_end"))
         period_end = _stripe_period_end_from_object(obj)
     elif event_type == "customer.subscription.deleted":
         subscription_id = obj.get("id") if isinstance(obj.get("id"), str) else None
@@ -861,6 +866,7 @@ def _handle_stripe_event(event_type: str, obj: dict[str, object]) -> None:
         customer_id=customer_id,
         subscription_id=subscription_id,
         status=status,
+        cancel_at_period_end=cancel_at_period_end,
         period_end=period_end,
         email=email,
     )
@@ -873,6 +879,7 @@ def _handle_stripe_event(event_type: str, obj: dict[str, object]) -> None:
         meta={
             "event_type": event_type,
             "status": status or "none",
+            "cancel_at_period_end": "true" if cancel_at_period_end else "false",
             "customer_id": customer_id or "",
             "subscription_id": subscription_id or "",
         },
@@ -1247,6 +1254,7 @@ def billing_webhook_mock(payload: BillingWebhookMockRequest, request: Request):
         stripe_subscription_id=subscription_id,
         stripe_customer_id=customer_id,
         status=effective_status,
+        cancel_at_period_end=False,
         current_period_end_utc=period_end,
     )
 

@@ -144,6 +144,7 @@ export function ControlPanel(props: {
   accountSource: string | null;
   accountProExpiresAt: string | null;
   billingStatus: string | null;
+  billingCancelAtPeriodEnd: boolean;
   billingRenewalAt: string | null;
   billingPortalAvailable: boolean;
   upgradeRequiresIdentity: boolean;
@@ -259,9 +260,10 @@ export function ControlPanel(props: {
     accountUserId,
     accountSource,
     accountProExpiresAt,
-  billingStatus,
-  billingRenewalAt,
-  billingPortalAvailable,
+    billingStatus,
+    billingCancelAtPeriodEnd,
+    billingRenewalAt,
+    billingPortalAvailable,
   upgradeRequiresIdentity,
   accountError,
   onUpgradeIntent,
@@ -311,8 +313,11 @@ export function ControlPanel(props: {
   const upgradeLocked = plan === "PRO";
   const manageBillingVisible = billingPortalAvailable;
   const planIdentityLabel = accountUserId ?? "Anonymous session";
-  const planStatusLabel = billingStatus ?? (plan === "PRO" ? "active" : "none");
+  const planStatusLabel = billingCancelAtPeriodEnd
+    ? "canceling"
+    : (billingStatus ?? (plan === "PRO" ? "active" : "none"));
   const renewalLabel = (billingRenewalAt ?? accountProExpiresAt ?? "").replace("T", " ").slice(0, 16);
+  const renewalPrefix = billingCancelAtPeriodEnd ? "Ends" : "Renews";
   const internalTesterIdentity = Boolean(accountUserId?.startsWith("hdr:"));
   const legacyTesterPro = upgradeLocked && !manageBillingVisible && internalTesterIdentity && accountSource !== "stripe";
   const planActionLabel = manageBillingVisible
@@ -465,9 +470,9 @@ export function ControlPanel(props: {
         </div>
       )}
       <div className="panel-body panel-body-compact">
-        <div className="workspace-edit-dock-head control-panel-head">
-          <div className="workspace-edit-dock-eyebrow">Control</div>
-        </div>
+          <div className="workspace-edit-dock-head control-panel-head">
+            <div className="workspace-edit-dock-eyebrow">Set-up</div>
+          </div>
         <div className="group-card compact">
           <div className="plan-row">
             <span className="group-title-inline">Plan</span>
@@ -521,7 +526,7 @@ export function ControlPanel(props: {
                 <div className="plan-summary-chip-row">
                   <span className="plan-summary-chip">{planSourceLabel}</span>
                   <span className="plan-summary-chip">{planStatusLabel}</span>
-                  {renewalLabel && <span className="plan-summary-chip">{`Renews ${renewalLabel}`}</span>}
+                  {renewalLabel && <span className="plan-summary-chip">{`${renewalPrefix} ${renewalLabel}`}</span>}
                 </div>
               </div>
 
@@ -1049,17 +1054,31 @@ export function ControlPanel(props: {
             </div>
           </div>
           <div className="creator-profile-card">
-            <div className="creator-profile-head">
-              <div>
+            <div className="creator-profile-line">
+              <div className="creator-profile-title-wrap">
                 <div className="creator-profile-eyebrow">Creator</div>
                 <div className="creator-profile-name">Min-Cheol Lee</div>
               </div>
-              <div className="creator-profile-role">Software 쨌 Physics 쨌 OPC</div>
-            </div>
-            <div className="creator-profile-links">
-              <a href="mailto:mincheol.chris.lee@gmail.com">Email</a>
-              <a href="https://www.linkedin.com/in/min-cheol-lee/" target="_blank" rel="noreferrer">LinkedIn</a>
-              <a href="https://mincheollee.com" target="_blank" rel="noreferrer">Website</a>
+              <div className="creator-profile-links">
+                <a href="mailto:mincheol.chris.lee@gmail.com" aria-label="Email" title="Email">
+                  <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2.2" y="3.2" width="11.6" height="9.2" rx="2" />
+                    <path d="M3.2 4.5 8 8.2l4.8-3.7" />
+                  </svg>
+                </a>
+                <a href="https://www.linkedin.com/in/min-cheol-lee/" target="_blank" rel="noreferrer" aria-label="LinkedIn" title="LinkedIn">
+                  <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true">
+                    <path d="M3.2 5.7h2.1V13H3.2zM4.25 2.8a1.23 1.23 0 1 1 0 2.46 1.23 1.23 0 0 1 0-2.46Zm2.9 2.9h2v1c.36-.65 1.24-1.15 2.44-1.15 2.61 0 3.09 1.72 3.09 3.95V13h-2.1V9.98c0-.72-.01-1.66-1.01-1.66-1.02 0-1.18.79-1.18 1.61V13h-2.1z" />
+                  </svg>
+                </a>
+                <a href="https://mincheollee.com" target="_blank" rel="noreferrer" aria-label="Website" title="Website">
+                  <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="8" cy="8" r="5.6" />
+                    <path d="M2.8 8h10.4" />
+                    <path d="M8 2.4c1.52 1.42 2.45 3.43 2.45 5.6 0 2.17-.93 4.18-2.45 5.6-1.52-1.42-2.45-3.43-2.45-5.6 0-2.17.93-4.18 2.45-5.6Z" />
+                  </svg>
+                </a>
+              </div>
             </div>
           </div>
           <p className="small-note tiny-note resource-footnote">

@@ -94,6 +94,8 @@ const FOCUS_EDIT_VISIBLE_KEY = "litopc_focus_edit_visible_v1";
 const LEGACY_FOCUS_EDIT_VISIBLE_KEY = "opclab_focus_edit_visible_v1";
 const FOCUS_SURFACE_VISIBLE_KEY = "litopc_focus_surface_visible_v1";
 const LEGACY_FOCUS_SURFACE_VISIBLE_KEY = "opclab_focus_surface_visible_v1";
+const STUDIO_EDIT_VISIBLE_KEY = "litopc_studio_edit_visible_v1";
+const STUDIO_SURFACE_VISIBLE_KEY = "litopc_studio_surface_visible_v1";
 const WORKSPACE_SCALE_MIN = 0.78;
 const WORKSPACE_SCALE_MAX = 1.85;
 
@@ -234,7 +236,12 @@ export default function Page() {
   const [focusControlsVisible, setFocusControlsVisible] = useState(true);
   const [focusEditVisible, setFocusEditVisible] = useState(true);
   const [focusSurfaceVisible, setFocusSurfaceVisible] = useState(true);
+  const [studioEditVisible, setStudioEditVisible] = useState(true);
+  const [studioSurfaceVisible, setStudioSurfaceVisible] = useState(true);
   const [workspaceScale, setWorkspaceScale] = useState(1);
+  const [studioEditToggleLeft, setStudioEditToggleLeft] = useState<number | null>(null);
+  const shellWrapRef = useRef<HTMLDivElement | null>(null);
+  const workspaceScrollRef = useRef<HTMLDivElement | null>(null);
   const workspacePinchRef = useRef<{ startDistance: number; startScale: number } | null>(null);
 
   const grid = plan === "PRO" ? 768 : 512;
@@ -563,6 +570,14 @@ export default function Page() {
       if (surfaceRaw === "1" || surfaceRaw === "0") {
         setFocusSurfaceVisible(surfaceRaw === "1");
       }
+      const studioEditRaw = getFirstStoredValue(STUDIO_EDIT_VISIBLE_KEY);
+      if (studioEditRaw === "1" || studioEditRaw === "0") {
+        setStudioEditVisible(studioEditRaw === "1");
+      }
+      const studioSurfaceRaw = getFirstStoredValue(STUDIO_SURFACE_VISIBLE_KEY);
+      if (studioSurfaceRaw === "1" || studioSurfaceRaw === "0") {
+        setStudioSurfaceVisible(studioSurfaceRaw === "1");
+      }
     } catch {
       // ignore local storage issues
     }
@@ -582,10 +597,12 @@ export default function Page() {
       window.localStorage.setItem(FOCUS_CONTROLS_VISIBLE_KEY, focusControlsVisible ? "1" : "0");
       window.localStorage.setItem(FOCUS_EDIT_VISIBLE_KEY, focusEditVisible ? "1" : "0");
       window.localStorage.setItem(FOCUS_SURFACE_VISIBLE_KEY, focusSurfaceVisible ? "1" : "0");
+      window.localStorage.setItem(STUDIO_EDIT_VISIBLE_KEY, studioEditVisible ? "1" : "0");
+      window.localStorage.setItem(STUDIO_SURFACE_VISIBLE_KEY, studioSurfaceVisible ? "1" : "0");
     } catch {
       // ignore local storage issues
     }
-  }, [workspaceMode, focusControlsVisible, focusEditVisible, focusSurfaceVisible]);
+  }, [workspaceMode, focusControlsVisible, focusEditVisible, focusSurfaceVisible, studioEditVisible, studioSurfaceVisible]);
 
   useEffect(() => {
     try {
@@ -1533,15 +1550,17 @@ export default function Page() {
   const isFocusMode = workspaceMode === "FOCUS";
   const isStudioMode = workspaceMode === "STUDIO";
   const sidebarVisible = isFocusMode ? focusControlsVisible : sidebarExpanded;
-  const surfacePanelActive = plan === "PRO" && focusSurfaceVisible;
+  const editPanelVisible = isFocusMode ? focusEditVisible : studioEditVisible;
+  const surfacePanelVisible = isFocusMode ? focusSurfaceVisible : studioSurfaceVisible;
+  const surfacePanelActive = plan === "PRO" && surfacePanelVisible;
+  const effectiveWorkspaceScale = isFocusMode ? workspaceScale : Math.min(workspaceScale, 1);
   const sidebarToggleLabel = sidebarVisible ? "Hide" : "Show";
   const sidebarToggleTitle = isFocusMode
-    ? (sidebarVisible ? "Hide controls overlay" : "Show controls overlay")
-    : (sidebarVisible ? "Hide controls panel" : "Show controls panel");
+    ? (sidebarVisible ? "Hide set-up overlay" : "Show set-up overlay")
+    : (sidebarVisible ? "Hide set-up panel" : "Show set-up panel");
   const sidebarToggleAria = isFocusMode
-    ? (sidebarVisible ? "Hide controls overlay" : "Show controls overlay")
-    : (sidebarVisible ? "Collapse left control panel" : "Expand left control panel");
-  const editPanelVisible = focusEditVisible;
+    ? (sidebarVisible ? "Hide set-up overlay" : "Show set-up overlay")
+    : (sidebarVisible ? "Collapse left set-up panel" : "Expand left set-up panel");
   const editToggleLabel = editPanelVisible ? "Hide" : "Show";
   const editToggleTitle = isFocusMode
     ? (editPanelVisible ? "Hide edit overlay" : "Show edit overlay")
@@ -1557,13 +1576,78 @@ export default function Page() {
     }
     setSidebarExpanded((v) => !v);
   };
-  const toggleEditDockPanel = () => setFocusEditVisible((v) => !v);
+  const toggleEditDockPanel = () => {
+    if (isFocusMode) {
+      setFocusEditVisible((v) => !v);
+      return;
+    }
+    setStudioEditVisible((v) => !v);
+  };
   const toggleSurfacePanel = () => {
     if (plan !== "PRO") return;
-    setFocusSurfaceVisible((v) => !v);
+    if (isFocusMode) {
+      setFocusSurfaceVisible((v) => !v);
+      return;
+    }
+    setStudioSurfaceVisible((v) => !v);
   };
 
   const canvasLeftInset = isFocusMode && sidebarVisible ? 382 : 0;
+
+  useEffect(() => {
+    if (isFocusMode) {
+      setStudioEditToggleLeft(null);
+      return;
+    }
+
+    let frame = 0;
+    const syncEditToggle = () => {
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const root = shellWrapRef.current;
+        if (!root || typeof window === "undefined") return;
+
+        const visibleEditSlot = root.querySelector(".viewport-edit-slot:not(.is-hidden)") as HTMLElement | null;
+        const visibleRightRail = root.querySelector(".viewport-side-stack:not(.is-hidden)") as HTMLElement | null;
+        const viewportFrame = root.querySelector(".viewport-frame") as HTMLElement | null;
+
+        const railRect = editPanelVisible
+          ? (visibleEditSlot?.getBoundingClientRect() ?? visibleRightRail?.getBoundingClientRect() ?? null)
+          : null;
+        const frameRect = viewportFrame?.getBoundingClientRect() ?? null;
+        const anchorX = editPanelVisible
+          ? (railRect ? railRect.left - 14 : ((frameRect?.right ?? window.innerWidth) + 2))
+          : ((frameRect?.right ?? window.innerWidth) - 2);
+        const clamped = Math.round(Math.max(14, Math.min(window.innerWidth - 14, anchorX)));
+
+        setStudioEditToggleLeft((prev) => (prev !== null && Math.abs(prev - clamped) < 1 ? prev : clamped));
+      });
+    };
+
+    syncEditToggle();
+
+    const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => syncEditToggle()) : null;
+    if (resizeObserver) {
+      if (shellWrapRef.current) resizeObserver.observe(shellWrapRef.current);
+      if (workspaceScrollRef.current) resizeObserver.observe(workspaceScrollRef.current);
+    }
+
+    const scrollEl = workspaceScrollRef.current;
+    scrollEl?.addEventListener("scroll", syncEditToggle, { passive: true });
+    window.addEventListener("resize", syncEditToggle);
+
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      resizeObserver?.disconnect();
+      scrollEl?.removeEventListener("scroll", syncEditToggle);
+      window.removeEventListener("resize", syncEditToggle);
+    };
+  }, [isFocusMode, editPanelVisible, surfacePanelVisible, sidebarVisible, effectiveWorkspaceScale]);
+
+  const studioEditToggleStyle = !isFocusMode && studioEditToggleLeft != null
+    ? { left: `${studioEditToggleLeft}px`, right: "auto", transform: "translate(-50%, -50%)" as const }
+    : undefined;
+
   const canvasModeHud = (
     <div className="canvas-mode-strip" role="toolbar" aria-label="Workspace and overlay panels">
       <div className="workspace-mode-switch" role="group" aria-label="Workspace mode">
@@ -1587,29 +1671,29 @@ export default function Page() {
           type="button"
           className={`workspace-mode-chip ${sidebarVisible ? "is-active" : ""}`}
           onClick={toggleSidebarPanel}
-          title={sidebarVisible ? "Hide control panel" : "Show control panel"}
-          aria-label={sidebarVisible ? "Hide control panel" : "Show control panel"}
+          title={sidebarVisible ? "Hide set-up panel" : "Show set-up panel"}
+          aria-label={sidebarVisible ? "Hide set-up panel" : "Show set-up panel"}
         >
-          Control
+          Set-up
         </button>
         <button
           type="button"
-          className={`workspace-mode-chip ${focusEditVisible ? "is-active" : ""}`}
+          className={`workspace-mode-chip ${editPanelVisible ? "is-active" : ""}`}
           onClick={toggleEditDockPanel}
-          title={focusEditVisible ? "Hide edit panel" : "Show edit panel"}
-          aria-label={focusEditVisible ? "Hide edit panel" : "Show edit panel"}
+          title={editPanelVisible ? "Hide edit panel" : "Show edit panel"}
+          aria-label={editPanelVisible ? "Hide edit panel" : "Show edit panel"}
         >
           Edit
         </button>
         <button
           type="button"
-          className={`workspace-mode-chip ${focusSurfaceVisible ? "is-active" : ""}`}
+          className={`workspace-mode-chip ${surfacePanelVisible ? "is-active" : ""}`}
           onClick={toggleSurfacePanel}
           disabled={plan !== "PRO"}
           title={plan !== "PRO"
             ? "3D panel is available on Pro."
-            : (focusSurfaceVisible ? "Hide 3D panel" : "Show 3D panel")}
-          aria-label={focusSurfaceVisible ? "Hide 3D panel" : "Show 3D panel"}
+            : (surfacePanelVisible ? "Hide 3D panel" : "Show 3D panel")}
+          aria-label={surfacePanelVisible ? "Hide 3D panel" : "Show 3D panel"}
         >
           3D
         </button>
@@ -1618,7 +1702,7 @@ export default function Page() {
   );
 
   return (
-    <div className={`litopc-shell-wrap ${sidebarVisible ? "" : "sidebar-collapsed"} ${editPanelVisible ? "" : "edit-collapsed"} ${surfacePanelActive ? "surface-visible" : ""} ${isFocusMode ? "is-focus-mode" : ""}`}>
+    <div ref={shellWrapRef} className={`litopc-shell-wrap ${sidebarVisible ? "" : "sidebar-collapsed"} ${editPanelVisible ? "" : "edit-collapsed"} ${surfacePanelActive ? "surface-visible" : ""} ${isFocusMode ? "is-focus-mode" : ""}`}>
       <button
         type="button"
         className="shell-sidebar-toggle"
@@ -1638,6 +1722,7 @@ export default function Page() {
         onClick={toggleEditDockPanel}
         aria-label={editToggleAria}
         title={editToggleTitle}
+        style={studioEditToggleStyle}
       >
         <span className="shell-sidebar-toggle-glyph">{editPanelVisible ? "▸" : "◂"}</span>
         <span className="shell-sidebar-toggle-label" aria-hidden="true">
@@ -1760,6 +1845,7 @@ export default function Page() {
         accountSource={currentEntitlement?.source ?? null}
         accountProExpiresAt={currentEntitlement?.pro_expires_at_utc ?? null}
         billingStatus={billingStatus?.subscription_status ?? null}
+        billingCancelAtPeriodEnd={Boolean(billingStatus?.cancel_at_period_end)}
         billingRenewalAt={billingStatus?.current_period_end_utc ?? null}
         billingPortalAvailable={billingPortalAvailable}
         upgradeRequiresIdentity={upgradeRequiresIdentity}
@@ -1770,13 +1856,20 @@ export default function Page() {
           />
         </div>
         <div
+          ref={workspaceScrollRef}
           className="litopc-workspace-scroll"
           onTouchStart={onWorkspaceTouchStart}
           onTouchMove={onWorkspaceTouchMove}
           onTouchEnd={onWorkspaceTouchEnd}
           onTouchCancel={onWorkspaceTouchEnd}
         >
-          <div className="litopc-workspace-inner" style={{ zoom: workspaceScale }}>
+          <div
+            className="litopc-workspace-inner"
+            style={{
+              zoom: effectiveWorkspaceScale,
+              minWidth: isFocusMode ? undefined : 0,
+            }}
+          >
             <Viewport
               sim={sim}
               req={req}
@@ -1859,8 +1952,8 @@ export default function Page() {
               sweepCompareALabel={compareA?.label ?? null}
               sweepCompareBLabel={compareB?.label ?? null}
               panelLayoutMode={isFocusMode ? "overlay" : "side"}
-              showEditDockPanel={focusEditVisible}
-              showSurfacePanel={focusSurfaceVisible}
+              showEditDockPanel={editPanelVisible}
+              showSurfacePanel={surfacePanelVisible}
               showMetricsFooter={!isStudioMode}
               canvasModeHud={canvasModeHud}
               canvasLeftInset={canvasLeftInset}

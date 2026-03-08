@@ -357,6 +357,7 @@ class BillingStatusResponse(BaseModel):
     stripe_customer_id: Optional[str] = None
     stripe_subscription_id: Optional[str] = None
     subscription_status: Optional[str] = None
+    cancel_at_period_end: bool = False
     current_period_end_utc: Optional[str] = None
     source: str = "none"
 

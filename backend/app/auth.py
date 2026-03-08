@@ -13,6 +13,10 @@ from fastapi import HTTPException, Request
 from .store import sanitize_user_id
 
 _TOKEN_RE = re.compile(r"^Bearer\s+(.+)$", re.IGNORECASE)
+_STRICT_HEADER_TESTER_EMAILS: dict[str, str] = {
+    "master": "master@opc-lab",
+    "tester1": "tester1@opc-lab",
+}
 
 
 @dataclass
@@ -29,6 +33,20 @@ def _header_first(request: Request, *names: str) -> str | None:
         if value:
             return value
     return None
+
+
+def _normalize_email(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    normalized = raw.strip().lower()
+    return normalized or None
+
+
+def _header_identity_requires_strict_email_match(user_id: str, email: str | None) -> bool:
+    required_email = _STRICT_HEADER_TESTER_EMAILS.get((user_id or "").strip().lower())
+    if not required_email:
+        return False
+    return _normalize_email(email) != required_email
 
 
 def _b64url_decode(segment: str) -> bytes:
@@ -104,12 +122,18 @@ def resolve_auth_identity(request: Request) -> AuthIdentity:
         header_user = sanitize_user_id(_header_first(request, "x-litopc-user-id", "x-opclab-user-id"))
         header_email = _header_first(request, "x-litopc-email", "x-opclab-email")
         if header_user:
-            return AuthIdentity(
-                user_id=f"hdr:{header_user}",
-                email=header_email.strip() if header_email else None,
-                source="header_user",
-                authenticated=False,
-            )
+            if _header_identity_requires_strict_email_match(header_user, header_email):
+                # Legacy internal Pro testers are keyed by a fixed user-id/email pair.
+                # Without the matching email, fall back to client-id identity so the
+                # reserved entitlement cannot be activated by user-id alone.
+                header_user = ""
+            else:
+                return AuthIdentity(
+                    user_id=f"hdr:{header_user}",
+                    email=_normalize_email(header_email),
+                    source="header_user",
+                    authenticated=False,
+                )
 
     client_id = sanitize_user_id(_header_first(request, "x-litopc-client-id", "x-opclab-client-id"))
     if client_id:

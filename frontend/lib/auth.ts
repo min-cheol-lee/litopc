@@ -5,10 +5,36 @@ const LEGACY_DEV_USER_ID_KEY = "opclab_user_id_v1";
 const DEV_EMAIL_KEY = "litopc_email_v1";
 const LEGACY_DEV_EMAIL_KEY = "opclab_email_v1";
 
-function getFirstLocalStorageValue(...keys: string[]): string | null {
+function safeLocalStorageGetItem(key: string): string | null {
   if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeLocalStorageRemoveItem(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Ignore storage failures in dev/test helpers.
+  }
+}
+
+function safeLocalStorageSetItem(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage failures in dev/test helpers.
+  }
+}
+
+function getFirstLocalStorageValue(...keys: string[]): string | null {
   for (const key of keys) {
-    const value = window.localStorage.getItem(key);
+    const value = safeLocalStorageGetItem(key);
     if (value) return value;
   }
   return null;
@@ -22,15 +48,14 @@ export function getAccessToken(): string | null {
 }
 
 export function setAccessToken(token: string): void {
-  if (typeof window === "undefined") return;
   const value = token.trim();
   if (!value) {
-    window.localStorage.removeItem(ACCESS_TOKEN_KEY);
-    window.localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
+    safeLocalStorageRemoveItem(ACCESS_TOKEN_KEY);
+    safeLocalStorageRemoveItem(LEGACY_ACCESS_TOKEN_KEY);
     return;
   }
-  window.localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
-  window.localStorage.setItem(ACCESS_TOKEN_KEY, value);
+  safeLocalStorageRemoveItem(LEGACY_ACCESS_TOKEN_KEY);
+  safeLocalStorageSetItem(ACCESS_TOKEN_KEY, value);
 }
 
 export function getDevUserId(): string | null {
@@ -41,15 +66,14 @@ export function getDevUserId(): string | null {
 }
 
 export function setDevUserId(userId: string): void {
-  if (typeof window === "undefined") return;
   const value = userId.trim();
   if (!value) {
-    window.localStorage.removeItem(DEV_USER_ID_KEY);
-    window.localStorage.removeItem(LEGACY_DEV_USER_ID_KEY);
+    safeLocalStorageRemoveItem(DEV_USER_ID_KEY);
+    safeLocalStorageRemoveItem(LEGACY_DEV_USER_ID_KEY);
     return;
   }
-  window.localStorage.removeItem(LEGACY_DEV_USER_ID_KEY);
-  window.localStorage.setItem(DEV_USER_ID_KEY, value);
+  safeLocalStorageRemoveItem(LEGACY_DEV_USER_ID_KEY);
+  safeLocalStorageSetItem(DEV_USER_ID_KEY, value);
 }
 
 export function getDevEmail(): string | null {
@@ -60,13 +84,12 @@ export function getDevEmail(): string | null {
 }
 
 export function setDevEmail(email: string): void {
-  if (typeof window === "undefined") return;
   const value = email.trim();
   if (!value) {
-    window.localStorage.removeItem(DEV_EMAIL_KEY);
-    window.localStorage.removeItem(LEGACY_DEV_EMAIL_KEY);
+    safeLocalStorageRemoveItem(DEV_EMAIL_KEY);
+    safeLocalStorageRemoveItem(LEGACY_DEV_EMAIL_KEY);
     return;
   }
-  window.localStorage.removeItem(LEGACY_DEV_EMAIL_KEY);
-  window.localStorage.setItem(DEV_EMAIL_KEY, value);
+  safeLocalStorageRemoveItem(LEGACY_DEV_EMAIL_KEY);
+  safeLocalStorageSetItem(DEV_EMAIL_KEY, value);
 }

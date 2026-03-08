@@ -69,6 +69,7 @@ class BillingSubscriptionRecord(TypedDict):
     stripe_customer_id: str | None
     stripe_subscription_id: str | None
     status: str | None
+    cancel_at_period_end: bool
     current_period_end_utc: str | None
     updated_at_utc: str
 
@@ -235,11 +236,23 @@ def ensure_db() -> None:
                     user_id TEXT NOT NULL,
                     stripe_customer_id TEXT,
                     status TEXT,
+                    cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
                     current_period_end_utc TEXT,
                     updated_at_utc TEXT NOT NULL
                 )
                 """
             )
+            columns = {
+                str(row["name"])
+                for row in conn.execute("PRAGMA table_info(billing_subscriptions)").fetchall()
+            }
+            if "cancel_at_period_end" not in columns:
+                conn.execute(
+                    """
+                    ALTER TABLE billing_subscriptions
+                    ADD COLUMN cancel_at_period_end INTEGER NOT NULL DEFAULT 0
+                    """
+                )
             conn.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_billing_subscriptions_user
@@ -861,7 +874,14 @@ def get_billing_subscription_by_user(user_id: str) -> BillingSubscriptionRecord 
     try:
         row = conn.execute(
             """
-            SELECT user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end_utc, updated_at_utc
+            SELECT
+                user_id,
+                stripe_customer_id,
+                stripe_subscription_id,
+                status,
+                cancel_at_period_end,
+                current_period_end_utc,
+                updated_at_utc
             FROM billing_subscriptions
             WHERE user_id = ?
             ORDER BY updated_at_utc DESC
@@ -878,6 +898,7 @@ def get_billing_subscription_by_user(user_id: str) -> BillingSubscriptionRecord 
         stripe_customer_id=row["stripe_customer_id"],
         stripe_subscription_id=row["stripe_subscription_id"],
         status=row["status"],
+        cancel_at_period_end=bool(row["cancel_at_period_end"]),
         current_period_end_utc=row["current_period_end_utc"],
         updated_at_utc=str(row["updated_at_utc"]),
     )
@@ -892,7 +913,14 @@ def get_billing_subscription_by_id(stripe_subscription_id: str) -> BillingSubscr
     try:
         row = conn.execute(
             """
-            SELECT user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end_utc, updated_at_utc
+            SELECT
+                user_id,
+                stripe_customer_id,
+                stripe_subscription_id,
+                status,
+                cancel_at_period_end,
+                current_period_end_utc,
+                updated_at_utc
             FROM billing_subscriptions
             WHERE stripe_subscription_id = ?
             """,
@@ -907,6 +935,7 @@ def get_billing_subscription_by_id(stripe_subscription_id: str) -> BillingSubscr
         stripe_customer_id=row["stripe_customer_id"],
         stripe_subscription_id=row["stripe_subscription_id"],
         status=row["status"],
+        cancel_at_period_end=bool(row["cancel_at_period_end"]),
         current_period_end_utc=row["current_period_end_utc"],
         updated_at_utc=str(row["updated_at_utc"]),
     )
@@ -917,6 +946,7 @@ def upsert_billing_subscription(
     stripe_subscription_id: str,
     stripe_customer_id: str | None = None,
     status: str | None = None,
+    cancel_at_period_end: bool = False,
     current_period_end_utc: str | None = None,
 ) -> BillingSubscriptionRecord:
     ensure_db()
@@ -932,16 +962,25 @@ def upsert_billing_subscription(
         conn.execute(
             """
             INSERT INTO billing_subscriptions
-            (stripe_subscription_id, user_id, stripe_customer_id, status, current_period_end_utc, updated_at_utc)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (
+                stripe_subscription_id,
+                user_id,
+                stripe_customer_id,
+                status,
+                cancel_at_period_end,
+                current_period_end_utc,
+                updated_at_utc
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(stripe_subscription_id) DO UPDATE SET
                 user_id = excluded.user_id,
                 stripe_customer_id = excluded.stripe_customer_id,
                 status = excluded.status,
+                cancel_at_period_end = excluded.cancel_at_period_end,
                 current_period_end_utc = excluded.current_period_end_utc,
                 updated_at_utc = excluded.updated_at_utc
             """,
-            (sub_id, uid, customer_id, st, current_period_end_utc, now),
+            (sub_id, uid, customer_id, st, int(cancel_at_period_end), current_period_end_utc, now),
         )
         conn.commit()
     finally:
@@ -951,6 +990,7 @@ def upsert_billing_subscription(
         stripe_customer_id=customer_id,
         stripe_subscription_id=sub_id,
         status=st,
+        cancel_at_period_end=bool(cancel_at_period_end),
         current_period_end_utc=current_period_end_utc,
         updated_at_utc=now,
     )

@@ -153,6 +153,7 @@ export function Viewport(props: {
   const [surfaceQuality, setSurfaceQuality] = useState<"FAST" | "FULL">("FULL");
   const dragStart = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
   const surfaceCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const viewportFrameRef = useRef<HTMLDivElement | null>(null);
   const contourDebugKeyRef = useRef<string>("");
   const surfaceDragRef = useRef<
     | { mode: "rotate"; x: number; y: number; az: number; el: number }
@@ -1118,6 +1119,19 @@ export function Viewport(props: {
   const overlayRailInset = overlayPanelsVisible ? `calc(${overlayRailWidth} + ${overlayRailGap})` : overlayRailGap;
   const mainCanvasLeftInset = `calc(10px + ${isCanvasLayout ? canvasLeftInset : 0}px)`;
   const canvasCommandRight = overlayRailInset;
+  const sideRailGap = isCanvasLayout ? "0px" : "8px";
+  const reserveBottomRightOverlayRail = isCanvasLayout && editDockVisible;
+  const miniPanelRight = surfaceAsBackground
+    ? (panelLayoutMode === "side" && !useOverlayRail ? `calc(-1 * (${sideRailWidth} + ${sideRailGap}))` : "10px")
+    : undefined;
+  const miniPanelTop = surfaceAsBackground
+    ? (panelLayoutMode === "side" && !useOverlayRail ? 0 : 14)
+    : undefined;
+  const floatingRightInset = reserveBottomRightOverlayRail ? overlayRailInset : "10px";
+  const floatingMaxWidth = reserveBottomRightOverlayRail
+    ? `calc(100% - ${mainCanvasLeftInset} - ${overlayRailInset} - 12px)`
+    : "calc(100% - 20px)";
+  const rulerFloatingMaxWidth = floatingMaxWidth;
 
   useEffect(() => {
     if (!canSwapSurfaceMain && surfaceSwapMain) setSurfaceSwapMain(false);
@@ -1151,17 +1165,22 @@ export function Viewport(props: {
 
   const renderSurfacePanel = (slot: "rail" | "main") => {
     const isMainSurface = slot === "main";
+    const isStudioMainSurface = isMainSurface && !isCanvasLayout;
     const panelTop = isMainSurface ? Math.max(12, canvasCommandHeight + 8) : 10;
     return (
       <div
         className="viewport-panel-shell viewport-panel-shell-3d"
         style={{
           position: isMainSurface ? "absolute" : "relative",
-          inset: isMainSurface ? -1 : undefined,
-          border: "none",
-          borderRadius: isMainSurface ? 0 : 16,
-          background: "transparent",
-          boxShadow: "none",
+          inset: isMainSurface ? (isCanvasLayout ? -1 : 0) : undefined,
+          border: isStudioMainSurface ? "1px solid rgba(122, 144, 176, 0.34)" : "none",
+          borderRadius: isMainSurface ? (isCanvasLayout ? 0 : 18) : 16,
+          background: isStudioMainSurface
+            ? "radial-gradient(168% 158% at 18% 2%, #334763 0%, #25364e 40%, #172538 78%, #121c2b 100%)"
+            : "transparent",
+          boxShadow: isStudioMainSurface
+            ? "inset 0 1px 0 rgba(244,248,255,0.12), inset 0 -38px 74px rgba(4,10,22,0.42), 0 16px 30px rgba(20,30,46,0.18)"
+            : "none",
           overflow: "hidden",
           height: isMainSurface ? twoDPanelHeight : surfacePanelHeight,
           display: "flex",
@@ -1183,7 +1202,7 @@ export function Viewport(props: {
             </div>
           </div>
         )}
-        {canSwapSurfaceMain && (
+        {canSwapSurfaceMain && (!isMainSurface || !surfaceAsBackground) && (
           <div className="panel-corner-actions" style={isMainSurface ? { top: panelTop + 2 } : undefined}>
             <button
               type="button"
@@ -1197,7 +1216,10 @@ export function Viewport(props: {
           </div>
         )}
         {!isMainSurface && surfacePanelVisible && (
-          <div className="panel-corner-actions panel-corner-actions-bottom-left">
+          <div
+            className="panel-corner-actions panel-corner-actions-bottom-left"
+            style={{ top: "auto", right: "auto", bottom: 12, left: 12, zIndex: 9 }}
+          >
             <button
               type="button"
               className={`panel-mini-control ${showSurfaceControls ? "is-active" : ""}`}
@@ -1215,12 +1237,12 @@ export function Viewport(props: {
           <canvas
             ref={surfaceCanvasRef}
             style={{
-              width: isMainSurface ? "calc(100% + 2px)" : "100%",
-              height: isMainSurface ? "calc(100% + 2px)" : "100%",
-              marginLeft: isMainSurface ? -1 : 0,
-              marginTop: isMainSurface ? -1 : 0,
+              width: isMainSurface && isCanvasLayout ? "calc(100% + 2px)" : "100%",
+              height: isMainSurface && isCanvasLayout ? "calc(100% + 2px)" : "100%",
+              marginLeft: isMainSurface && isCanvasLayout ? -1 : 0,
+              marginTop: isMainSurface && isCanvasLayout ? -1 : 0,
               border: isMainSurface ? "none" : "1px solid rgba(96,108,132,0.4)",
-              borderRadius: isMainSurface ? 0 : 16,
+              borderRadius: isMainSurface ? (isCanvasLayout ? 0 : 18) : 16,
               background:
                 "radial-gradient(168% 158% at 18% 2%, #334763 0%, #25364e 40%, #172538 78%, #121c2b 100%)",
               boxShadow: isMainSurface
@@ -1271,7 +1293,7 @@ export function Viewport(props: {
 
   const renderRightRailPanels = () => (
     <div
-      className={`viewport-side-stack ${useOverlayRail ? "viewport-side-stack-overlay" : ""} ${editDockVisible && !surfacePanelVisible ? "viewport-side-stack-edit-only" : ""} ${useOverlayRail && editDockVisible && !surfacePanelVisible ? "viewport-side-stack-overlay-edit-only" : ""} ${!editDockVisible && surfacePanelVisible ? "viewport-side-stack-no-edit" : ""} ${rightRailCollapsed ? "is-hidden" : ""}`}
+      className={`viewport-side-stack ${useOverlayRail ? "viewport-side-stack-overlay" : ""} ${useOverlayRail && isCanvasLayout ? "viewport-side-stack-overlay-canvas" : ""} ${useOverlayRail && !isCanvasLayout ? "viewport-side-stack-overlay-studio" : ""} ${editDockVisible && !surfacePanelVisible ? "viewport-side-stack-edit-only" : ""} ${useOverlayRail && editDockVisible && !surfacePanelVisible ? "viewport-side-stack-overlay-edit-only" : ""} ${!editDockVisible && surfacePanelVisible ? "viewport-side-stack-no-edit" : ""} ${rightRailCollapsed ? "is-hidden" : ""}`}
       style={useOverlayRail ? { width: rightRailCollapsed ? "0px" : overlayRailWidth, minWidth: rightRailCollapsed ? "0px" : overlayRailWidth, maxWidth: rightRailCollapsed ? "0px" : overlayRailWidth } : { width: rightRailCollapsed ? "0px" : sideRailWidth, minWidth: rightRailCollapsed ? "0px" : sideRailWidth, maxWidth: rightRailCollapsed ? "0px" : sideRailWidth }}
     >
       {surfacePanelVisible && !surfaceAsBackground && renderSurfacePanel("rail")}
@@ -1390,7 +1412,10 @@ export function Viewport(props: {
   };
 
   const rulerFloatingControl = showRulers ? (
-    <div className={`ruler-floating-box ${overlayPanelsVisible ? "has-overlay-rail" : ""}`} style={{ left: mainCanvasLeftInset, right: "auto" }}>
+    <div
+      className={`ruler-floating-box ${overlayPanelsVisible ? "has-overlay-rail" : ""}`}
+      style={{ left: mainCanvasLeftInset, right: "auto", maxWidth: rulerFloatingMaxWidth }}
+    >
       <div className="canvas-toolbar-group ruler-floating-group" aria-label="Ruler toolbox">
         <span className="ruler-floating-title"><ToolbarIcon kind="ruler" /> Ruler</span>
         <div className="ruler-floating-seg" role="group" aria-label="Ruler target">
@@ -1448,6 +1473,112 @@ export function Viewport(props: {
         </div>
         <span className="ruler-help-anchor" title={rulerKeyboardHelp} aria-label="Ruler keyboard help">?</span>
       </div>
+    </div>
+  ) : null;
+
+  const mainBottomRightStack = (showLegend || !surfaceAsBackground) ? (
+    <div
+      className="canvas-bottom-right-stack"
+      style={{
+        position: "absolute",
+        right: floatingRightInset,
+        bottom: 14,
+        zIndex: surfaceAsBackground ? 5 : 9,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-end",
+        gap: showLegend && !surfaceAsBackground ? 7 : 0,
+        maxWidth: floatingMaxWidth,
+        pointerEvents: "none",
+      }}
+    >
+      {!surfaceAsBackground && (
+        <div
+          className={`canvas-tech-text ${reserveBottomRightOverlayRail ? "has-overlay-rail" : ""}`}
+          style={{ position: "relative", right: "auto", bottom: "auto", top: "auto" }}
+        >
+          {sim ? `grid=${sim.grid_used} · nm/px=${sim.nm_per_pixel.toFixed(2)}` : "Run to simulate"}
+        </div>
+      )}
+      {showLegend && (
+        <div
+          className={`legend-card canvas-legend ${reserveBottomRightOverlayRail ? "has-overlay-rail" : ""}`}
+          style={{
+            position: "relative",
+            top: "auto",
+            bottom: "auto",
+            right: "auto",
+            left: "auto",
+            zIndex: 3,
+            margin: 0,
+            backdropFilter: "blur(10px)",
+            background: "linear-gradient(180deg, rgba(255,255,255,0.86), rgba(248,250,255,0.62))",
+            pointerEvents: "none",
+            display: "inline-flex",
+            alignItems: "center",
+            flexWrap: "wrap",
+            justifyContent: "flex-end",
+            rowGap: 4,
+            maxWidth: "100%",
+            fontSize: 12,
+            lineHeight: 1,
+            padding: "6px 9px",
+          }}
+        >
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 11, fontWeight: 560 }}>
+            <span
+              style={{
+                width: 16,
+                height: 8,
+                border: "1.2px solid #cc2d64",
+                borderRadius: 2,
+                background: "repeating-linear-gradient(-28deg, rgba(255,232,242,0.38) 0px, rgba(255,232,242,0.38) 2px, rgba(255,90,138,0.16) 2px, rgba(255,90,138,0.16) 8px)",
+              }}
+            />
+            Final Mask
+          </span>
+          {!!overlayAddPaths.length && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 11, fontWeight: 560 }}>
+              <span style={{ width: 16, height: 8, borderRadius: 2, background: "rgba(176,216,255,0.14)", border: "1px solid rgba(176,216,255,0.32)" }} />
+              Add
+            </span>
+          )}
+          {!!maskSubtractPaths.length && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 11, fontWeight: 560 }}>
+              <span style={{ width: 16, height: 8, borderRadius: 2, background: "rgba(22,42,74,0.18)", border: "1px solid rgba(124,162,228,0.44)" }} />
+              Subtract
+            </span>
+          )}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 11, fontWeight: 560 }}>
+            <span style={{ width: 16, height: 8, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+              <span style={{ width: "100%", borderTop: "1.6px solid #1f1f1f", display: "block", transform: "translateY(-0.5px)" }} />
+            </span>
+            <span style={{ transform: "translateY(-0.5px)", opacity: effectiveShowMainContour ? 1 : 0.45 }}>Contour</span>
+          </span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 560, opacity: showAerial ? 1 : 0.45 }}>
+            <span style={{ width: 16, height: 8, borderRadius: 2, background: "linear-gradient(90deg, rgba(92,225,230,0.65), rgba(255,69,58,0.62))" }} />
+            Aerial
+          </span>
+          {targetGuide && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginLeft: 11, fontWeight: 560, opacity: showTargetOverlay ? 1 : 0.45 }}>
+              <span style={{ width: 16, borderTop: "1.6px dashed rgba(98,242,214,0.95)" }} />
+              Target
+            </span>
+          )}
+          {compareActive && (
+            <>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginLeft: 11, fontWeight: 560 }}>
+                <span style={{ width: 16, borderTop: `1.6px dashed ${COMPARE_A_COLOR}` }} />
+                A
+              </span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginLeft: 8, fontWeight: 560 }}>
+                <span style={{ width: 16, borderTop: `1.6px dashed ${COMPARE_B_COLOR}` }} />
+                B
+              </span>
+            </>
+          )}
+        </div>
+      )}
     </div>
   ) : null;
 
@@ -1642,7 +1773,11 @@ export function Viewport(props: {
   );
 
   return (
-    <div className={`viewport-frame ${panelLayoutMode === "overlay" ? "viewport-frame-focus" : ""}`} style={{ display: "flex", flexDirection: "column", minHeight: 0, overflowY: "auto", overflowX: "hidden" }}>
+    <div
+      ref={viewportFrameRef}
+      className={`viewport-frame ${panelLayoutMode === "overlay" ? "viewport-frame-focus" : ""}`}
+      style={{ display: "flex", flexDirection: "column", minHeight: 0, overflowY: useOverlayRail ? "hidden" : "auto", overflowX: "hidden" }}
+    >
       <div
         className="viewport-panels-grid"
         style={{
@@ -1661,8 +1796,8 @@ export function Viewport(props: {
             className="viewport-panel-shell viewport-panel-shell-2d"
             style={{
               position: surfaceAsBackground ? "absolute" : "relative",
-              top: surfaceAsBackground ? 14 : undefined,
-              right: surfaceAsBackground ? 10 : undefined,
+              top: miniPanelTop,
+              right: miniPanelRight,
               left: surfaceAsBackground ? "auto" : undefined,
               width: surfaceAsBackground ? overlayRailWidth : "100%",
               height: surfaceAsBackground ? surfacePanelHeight : twoDPanelHeight,
@@ -1708,7 +1843,10 @@ export function Viewport(props: {
                   </button>
                 </div>
                 {surfacePanelVisible && (
-                  <div className="panel-corner-actions panel-corner-actions-bottom-left" style={{ zIndex: 9 }}>
+                  <div
+                    className="panel-corner-actions panel-corner-actions-bottom-left"
+                    style={{ top: "auto", right: "auto", bottom: 12, left: 12, zIndex: 9 }}
+                  >
                     <button
                       type="button"
                       className={`panel-mini-control ${showSurfaceControls ? "is-active" : ""}`}
@@ -1722,111 +1860,6 @@ export function Viewport(props: {
                   </div>
                 )}
               </>
-            )}
-            {(showLegend || !surfaceAsBackground) && (
-              <div
-                className="canvas-bottom-right-stack"
-                style={{
-                  position: surfaceAsBackground ? "fixed" : "absolute",
-                  right: overlayRailInset,
-                  bottom: 14,
-                  zIndex: surfaceAsBackground ? 12 : 9,
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "flex-end",
-                  gap: showLegend && !surfaceAsBackground ? 7 : 0,
-                  maxWidth: `calc(100% - ${mainCanvasLeftInset} - ${overlayRailInset} - 12px)`,
-                  pointerEvents: "none",
-                }}
-              >
-                {!surfaceAsBackground && (
-                  <div
-                    className={`canvas-tech-text ${overlayPanelsVisible ? "has-overlay-rail" : ""}`}
-                    style={{ position: "relative", right: "auto", bottom: "auto", top: "auto" }}
-                  >
-                    {sim ? `grid=${sim.grid_used} · nm/px=${sim.nm_per_pixel.toFixed(2)}` : "Run to simulate"}
-                  </div>
-                )}
-                {showLegend && (
-                  <div
-                    className={`legend-card canvas-legend ${overlayPanelsVisible ? "has-overlay-rail" : ""}`}
-                    style={{
-                      position: "relative",
-                      top: "auto",
-                      bottom: "auto",
-                      right: "auto",
-                      left: "auto",
-                      zIndex: surfaceAsBackground ? 12 : 3,
-                      margin: 0,
-                      backdropFilter: "blur(10px)",
-                      background: "linear-gradient(180deg, rgba(255,255,255,0.86), rgba(248,250,255,0.62))",
-                      pointerEvents: "none",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      flexWrap: "wrap",
-                      justifyContent: "flex-end",
-                      rowGap: 4,
-                      maxWidth: "100%",
-                      fontSize: 12,
-                      lineHeight: 1,
-                      padding: "6px 9px",
-                    }}
-                  >
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 11, fontWeight: 560 }}>
-                <span
-                  style={{
-                    width: 16,
-                    height: 8,
-                    border: "1.2px solid #cc2d64",
-                    borderRadius: 2,
-                    background: "repeating-linear-gradient(-28deg, rgba(255,232,242,0.38) 0px, rgba(255,232,242,0.38) 2px, rgba(255,90,138,0.16) 2px, rgba(255,90,138,0.16) 8px)",
-                  }}
-                />
-                Final Mask
-              </span>
-              {!!overlayAddPaths.length && (
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 11, fontWeight: 560 }}>
-                  <span style={{ width: 16, height: 8, borderRadius: 2, background: "rgba(176,216,255,0.14)", border: "1px solid rgba(176,216,255,0.32)" }} />
-                  Add
-                </span>
-              )}
-                {!!maskSubtractPaths.length && (
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 11, fontWeight: 560 }}>
-                    <span style={{ width: 16, height: 8, borderRadius: 2, background: "rgba(22,42,74,0.18)", border: "1px solid rgba(124,162,228,0.44)" }} />
-                    Subtract
-                  </span>
-                )}
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 11, fontWeight: 560 }}>
-                <span style={{ width: 16, height: 8, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-                  <span style={{ width: "100%", borderTop: "1.6px solid #1f1f1f", display: "block", transform: "translateY(-0.5px)" }} />
-                </span>
-                <span style={{ transform: "translateY(-0.5px)", opacity: effectiveShowMainContour ? 1 : 0.45 }}>Contour</span>
-              </span>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 560, opacity: showAerial ? 1 : 0.45 }}>
-                <span style={{ width: 16, height: 8, borderRadius: 2, background: "linear-gradient(90deg, rgba(92,225,230,0.65), rgba(255,69,58,0.62))" }} />
-                Aerial
-              </span>
-              {targetGuide && (
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginLeft: 11, fontWeight: 560, opacity: showTargetOverlay ? 1 : 0.45 }}>
-                  <span style={{ width: 16, borderTop: "1.6px dashed rgba(98,242,214,0.95)" }} />
-                  Target
-                </span>
-              )}
-              {compareActive && (
-                <>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginLeft: 11, fontWeight: 560 }}>
-                    <span style={{ width: 16, borderTop: `1.6px dashed ${COMPARE_A_COLOR}` }} />
-                    A
-                  </span>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginLeft: 8, fontWeight: 560 }}>
-                    <span style={{ width: 16, borderTop: `1.6px dashed ${COMPARE_B_COLOR}` }} />
-                    B
-                  </span>
-                </>
-              )}
-                  </div>
-                )}
-              </div>
             )}
           {!surfaceAsBackground && renderSweepStatusLine("2d")}
           {!surfaceAsBackground && editorTool === "PLACE_SRAF" && (
@@ -2433,10 +2466,11 @@ export function Viewport(props: {
           </svg>
         </div>
           {overlayPanelsMounted && (
-            <div className="viewport-overlay-panels">
+            <div className={`viewport-overlay-panels ${isCanvasLayout ? "viewport-overlay-panels-canvas" : "viewport-overlay-panels-studio"}`}>
               {renderRightRailPanels()}
             </div>
           )}
+          {mainBottomRightStack}
           {rulerFloatingControl}
           {showSurfaceControls && surfacePanelVisible && surfaceAsBackground && (
             <div
