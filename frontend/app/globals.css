@@ -882,6 +882,56 @@ select:focus {
   gap: 6px;
 }
 
+.plan-readonly-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plan-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(33, 49, 73, 0.18);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 247, 252, 0.95));
+  color: rgba(18, 32, 52, 0.82);
+  font-size: 12px;
+  font-weight: 640;
+}
+
+.plan-status-pill.is-pro {
+  border-color: rgba(10, 132, 255, 0.44);
+  background: linear-gradient(180deg, rgba(235, 246, 255, 0.98), rgba(214, 234, 255, 0.96));
+  color: rgba(11, 83, 154, 0.96);
+}
+
+.plan-status-note {
+  font-size: 10.5px;
+  font-weight: 620;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(30, 47, 71, 0.54);
+}
+
+.plan-utility-link {
+  color: rgba(34, 54, 82, 0.5);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  padding: 0 2px;
+  border-bottom: 1px solid rgba(34, 54, 82, 0.14);
+}
+
+.plan-utility-link:hover {
+  color: rgba(11, 83, 154, 0.88);
+  border-bottom-color: rgba(11, 83, 154, 0.28);
+}
+
 .plan-collapse-btn {
   min-width: 54px;
   border-radius: 999px;
@@ -918,7 +968,8 @@ select:focus {
 .plan-collapsed-secondary {
   font-size: 10px;
   color: rgba(24, 41, 64, 0.6);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 620;
+  letter-spacing: 0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -928,6 +979,71 @@ select:focus {
   margin-top: 7px;
   display: grid;
   gap: 8px;
+}
+
+.plan-summary-card {
+  border: 1px solid rgba(32, 46, 68, 0.14);
+  border-radius: 11px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(245, 249, 255, 0.84));
+  padding: 8px;
+  display: grid;
+  gap: 7px;
+}
+
+.plan-summary-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.plan-summary-k {
+  font-size: 10px;
+  font-weight: 650;
+  color: rgba(25, 41, 62, 0.58);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.plan-summary-v {
+  font-size: 11px;
+  font-weight: 640;
+  color: rgba(13, 30, 51, 0.9);
+  max-width: 70%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.plan-summary-v.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+}
+
+.plan-summary-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.plan-summary-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(32, 46, 68, 0.12);
+  background: rgba(255, 255, 255, 0.78);
+  color: rgba(21, 36, 57, 0.72);
+  font-size: 10.5px;
+  font-weight: 620;
+}
+
+.plan-governance-note {
+  font-size: 10.5px;
+  font-weight: 620;
+  color: rgba(32, 48, 72, 0.58);
+  letter-spacing: 0.01em;
 }
 
 .plan-metrics-inline {
@@ -1074,6 +1190,10 @@ select:focus {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
+}
+
+.plan-actions-grid-single {
+  grid-template-columns: 1fr;
 }
 
 .plan-action-btn {

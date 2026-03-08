@@ -5,6 +5,7 @@ import json
 import hmac
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
+from urllib import error as urlerror, request as urlrequest
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from fastapi import FastAPI, HTTPException, Request
@@ -578,6 +579,299 @@ def _validate_return_url(raw: str, field_name: str) -> str:
         raise HTTPException(status_code=400, detail=f"{field_name} must be an absolute http(s) URL.")
     return value
 
+
+def _stripe_secret_key() -> str:
+    key = _env_first("STRIPE_SECRET_KEY")
+    if not key:
+        raise HTTPException(status_code=503, detail="STRIPE_SECRET_KEY is not configured.")
+    return key
+
+
+def _stripe_webhook_secret() -> str:
+    secret = _env_first("STRIPE_WEBHOOK_SECRET")
+    if not secret:
+        raise HTTPException(status_code=503, detail="STRIPE_WEBHOOK_SECRET is not configured.")
+    return secret
+
+
+def _stripe_price_id(payload_price_id: str | None) -> str:
+    price_id = (payload_price_id or _env_first("STRIPE_PRICE_ID_PRO", "STRIPE_PRICE_ID_PRO_MONTHLY")).strip()
+    if not price_id:
+        raise HTTPException(status_code=503, detail="Stripe price id is not configured.")
+    return price_id
+
+
+def _stripe_api_request(
+    path: str,
+    params: list[tuple[str, str]],
+    *,
+    method: str = "POST",
+    idempotency_key: str | None = None,
+) -> dict[str, object]:
+    data = urlencode(params).encode("utf-8") if params else None
+    req = urlrequest.Request(f"https://api.stripe.com{path}", data=data, method=method.upper())
+    req.add_header("Authorization", f"Bearer {_stripe_secret_key()}")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+    api_version = _env_first("STRIPE_API_VERSION")
+    if api_version:
+        req.add_header("Stripe-Version", api_version)
+    if idempotency_key:
+        req.add_header("Idempotency-Key", idempotency_key)
+    try:
+        with urlrequest.urlopen(req, timeout=20) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except urlerror.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            payload = {}
+        message = None
+        if isinstance(payload, dict):
+            error_payload = payload.get("error")
+            if isinstance(error_payload, dict):
+                message = error_payload.get("message")
+        detail = str(message or raw or "Stripe request failed.")
+        raise HTTPException(status_code=502, detail=f"Stripe API error: {detail}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Stripe API request failed.") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=502, detail="Stripe API returned an invalid payload.")
+    return payload
+
+
+def _stripe_ensure_customer(user_id: str, email: str | None) -> dict[str, str | None]:
+    existing = get_billing_customer_by_user(user_id)
+    normalized_email = (email or "").strip().lower() or None
+    if existing is not None:
+        if normalized_email and normalized_email != existing["email"]:
+            _stripe_api_request(
+                f"/v1/customers/{existing['stripe_customer_id']}",
+                [
+                    ("email", normalized_email),
+                    ("metadata[litopc_user_id]", user_id),
+                ],
+                idempotency_key=f"litopc-customer-update-{sanitize_user_id(user_id)}",
+            )
+            return upsert_billing_customer(
+                user_id=user_id,
+                stripe_customer_id=existing["stripe_customer_id"],
+                email=normalized_email,
+            )
+        return existing
+
+    create_payload = [
+        ("metadata[litopc_user_id]", user_id),
+    ]
+    if normalized_email:
+        create_payload.append(("email", normalized_email))
+    response = _stripe_api_request(
+        "/v1/customers",
+        create_payload,
+        idempotency_key=f"litopc-customer-create-{sanitize_user_id(user_id)}",
+    )
+    customer_id = str(response.get("id") or "").strip()
+    if not customer_id:
+        raise HTTPException(status_code=502, detail="Stripe customer creation did not return an id.")
+    return upsert_billing_customer(user_id=user_id, stripe_customer_id=customer_id, email=normalized_email)
+
+
+def _stripe_parse_signature(header_value: str | None) -> tuple[int | None, list[str]]:
+    if not header_value:
+        return None, []
+    timestamp: int | None = None
+    signatures: list[str] = []
+    for part in header_value.split(","):
+        key, _, value = part.partition("=")
+        key = key.strip()
+        value = value.strip()
+        if key == "t":
+            try:
+                timestamp = int(value)
+            except ValueError:
+                timestamp = None
+        elif key == "v1" and value:
+            signatures.append(value)
+    return timestamp, signatures
+
+
+def _verify_stripe_signature(header_value: str | None, body: bytes) -> None:
+    timestamp, signatures = _stripe_parse_signature(header_value)
+    if timestamp is None or not signatures:
+        raise HTTPException(status_code=400, detail="Missing or invalid Stripe signature.")
+    now = int(datetime.now(timezone.utc).timestamp())
+    if abs(now - timestamp) > 300:
+        raise HTTPException(status_code=400, detail="Stripe signature timestamp is outside tolerance.")
+    signed_payload = f"{timestamp}.".encode("utf-8") + body
+    expected = hmac.new(
+        _stripe_webhook_secret().encode("utf-8"),
+        signed_payload,
+        hashlib.sha256,
+    ).hexdigest()
+    if not any(hmac.compare_digest(expected, candidate) for candidate in signatures):
+        raise HTTPException(status_code=400, detail="Stripe signature verification failed.")
+
+
+def _stripe_unix_to_iso(raw: object) -> str | None:
+    if isinstance(raw, int):
+        return datetime.fromtimestamp(raw, timezone.utc).isoformat()
+    if isinstance(raw, float):
+        return datetime.fromtimestamp(int(raw), timezone.utc).isoformat()
+    if isinstance(raw, str) and raw.isdigit():
+        return datetime.fromtimestamp(int(raw), timezone.utc).isoformat()
+    return None
+
+
+def _stripe_metadata_user_id(obj: dict[str, object]) -> str:
+    raw_meta = obj.get("metadata")
+    if isinstance(raw_meta, dict):
+        for key in ("litopc_user_id", "user_id"):
+            value = raw_meta.get(key)
+            if isinstance(value, str):
+                sanitized = sanitize_user_id(value)
+                if sanitized:
+                    return sanitized
+    for key in ("client_reference_id",):
+        value = obj.get(key)
+        if isinstance(value, str):
+            sanitized = sanitize_user_id(value)
+            if sanitized:
+                return sanitized
+    return ""
+
+
+def _billing_user_from_stripe_object(obj: dict[str, object]) -> str:
+    direct = _stripe_metadata_user_id(obj)
+    if direct:
+        return direct
+
+    subscription_id = obj.get("id") if str(obj.get("object") or "") == "subscription" else obj.get("subscription")
+    if isinstance(subscription_id, str):
+        existing_sub = get_billing_subscription_by_id(subscription_id)
+        if existing_sub is not None:
+            return existing_sub["user_id"]
+
+    customer_id = obj.get("customer")
+    if isinstance(customer_id, str):
+        existing_user = get_user_id_by_billing_customer(customer_id)
+        if existing_user:
+            return existing_user
+    return ""
+
+
+def _stripe_period_end_from_object(obj: dict[str, object]) -> str | None:
+    for key in ("current_period_end",):
+        period_end = _stripe_unix_to_iso(obj.get(key))
+        if period_end:
+            return period_end
+    lines = obj.get("lines")
+    if isinstance(lines, dict):
+        data = lines.get("data")
+        if isinstance(data, list):
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                period = item.get("period")
+                if not isinstance(period, dict):
+                    continue
+                period_end = _stripe_unix_to_iso(period.get("end"))
+                if period_end:
+                    return period_end
+    return None
+
+
+def _apply_billing_state(
+    *,
+    user_id: str,
+    source: str,
+    customer_id: str | None,
+    subscription_id: str | None,
+    status: str | None,
+    period_end: str | None,
+    email: str | None = None,
+) -> None:
+    if customer_id:
+        upsert_billing_customer(user_id=user_id, stripe_customer_id=customer_id, email=email)
+    if subscription_id:
+        upsert_billing_subscription(
+            user_id=user_id,
+            stripe_subscription_id=subscription_id,
+            stripe_customer_id=customer_id,
+            status=status,
+            current_period_end_utc=period_end,
+        )
+    if status in {"active", "trialing", "past_due"}:
+        set_user_entitlement(user_id=user_id, plan="PRO", source=source, pro_expires_at_utc=period_end)
+    elif status:
+        set_user_entitlement(user_id=user_id, plan="FREE", source=source, pro_expires_at_utc=None)
+
+
+def _handle_stripe_event(event_type: str, obj: dict[str, object]) -> None:
+    user_id = _billing_user_from_stripe_object(obj)
+    customer_id = obj.get("customer") if isinstance(obj.get("customer"), str) else None
+    subscription_id: str | None = None
+    email: str | None = None
+    status: str | None = None
+    period_end: str | None = None
+
+    if event_type == "checkout.session.completed":
+        subscription_id = obj.get("subscription") if isinstance(obj.get("subscription"), str) else None
+        if isinstance(obj.get("customer_email"), str):
+            email = str(obj.get("customer_email")).strip().lower()
+        customer_details = obj.get("customer_details")
+        if not email and isinstance(customer_details, dict) and isinstance(customer_details.get("email"), str):
+            email = str(customer_details.get("email")).strip().lower()
+        status = "checkout_completed"
+        period_end = None
+    elif event_type == "invoice.paid":
+        subscription_id = obj.get("subscription") if isinstance(obj.get("subscription"), str) else None
+        status = "active"
+        period_end = _stripe_period_end_from_object(obj)
+    elif event_type == "customer.subscription.updated":
+        subscription_id = obj.get("id") if isinstance(obj.get("id"), str) else None
+        status = str(obj.get("status") or "").strip().lower() or None
+        period_end = _stripe_period_end_from_object(obj)
+    elif event_type == "customer.subscription.deleted":
+        subscription_id = obj.get("id") if isinstance(obj.get("id"), str) else None
+        status = "canceled"
+        period_end = None
+    else:
+        return
+
+    if not user_id:
+        _record_policy_audit(
+            endpoint="/billing/webhook/stripe",
+            method="POST",
+            client_id=customer_id or subscription_id or "stripe:unknown",
+            decision="observed",
+            reason="stripe_user_resolution_failed",
+            meta={"event_type": event_type},
+        )
+        return
+
+    _apply_billing_state(
+        user_id=user_id,
+        source="stripe_webhook",
+        customer_id=customer_id,
+        subscription_id=subscription_id,
+        status=status,
+        period_end=period_end,
+        email=email,
+    )
+    _record_policy_audit(
+        endpoint="/billing/webhook/stripe",
+        method="POST",
+        client_id=user_id,
+        plan=_effective_plan_for_user(user_id),
+        decision="observed",
+        meta={
+            "event_type": event_type,
+            "status": status or "none",
+            "customer_id": customer_id or "",
+            "subscription_id": subscription_id or "",
+        },
+    )
+
 def _plan_entitlements(plan: Plan) -> PlanEntitlements:
     return PlanEntitlements(
         plan=plan,
@@ -769,30 +1063,71 @@ def billing_me(request: Request):
 @app.post("/billing/checkout/session", response_model=BillingCheckoutResponse)
 def billing_checkout_session(payload: BillingCheckoutRequest, request: Request):
     mode = _billing_mode()
-    if mode != "stub":
-        raise HTTPException(status_code=503, detail="Only BILLING_MODE=stub is supported in this build.")
-
     user_id = _resolve_user_id(request)
     success_url = _validate_return_url(payload.success_url, "success_url")
     cancel_url = _validate_return_url(payload.cancel_url, "cancel_url")
     email = getattr(request.state, "litopc_email", None)
-    customer = get_billing_customer_by_user(user_id)
-    if customer is None:
-        customer = upsert_billing_customer(user_id=user_id, stripe_customer_id=_mock_customer_id(user_id), email=email)
 
-    session_id = _mock_checkout_session_id(user_id)
-    sub_id = _mock_subscription_id(user_id)
-    upsert_billing_subscription(
-        user_id=user_id,
-        stripe_subscription_id=sub_id,
-        stripe_customer_id=customer["stripe_customer_id"],
-        status="checkout_started",
-        current_period_end_utc=None,
+    if mode == "stub":
+        customer = get_billing_customer_by_user(user_id)
+        if customer is None:
+            customer = upsert_billing_customer(user_id=user_id, stripe_customer_id=_mock_customer_id(user_id), email=email)
+
+        session_id = _mock_checkout_session_id(user_id)
+        sub_id = _mock_subscription_id(user_id)
+        upsert_billing_subscription(
+            user_id=user_id,
+            stripe_subscription_id=sub_id,
+            stripe_customer_id=customer["stripe_customer_id"],
+            status="checkout_started",
+            current_period_end_utc=None,
+        )
+        redirect_url = _append_query_params(
+            success_url,
+            {"litopc_checkout": "stub", "session_id": session_id, "user": user_id},
+        )
+        _record_policy_audit(
+            endpoint="/billing/checkout/session",
+            method="POST",
+            client_id=user_id,
+            plan=_effective_plan_for_user(user_id),
+            decision="observed",
+            meta={
+                "mode": mode,
+                "price_id": payload.price_id or "env_default",
+                "cancel_url": cancel_url,
+                "redirect_url": redirect_url,
+            },
+        )
+        return BillingCheckoutResponse(url=redirect_url, session_id=session_id)
+
+    if mode != "stripe":
+        raise HTTPException(status_code=503, detail=f"Unsupported BILLING_MODE: {mode}")
+
+    if not email:
+        raise HTTPException(status_code=400, detail="Billing checkout requires an email identity.")
+
+    customer = _stripe_ensure_customer(user_id=user_id, email=email)
+    session_payload = _stripe_api_request(
+        "/v1/checkout/sessions",
+        [
+            ("mode", "subscription"),
+            ("success_url", success_url),
+            ("cancel_url", cancel_url),
+            ("customer", customer["stripe_customer_id"]),
+            ("client_reference_id", user_id),
+            ("allow_promotion_codes", "true"),
+            ("line_items[0][price]", _stripe_price_id(payload.price_id)),
+            ("line_items[0][quantity]", "1"),
+            ("metadata[litopc_user_id]", user_id),
+            ("subscription_data[metadata][litopc_user_id]", user_id),
+        ],
+        idempotency_key=f"litopc-checkout-{sanitize_user_id(user_id)}-{int(datetime.now(timezone.utc).timestamp())}",
     )
-    redirect_url = _append_query_params(
-        success_url,
-        {"litopc_checkout": "stub", "session_id": session_id, "user": user_id},
-    )
+    session_id = str(session_payload.get("id") or "").strip()
+    redirect_url = str(session_payload.get("url") or "").strip()
+    if not session_id or not redirect_url:
+        raise HTTPException(status_code=502, detail="Stripe checkout session did not return a redirect URL.")
     _record_policy_audit(
         endpoint="/billing/checkout/session",
         method="POST",
@@ -803,7 +1138,7 @@ def billing_checkout_session(payload: BillingCheckoutRequest, request: Request):
             "mode": mode,
             "price_id": payload.price_id or "env_default",
             "cancel_url": cancel_url,
-            "redirect_url": redirect_url,
+            "session_id": session_id,
         },
     )
     return BillingCheckoutResponse(url=redirect_url, session_id=session_id)
@@ -812,17 +1147,41 @@ def billing_checkout_session(payload: BillingCheckoutRequest, request: Request):
 @app.post("/billing/portal/session", response_model=BillingPortalResponse)
 def billing_portal_session(payload: BillingPortalRequest, request: Request):
     mode = _billing_mode()
-    if mode != "stub":
-        raise HTTPException(status_code=503, detail="Only BILLING_MODE=stub is supported in this build.")
     user_id = _resolve_user_id(request)
     return_url = _validate_return_url(payload.return_url, "return_url")
     customer = get_billing_customer_by_user(user_id)
     if customer is None:
         raise HTTPException(status_code=400, detail="No billing customer exists for this user yet.")
-    url = _append_query_params(
-        return_url,
-        {"litopc_portal": "stub", "customer_id": customer["stripe_customer_id"], "user": user_id},
+
+    if mode == "stub":
+        url = _append_query_params(
+            return_url,
+            {"litopc_portal": "stub", "customer_id": customer["stripe_customer_id"], "user": user_id},
+        )
+        _record_policy_audit(
+            endpoint="/billing/portal/session",
+            method="POST",
+            client_id=user_id,
+            plan=_effective_plan_for_user(user_id),
+            decision="observed",
+            meta={"mode": mode, "portal_url": url},
+        )
+        return BillingPortalResponse(url=url)
+
+    if mode != "stripe":
+        raise HTTPException(status_code=503, detail=f"Unsupported BILLING_MODE: {mode}")
+
+    session_payload = _stripe_api_request(
+        "/v1/billing_portal/sessions",
+        [
+            ("customer", customer["stripe_customer_id"]),
+            ("return_url", return_url),
+        ],
+        idempotency_key=f"litopc-portal-{sanitize_user_id(user_id)}-{int(datetime.now(timezone.utc).timestamp())}",
     )
+    url = str(session_payload.get("url") or "").strip()
+    if not url:
+        raise HTTPException(status_code=502, detail="Stripe billing portal did not return a redirect URL.")
     _record_policy_audit(
         endpoint="/billing/portal/session",
         method="POST",
@@ -899,6 +1258,31 @@ def billing_webhook_mock(payload: BillingWebhookMockRequest, request: Request):
         },
     )
     return _resolve_billing_status_for_user(user_id)
+
+
+@app.post("/billing/webhook/stripe")
+async def billing_webhook_stripe(request: Request):
+    mode = _billing_mode()
+    if mode != "stripe":
+        raise HTTPException(status_code=503, detail="Stripe webhook is only available in BILLING_MODE=stripe.")
+
+    raw_body = await request.body()
+    _verify_stripe_signature(request.headers.get("stripe-signature"), raw_body)
+    try:
+        payload = json.loads(raw_body.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Invalid Stripe webhook payload.") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid Stripe webhook envelope.")
+
+    event_type = str(payload.get("type") or "").strip()
+    data = payload.get("data")
+    obj = data.get("object") if isinstance(data, dict) else None
+    if not isinstance(obj, dict):
+        raise HTTPException(status_code=400, detail="Stripe webhook object is missing.")
+
+    _handle_stripe_event(event_type, obj)
+    return {"ok": True}
 
 @app.get("/policy/audit", response_model=PolicyAuditResponse)
 def policy_audit(limit: int = 120):

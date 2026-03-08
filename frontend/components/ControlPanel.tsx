@@ -35,7 +35,7 @@ type CustomMaskPreset = {
 };
 
 export function ControlPanel(props: {
-  plan: Plan; setPlan: (v: Plan) => void;
+  plan: Plan;
   maskMode: "TEMPLATE" | "CUSTOM"; setMaskMode: (v: "TEMPLATE" | "CUSTOM") => void;
   onEnterCustomEditMode: () => void;
   activeEditLayer: EditorLayer;
@@ -145,17 +145,15 @@ export function ControlPanel(props: {
   accountProExpiresAt: string | null;
   billingStatus: string | null;
   billingRenewalAt: string | null;
-  accountLoading: boolean;
+  billingPortalAvailable: boolean;
   accountError: string | null;
-  onRefreshAccount: () => void;
-  onOpenBillingPortal: () => void;
   onUpgradeIntent: (source: string) => void;
+  onManageBillingIntent: (source: string) => void;
 }) {
   const PLAN_PANEL_COLLAPSED_KEY = "litopc_plan_panel_collapsed_v1";
   const LEGACY_PLAN_PANEL_COLLAPSED_KEY = "opclab_plan_panel_collapsed_v1";
   const {
     plan,
-    setPlan,
     maskMode,
     setMaskMode,
     onEnterCustomEditMode,
@@ -262,11 +260,10 @@ export function ControlPanel(props: {
     accountProExpiresAt,
     billingStatus,
     billingRenewalAt,
-    accountLoading,
+    billingPortalAvailable,
     accountError,
-    onRefreshAccount,
-    onOpenBillingPortal,
     onUpgradeIntent,
+    onManageBillingIntent,
   } = props;
 
   const [maskPresetName, setMaskPresetName] = useState("");
@@ -307,6 +304,13 @@ export function ControlPanel(props: {
   const squareTemplate = templateId === "CONTACT_RAW" || templateId === "CONTACT_OPC_SERIF";
   const customShapePromptVisible = plan === "FREE" && customLimitReached;
   const sweepPromptVisible = analysisTab === "SWEEP" && sweepLocked;
+  const planLabel = plan === "PRO" ? "Pro" : "Free";
+  const planSourceLabel = (accountSource ?? "server_managed").replace(/_/g, " ");
+  const upgradeLocked = plan === "PRO";
+  const manageBillingVisible = billingPortalAvailable;
+  const planIdentityLabel = accountUserId ?? "Anonymous session";
+  const planStatusLabel = billingStatus ?? (plan === "PRO" ? "active" : "none");
+  const renewalLabel = (billingRenewalAt ?? accountProExpiresAt ?? "").replace("T", " ").slice(0, 16);
   const promptSeenRef = useRef<Record<string, boolean>>({});
   const targetEditing = activeEditLayer === "TARGET";
   const canUseSubtractTools = !targetEditing;
@@ -400,6 +404,10 @@ export function ControlPanel(props: {
     onUpgradeIntent(source);
   }
 
+  function requestManageBilling(source: string) {
+    onManageBillingIntent(source);
+  }
+
   useEffect(() => {
     markUpgradePromptViewed("custom_shape_limit", customShapePromptVisible);
   }, [customShapePromptVisible, plan]);
@@ -442,10 +450,13 @@ export function ControlPanel(props: {
           <div className="plan-row">
             <span className="group-title-inline">Plan</span>
             <div className="plan-row-controls">
-              <div className="mini-seg">
-                <button onClick={() => setPlan("FREE")} disabled={plan === "FREE"}>Free</button>
-                <button onClick={() => setPlan("PRO")} disabled={plan === "PRO"}>Pro</button>
+              <div className="plan-readonly-indicator" aria-label={`Current plan ${planLabel}`}>
+                <span className={`plan-status-pill ${plan === "PRO" ? "is-pro" : "is-free"}`}>{planLabel}</span>
+                <span className="plan-status-note">Server managed</span>
               </div>
+              <a href="/litopc/internal-login" className="plan-utility-link" title="Internal tester identity">
+                Tester
+              </a>
               <button
                 className="mini-btn slim plan-collapse-btn"
                 onClick={() => setPlanPanelCollapsed((prev) => !prev)}
@@ -466,64 +477,55 @@ export function ControlPanel(props: {
                     : "Usage unavailable"}
               </div>
               <div className="plan-collapsed-secondary">
-                {accountUserId ? `User ${accountUserId}` : "User not set"}
+                {`${planLabel} - ${planSourceLabel}`}
               </div>
             </div>
           ) : (
             <div className="plan-cockpit">
-            {usageLoading && <div className="small-note tiny-note">Loading usage...</div>}
-            {usageStatus && (
-              <div className="plan-metrics-inline">
-                <span><b>Runs</b> {usageStatus.usage.runs}/{usageStatus.limits.runs}</span>
-                <span><b>Sweep</b> {usageStatus.usage.sweep_points}/{usageStatus.limits.sweep_points}</span>
-                <span><b>Export</b> {usageStatus.usage.exports}/{usageStatus.limits.exports}</span>
-              </div>
-            )}
-
-            <div className="plan-meta-card">
-              <div className="plan-meta-row">
-                <span className="plan-meta-k">User</span>
-                <span className="plan-meta-v mono">{accountUserId ?? "-"}</span>
-              </div>
-              <div className="plan-meta-row">
-                <span className="plan-meta-k">Plan Source</span>
-                <span className="plan-meta-v">{accountSource ?? "-"}</span>
-              </div>
-              <div className="plan-meta-row">
-                <span className="plan-meta-k">Billing</span>
-                <span className="plan-meta-v">{billingStatus ?? "none"}</span>
-              </div>
-              {(accountProExpiresAt || billingRenewalAt) && (
-                <div className="plan-meta-row">
-                  <span className="plan-meta-k">Renewal</span>
-                  <span className="plan-meta-v">{(billingRenewalAt ?? accountProExpiresAt ?? "").replace("T", " ").slice(0, 16)}</span>
+              {usageLoading && <div className="small-note tiny-note">Loading usage...</div>}
+              {usageStatus && (
+                <div className="plan-metrics-inline">
+                  <span><b>Runs</b> {usageStatus.usage.runs}/{usageStatus.limits.runs}</span>
+                  <span><b>Sweep</b> {usageStatus.usage.sweep_points}/{usageStatus.limits.sweep_points}</span>
+                  <span><b>Export</b> {usageStatus.usage.exports}/{usageStatus.limits.exports}</span>
                 </div>
               )}
-            </div>
 
-            <div className="plan-actions-grid">
-              <button className="mini-btn slim plan-action-btn" onClick={onRefreshAccount} disabled={accountLoading}>
-                {accountLoading ? "Refreshing" : "Refresh"}
-              </button>
-              <button className="mini-btn slim plan-action-btn upgrade" onClick={() => requestUpgrade("account_panel")}>
-                Upgrade
-              </button>
-              <button className="mini-btn slim plan-action-btn" onClick={onOpenBillingPortal}>
-                Billing
-              </button>
-            </div>
-            <div className="plan-secondary-links">
-              <a href="/litopc/internal-login" className="plan-action-link-muted">
-                Internal Login
-              </a>
-            </div>
-
-            {(usageError || accountError) && (
-              <div className="plan-error-stack">
-                {usageError && <div className="small-note tiny-note plan-inline-error">{usageError}</div>}
-                {accountError && <div className="small-note tiny-note plan-inline-error">{accountError}</div>}
+              <div className="plan-summary-card">
+                <div className="plan-summary-line">
+                  <span className="plan-summary-k">Identity</span>
+                  <span className="plan-summary-v mono">{planIdentityLabel}</span>
+                </div>
+                <div className="plan-summary-chip-row">
+                  <span className="plan-summary-chip">{planSourceLabel}</span>
+                  <span className="plan-summary-chip">{planStatusLabel}</span>
+                  {renewalLabel && <span className="plan-summary-chip">{`Renews ${renewalLabel}`}</span>}
+                </div>
               </div>
-            )}
+
+              <div className="plan-actions-grid plan-actions-grid-single">
+                <button
+                  className="mini-btn slim plan-action-btn upgrade"
+                  onClick={() => (manageBillingVisible ? requestManageBilling("account_panel") : requestUpgrade("account_panel"))}
+                  disabled={upgradeLocked && !manageBillingVisible}
+                  title={
+                    manageBillingVisible
+                      ? "Open Stripe billing portal"
+                      : upgradeLocked
+                        ? "Pro is active. Billing portal is not available for this entitlement."
+                        : "Start upgrade flow"
+                  }
+                >
+                  {manageBillingVisible ? "Manage Billing" : upgradeLocked ? "Pro Active" : "Upgrade"}
+                </button>
+              </div>
+
+              {(usageError || accountError) && (
+                <div className="plan-error-stack">
+                  {usageError && <div className="small-note tiny-note plan-inline-error">{usageError}</div>}
+                  {accountError && <div className="small-note tiny-note plan-inline-error">{accountError}</div>}
+                </div>
+              )}
             </div>
           )}
         </div>

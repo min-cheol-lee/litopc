@@ -228,7 +228,6 @@ export default function Page() {
   const [entitlementWarning, setEntitlementWarning] = useState<string | null>(null);
   const [currentEntitlement, setCurrentEntitlement] = useState<CurrentEntitlementResponse | null>(null);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
-  const [accountLoading, setAccountLoading] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("STUDIO");
@@ -369,7 +368,6 @@ export default function Page() {
   }
 
   async function refreshAccountState() {
-    setAccountLoading(true);
     setAccountError(null);
     const hasExplicitLogin = Boolean(getAccessToken() || getDevUserId() || getDevEmail());
     let nextPlan: "FREE" | "PRO" = "FREE";
@@ -403,7 +401,6 @@ export default function Page() {
       setAccountError(toUiFetchError(err, "Failed to load account state."));
     } finally {
       void refreshUsageStatus(nextPlan);
-      setAccountLoading(false);
     }
   }
 
@@ -459,9 +456,20 @@ export default function Page() {
 
   useEffect(() => {
     const qp = new URLSearchParams(window.location.search);
-    if (qp.get("litopc_checkout") !== "stub" && qp.get("opclab_checkout") !== "stub") return;
-    setAccountError("Checkout session created. Ask admin to complete entitlement via billing webhook mock.");
-    void refreshAccountState();
+    const checkoutState = qp.get("litopc_checkout") ?? qp.get("opclab_checkout");
+    const portalState = qp.get("litopc_portal") ?? qp.get("opclab_portal");
+    if (checkoutState === "stub") {
+      setAccountError("Checkout session created. Ask admin to complete entitlement via billing webhook mock.");
+      void refreshAccountState();
+      return;
+    }
+    if (checkoutState === "success" || portalState === "return") {
+      void refreshAccountState();
+      return;
+    }
+    if (checkoutState === "cancel") {
+      setAccountError(null);
+    }
   }, []);
 
   useEffect(() => {
@@ -796,7 +804,6 @@ export default function Page() {
   function applyRequestToControls(r: SimRequest) {
     const nextMode = r.mask.mode ?? "TEMPLATE";
     const nextShapes = cloneMaskShapes((r.mask.shapes ?? []) as Array<MaskShape>);
-    setPlan(r.plan);
     setMaskMode(nextMode);
     setPresetId(r.preset_id);
     setTemplateId(r.mask.template_id ?? "ISO_LINE");
@@ -1407,25 +1414,43 @@ export default function Page() {
     }
   }
 
-  async function startUpgradeCheckout(source: string) {
+  function buildLitopcReturnUrl(params: Record<string, string>) {
+    const url = new URL(`${window.location.origin}/litopc`);
+    Object.entries(params).forEach(([key, value]) => {
+      url.searchParams.set(key, value);
+    });
+    return url.toString();
+  }
+
+  async function openBillingPortal(source: string) {
     setAccountError(null);
     try {
-      const returnUrl = `${window.location.origin}/litopc?upgrade_source=${encodeURIComponent(source)}`;
-      const session = await createCheckoutSession(returnUrl, returnUrl);
+      const returnUrl = buildLitopcReturnUrl({
+        litopc_portal: "return",
+        billing_source: source,
+      });
+      const session = await createPortalSession(returnUrl);
       window.location.assign(session.url);
     } catch (err) {
-      setAccountError(err instanceof Error ? err.message : "Failed to start checkout.");
+      setAccountError(err instanceof Error ? err.message : "Failed to open billing portal.");
     }
   }
 
-  async function openBillingPortal() {
+  async function startUpgradeCheckout(source: string) {
     setAccountError(null);
     try {
-      const returnUrl = `${window.location.origin}/litopc`;
-      const portal = await createPortalSession(returnUrl);
-      window.location.assign(portal.url);
+      const successUrl = buildLitopcReturnUrl({
+        litopc_checkout: "success",
+        upgrade_source: source,
+      });
+      const cancelUrl = buildLitopcReturnUrl({
+        litopc_checkout: "cancel",
+        upgrade_source: source,
+      });
+      const session = await createCheckoutSession(successUrl, cancelUrl);
+      window.location.assign(session.url);
     } catch (err) {
-      setAccountError(err instanceof Error ? err.message : "Failed to open billing portal.");
+      setAccountError(err instanceof Error ? err.message : "Failed to start checkout.");
     }
   }
 
@@ -1598,7 +1623,6 @@ export default function Page() {
         <div className={`litopc-sidebar ${isFocusMode ? "focus-overlay-sidebar" : ""} ${sidebarVisible ? "" : "is-hidden"}`}>
           <ControlPanel
         plan={plan}
-        setPlan={setPlan}
         maskMode={maskMode}
         setMaskMode={setMaskMode}
         onEnterCustomEditMode={switchToCustomEditMode}
@@ -1711,11 +1735,10 @@ export default function Page() {
         accountProExpiresAt={currentEntitlement?.pro_expires_at_utc ?? null}
         billingStatus={billingStatus?.subscription_status ?? null}
         billingRenewalAt={billingStatus?.current_period_end_utc ?? null}
-        accountLoading={accountLoading}
+        billingPortalAvailable={Boolean(billingStatus?.stripe_customer_id && billingStatus?.source === "stripe")}
         accountError={accountError}
-        onRefreshAccount={() => { void refreshAccountState(); }}
-        onOpenBillingPortal={() => { void openBillingPortal(); }}
         onUpgradeIntent={(source) => { void startUpgradeCheckout(source); }}
+        onManageBillingIntent={(source) => { void openBillingPortal(source); }}
         showBrand={!isStudioMode}
           />
         </div>

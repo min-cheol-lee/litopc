@@ -74,12 +74,12 @@ Invoke-RestMethod `
 3. Finalize entitlement with webhook mock:
 
 ```powershell
-Invoke-RestMethod `
-  -Method POST `
-  -Uri "$api/billing/webhook/mock" `
-  -Headers @{ "x-litopc-admin-token" = $admin } `
-  -ContentType "application/json" `
-  -Body '{"user_id":"hdr:tester-alice","event_type":"invoice.paid","status":"active","period_days":30}'
+.\dev-billing-mock.ps1 `
+  -ApiBase $api `
+  -AdminToken $admin `
+  -UserId tester-alice `
+  -Action grant `
+  -PeriodDays 30
 ```
 
 4. In simulator account card, click `Refresh`.
@@ -87,12 +87,11 @@ Invoke-RestMethod `
 
 ## 8) Revoke/downgrade test
 ```powershell
-Invoke-RestMethod `
-  -Method POST `
-  -Uri "$api/billing/webhook/mock" `
-  -Headers @{ "x-litopc-admin-token" = $admin } `
-  -ContentType "application/json" `
-  -Body '{"user_id":"hdr:tester-alice","event_type":"customer.subscription.deleted"}'
+.\dev-billing-mock.ps1 `
+  -ApiBase $api `
+  -AdminToken $admin `
+  -UserId tester-alice `
+  -Action revoke
 ```
 
 Then click `Refresh` in simulator and confirm Free limits apply again.

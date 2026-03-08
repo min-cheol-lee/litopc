@@ -54,3 +54,7 @@ Date: 2026-02-25
   - `x-litopc-email` fallback via localStorage key `litopc_email_v1`
 - End-to-end tester runbook:
   - `docs/internal-tester-onboarding.md`
+- Tester account operations:
+  - `docs/internal-tester-account-operations.md`
+- Mock billing webhook helper:
+  - `./dev-billing-mock.ps1`
