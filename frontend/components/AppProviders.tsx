@@ -17,6 +17,7 @@ function ClerkRuntimeBridge() {
   const clerk = useClerk();
   const { isLoaded, isSignedIn, userId, getToken } = useAuth();
   const { user } = useUser();
+  const authRefreshIntervalMs = 30 * 1000;
   const primaryEmail =
     user?.primaryEmailAddress?.emailAddress ??
     user?.emailAddresses?.[0]?.emailAddress ??
@@ -68,16 +69,25 @@ function ClerkRuntimeBridge() {
     if (isLoaded && isSignedIn && userId) {
       refreshTimer = window.setInterval(() => {
         void syncRuntimeAuth();
-      }, 4 * 60 * 1000);
+      }, authRefreshIntervalMs);
     }
+
+    const syncOnFocus = () => {
+      void syncRuntimeAuth();
+    };
+    window.addEventListener("focus", syncOnFocus);
+    document.addEventListener("visibilitychange", syncOnFocus);
 
     return () => {
       active = false;
       if (refreshTimer !== null) {
         window.clearInterval(refreshTimer);
       }
+      window.removeEventListener("focus", syncOnFocus);
+      document.removeEventListener("visibilitychange", syncOnFocus);
     };
   }, [
+    authRefreshIntervalMs,
     getToken,
     isLoaded,
     isSignedIn,

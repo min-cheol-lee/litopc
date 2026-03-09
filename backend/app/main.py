@@ -232,7 +232,10 @@ def _should_bypass_allowlist(request: Request) -> bool:
 
 @app.middleware("http")
 async def auth_identity_middleware(request: Request, call_next):
-    identity = resolve_auth_identity(request)
+    try:
+        identity = resolve_auth_identity(request)
+    except HTTPException as exc:
+        return _cors_json_response(request, exc.status_code, str(exc.detail))
     enforce_allowlist = os.getenv("AUTH_ENFORCE_ALLOWLIST", "0").strip() == "1"
     if enforce_allowlist and not _should_bypass_allowlist(request):
         email = (identity.email or "").strip().lower()
