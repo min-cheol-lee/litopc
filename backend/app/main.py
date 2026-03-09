@@ -745,10 +745,26 @@ def _stripe_unix_to_iso(raw: object) -> str | None:
 
 
 def _stripe_metadata_user_id(obj: dict[str, object]) -> str:
+    metadata_candidates: list[dict[str, object]] = []
     raw_meta = obj.get("metadata")
     if isinstance(raw_meta, dict):
+        metadata_candidates.append(raw_meta)
+    subscription_details = obj.get("subscription_details")
+    if isinstance(subscription_details, dict):
+        nested_meta = subscription_details.get("metadata")
+        if isinstance(nested_meta, dict):
+            metadata_candidates.append(nested_meta)
+    parent = obj.get("parent")
+    if isinstance(parent, dict):
+        parent_subscription_details = parent.get("subscription_details")
+        if isinstance(parent_subscription_details, dict):
+            parent_nested_meta = parent_subscription_details.get("metadata")
+            if isinstance(parent_nested_meta, dict):
+                metadata_candidates.append(parent_nested_meta)
+
+    for meta in metadata_candidates:
         for key in ("litopc_user_id", "user_id"):
-            value = raw_meta.get(key)
+            value = meta.get(key)
             if isinstance(value, str):
                 sanitized = sanitize_user_id(value)
                 if sanitized:
@@ -826,7 +842,7 @@ def _apply_billing_state(
         )
     if status in {"active", "trialing", "past_due"}:
         set_user_entitlement(user_id=user_id, plan="PRO", source=source, pro_expires_at_utc=period_end)
-    elif status:
+    elif status in {"canceled", "cancelled", "unpaid", "incomplete_expired"}:
         set_user_entitlement(user_id=user_id, plan="FREE", source=source, pro_expires_at_utc=None)
 
 
