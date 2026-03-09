@@ -999,6 +999,15 @@ select:focus {
   gap: 8px;
 }
 
+.plan-summary-value-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  max-width: 74%;
+}
+
 .plan-summary-k {
   font-size: 10px;
   font-weight: 650;
@@ -1020,6 +1029,18 @@ select:focus {
 .plan-summary-v.mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 10.5px;
+}
+
+.plan-summary-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+  font-size: 10.5px;
+  font-weight: 620;
+  color: rgba(27, 43, 65, 0.72);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .plan-copy-id-btn {

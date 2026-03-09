@@ -325,6 +325,11 @@ export function ControlPanel(props: {
   const planStatusLabel = billingCancelAtPeriodEnd
     ? "canceling"
     : (billingStatus ?? (plan === "PRO" ? "active" : "none"));
+  const accountIdPreview = accountUserId
+    ? (accountUserId.length > 24
+      ? `${accountUserId.slice(0, 16)}...${accountUserId.slice(-6)}`
+      : accountUserId)
+    : null;
   const renewalLabel = (billingRenewalAt ?? accountProExpiresAt ?? "").replace("T", " ").slice(0, 16);
   const renewalPrefix = billingCancelAtPeriodEnd ? "Ends" : "Renews";
   const internalTesterIdentity = Boolean(accountUserId?.startsWith("hdr:"));
@@ -558,14 +563,19 @@ export function ControlPanel(props: {
                 {accountSignedIn && accountUserId && (
                   <div className="plan-summary-line">
                     <span className="plan-summary-k">Account ID</span>
-                    <button
-                      className="mini-btn slim plan-copy-id-btn"
-                      onClick={copyAccountId}
-                      type="button"
-                      title="Copy account ID"
-                    >
-                      {accountIdCopied ? "Copied" : "Copy ID"}
-                    </button>
+                    <div className="plan-summary-value-row">
+                      <span className="plan-summary-preview mono" title={accountUserId}>
+                        {accountIdPreview}
+                      </span>
+                      <button
+                        className="mini-btn slim plan-copy-id-btn"
+                        onClick={copyAccountId}
+                        type="button"
+                        title="Copy account ID"
+                      >
+                        {accountIdCopied ? "Copied" : "Copy ID"}
+                      </button>
+                    </div>
                   </div>
                 )}
                 <div className="plan-summary-chip-row">
