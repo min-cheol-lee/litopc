@@ -141,6 +141,8 @@ export function ControlPanel(props: {
   usageError: string | null;
   showBrand?: boolean;
   accountUserId: string | null;
+  accountIdentityLabel: string | null;
+  accountSignedIn: boolean;
   accountSource: string | null;
   accountProExpiresAt: string | null;
   billingStatus: string | null;
@@ -148,9 +150,11 @@ export function ControlPanel(props: {
   billingRenewalAt: string | null;
   billingPortalAvailable: boolean;
   upgradeRequiresIdentity: boolean;
+  showInternalLoginLink: boolean;
   accountError: string | null;
   onUpgradeIntent: (source: string) => void;
   onManageBillingIntent: (source: string) => void;
+  onSignOutIntent: () => void;
 }) {
   const PLAN_PANEL_COLLAPSED_KEY = "litopc_plan_panel_collapsed_v1";
   const LEGACY_PLAN_PANEL_COLLAPSED_KEY = "opclab_plan_panel_collapsed_v1";
@@ -258,16 +262,20 @@ export function ControlPanel(props: {
     usageError,
     showBrand = true,
     accountUserId,
+    accountIdentityLabel,
+    accountSignedIn,
     accountSource,
     accountProExpiresAt,
     billingStatus,
     billingCancelAtPeriodEnd,
     billingRenewalAt,
     billingPortalAvailable,
-  upgradeRequiresIdentity,
-  accountError,
-  onUpgradeIntent,
-  onManageBillingIntent,
+    upgradeRequiresIdentity,
+    showInternalLoginLink,
+    accountError,
+    onUpgradeIntent,
+    onManageBillingIntent,
+    onSignOutIntent,
   } = props;
 
   const [maskPresetName, setMaskPresetName] = useState("");
@@ -312,7 +320,7 @@ export function ControlPanel(props: {
   const planSourceLabel = (accountSource ?? "server_managed").replace(/_/g, " ");
   const upgradeLocked = plan === "PRO";
   const manageBillingVisible = billingPortalAvailable;
-  const planIdentityLabel = accountUserId ?? "Anonymous session";
+  const planIdentityLabel = accountIdentityLabel ?? (accountSignedIn ? "Signed in" : "Signed out");
   const planStatusLabel = billingCancelAtPeriodEnd
     ? "canceling"
     : (billingStatus ?? (plan === "PRO" ? "active" : "none"));
@@ -481,9 +489,21 @@ export function ControlPanel(props: {
                 <span className={`plan-status-pill ${plan === "PRO" ? "is-pro" : "is-free"}`}>{planLabel}</span>
                 <span className="plan-status-note">Server managed</span>
               </div>
-              <a href="/litopc/internal-login" className="plan-utility-link" title="Internal tester identity">
-                Tester
-              </a>
+              {showInternalLoginLink && (
+                <a href="/litopc/internal-login" className="plan-utility-link" title="Internal tester identity">
+                  Tester
+                </a>
+              )}
+              {accountSignedIn && (
+                <button
+                  className="mini-btn slim plan-utility-link"
+                  onClick={onSignOutIntent}
+                  title="Sign out"
+                  type="button"
+                >
+                  Sign out
+                </button>
+              )}
               <button
                 className="mini-btn slim plan-collapse-btn"
                 onClick={() => setPlanPanelCollapsed((prev) => !prev)}
@@ -541,7 +561,7 @@ export function ControlPanel(props: {
                 </button>
               </div>
 
-              {legacyTesterPro && (
+              {legacyTesterPro && showInternalLoginLink && (
                 <div className="plan-governance-note plan-tester-guidance">
                   This tester already has legacy Pro access. Use a fresh tester identity from{" "}
                   <a href="/litopc/internal-login" className="plan-inline-link">

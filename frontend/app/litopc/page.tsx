@@ -18,7 +18,16 @@ import { SavedScenario, loadScenarios, saveScenarios } from "../../lib/scenarios
 import { exportSweepCsv } from "../../lib/export";
 import { createCheckoutSession, createPortalSession, fetchBillingStatus, type BillingStatus } from "../../lib/billing";
 import { getApiBase } from "../../lib/api-base";
-import { getAccessToken, getDevEmail, getDevUserId } from "../../lib/auth";
+import {
+  beginPublicSignIn,
+  getRuntimeAuthState,
+  getStoredAccessToken,
+  getStoredDevEmail,
+  getStoredDevUserId,
+  isInternalLoginEnabled,
+  signOutPublicUser,
+  subscribeRuntimeAuth,
+} from "../../lib/auth";
 import { downloadCustomMaskFile, parseCustomMaskFile } from "../../lib/custom-mask-files";
 import {
   clientHeaders,
@@ -231,6 +240,7 @@ export default function Page() {
   const [currentEntitlement, setCurrentEntitlement] = useState<CurrentEntitlementResponse | null>(null);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
   const [accountError, setAccountError] = useState<string | null>(null);
+  const [authState, setAuthState] = useState(() => getRuntimeAuthState());
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("STUDIO");
   const [focusControlsVisible, setFocusControlsVisible] = useState(true);
@@ -243,9 +253,14 @@ export default function Page() {
   const shellWrapRef = useRef<HTMLDivElement | null>(null);
   const workspaceScrollRef = useRef<HTMLDivElement | null>(null);
   const workspacePinchRef = useRef<{ startDistance: number; startScale: number } | null>(null);
+  const authIntentHandledRef = useRef<string | null>(null);
 
   const grid = plan === "PRO" ? 768 : 512;
   const returnIntensity = true;
+  const internalLoginEnabled = isInternalLoginEnabled();
+  const storedDevUserId = internalLoginEnabled ? getStoredDevUserId() : null;
+  const storedDevEmail = internalLoginEnabled ? getStoredDevEmail() : null;
+  const storedDevAccessToken = internalLoginEnabled ? getStoredAccessToken() : null;
   const effectiveParams = { ...params, sraf_on: 0 };
   const basePresetGuide = useMemo(
     () => getPresetTargetGuide(templateId ?? "ISO_LINE", presetId, effectiveParams),
@@ -375,8 +390,9 @@ export default function Page() {
   }
 
   async function refreshAccountState() {
+    if (!authState.ready) return;
     setAccountError(null);
-    const hasExplicitLogin = Boolean(getAccessToken() || getDevUserId() || getDevEmail());
+    const hasExplicitLogin = Boolean(authState.signedIn || storedDevUserId || storedDevEmail || storedDevAccessToken);
     let nextPlan: "FREE" | "PRO" = "FREE";
     try {
       try {
@@ -398,7 +414,12 @@ export default function Page() {
           setBillingStatus(billing);
         } catch (err) {
           setBillingStatus(null);
-          setAccountError(toUiFetchError(err, "Failed to load billing status."));
+          const message = toUiFetchError(err, "Failed to load billing status.");
+          if (message.toLowerCase().includes("authentication required")) {
+            setAccountError("Sign in to manage billing.");
+          } else {
+            setAccountError(message);
+          }
         }
       } else {
         setBillingStatus(null);
@@ -410,6 +431,12 @@ export default function Page() {
       void refreshUsageStatus(nextPlan);
     }
   }
+
+  useEffect(() => {
+    return subscribeRuntimeAuth(() => {
+      setAuthState(getRuntimeAuthState());
+    });
+  }, []);
 
   useEffect(() => {
     if (plan !== "FREE") return;
@@ -440,8 +467,9 @@ export default function Page() {
   }, [plan, presetId, templateId, dose, presetEditShapes, presetFeatureOverrides, presetTargetOverrides, customShapes, targetShapes]);
 
   useEffect(() => {
+    if (!authState.ready) return;
     void refreshAccountState();
-  }, []);
+  }, [authState.ready, authState.signedIn, authState.userId, authState.email]);
 
   useEffect(() => {
     void refreshUsageStatus(plan);
@@ -462,9 +490,12 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
+    if (!authState.ready) return;
     const qp = new URLSearchParams(window.location.search);
     const checkoutState = qp.get("litopc_checkout") ?? qp.get("opclab_checkout");
     const portalState = qp.get("litopc_portal") ?? qp.get("opclab_portal");
+    const authIntent = qp.get("litopc_auth_intent");
+    const upgradeSource = qp.get("upgrade_source") ?? "account_panel";
     if (checkoutState === "stub") {
       setAccountError("Checkout session created. Ask admin to complete entitlement via billing webhook mock.");
       void refreshAccountState();
@@ -477,7 +508,17 @@ export default function Page() {
     if (checkoutState === "cancel") {
       setAccountError(null);
     }
-  }, []);
+    if (authIntent === "upgrade" && authState.signedIn) {
+      const authIntentKey = `${authIntent}:${upgradeSource}:${authState.userId ?? "unknown"}`;
+      if (authIntentHandledRef.current === authIntentKey) return;
+      authIntentHandledRef.current = authIntentKey;
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("litopc_auth_intent");
+      cleanUrl.searchParams.delete("upgrade_source");
+      window.history.replaceState({}, "", cleanUrl.toString());
+      void startUpgradeCheckout(upgradeSource, true);
+    }
+  }, [authState.ready, authState.signedIn, authState.userId]);
 
   useEffect(() => {
     if (plan !== "PRO") return;
@@ -1446,6 +1487,28 @@ export default function Page() {
     window.location.assign(url.toString());
   }
 
+  async function promptForPublicSignIn(source: string) {
+    const redirectUrl = buildLitopcReturnUrl({
+      litopc_auth_intent: "upgrade",
+      upgrade_source: source,
+    });
+    const opened = await beginPublicSignIn(redirectUrl);
+    if (opened) return;
+    if (internalLoginEnabled) {
+      redirectToInternalLogin("billing_email_required");
+      return;
+    }
+    setAccountError("Public sign-in is not configured.");
+  }
+
+  async function signOutCurrentUser() {
+    setAccountError(null);
+    const didSignOut = await signOutPublicUser(buildLitopcReturnUrl({}));
+    if (!didSignOut) {
+      setAccountError("Public sign-out is not available in this environment.");
+    }
+  }
+
   async function openBillingPortal(source: string) {
     setAccountError(null);
     try {
@@ -1460,14 +1523,14 @@ export default function Page() {
     }
   }
 
-  async function startUpgradeCheckout(source: string) {
+  async function startUpgradeCheckout(source: string, fromAuthReturn: boolean = false) {
     setAccountError(null);
     const currentUserId = currentEntitlement?.user_id ?? null;
-    const hasStoredDevEmail = Boolean(getDevEmail());
-    const hasAccessToken = Boolean(getAccessToken());
-    const isAnonymousSession = Boolean(currentUserId?.startsWith("cid:")) && !hasStoredDevEmail && !hasAccessToken;
+    const hasStoredDevEmail = Boolean(storedDevEmail);
+    const hasAccessToken = Boolean(authState.token || storedDevAccessToken);
+    const isAnonymousSession = Boolean(currentUserId?.startsWith("cid:")) && !hasStoredDevEmail && !hasAccessToken && !authState.signedIn;
     if (isAnonymousSession) {
-      redirectToInternalLogin("billing_email_required");
+      await promptForPublicSignIn(source);
       return;
     }
     try {
@@ -1483,8 +1546,19 @@ export default function Page() {
       window.location.assign(session.url);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to start checkout.";
-      if (message.toLowerCase().includes("email identity")) {
-        redirectToInternalLogin("billing_email_required");
+      if (
+        message.toLowerCase().includes("email identity") ||
+        message.toLowerCase().includes("authentication required")
+      ) {
+        if (!fromAuthReturn) {
+          await promptForPublicSignIn(source);
+          return;
+        }
+        if (internalLoginEnabled && !authState.signedIn) {
+          redirectToInternalLogin("billing_email_required");
+          return;
+        }
+        setAccountError(message);
         return;
       }
       setAccountError(message);
@@ -1510,7 +1584,9 @@ export default function Page() {
   const compareB = runHistory.find((r) => r.id === compareBId) ?? null;
   const compareActive = compareEnabled && !!compareA && !!compareB && compareA.id !== compareB.id;
   const templateOptions = (plan === "FREE" ? FREE_TEMPLATES : PRO_TEMPLATES).map((id) => ({ id, label: templateLabel(id) }));
-  const upgradeRequiresIdentity = Boolean(currentEntitlement?.user_id?.startsWith("cid:")) && !getDevEmail() && !getAccessToken();
+  const hasSignedInIdentity = authState.signedIn || Boolean(storedDevUserId || storedDevEmail || storedDevAccessToken);
+  const accountIdentityLabel = authState.email ?? storedDevEmail ?? storedDevUserId ?? (hasSignedInIdentity ? currentEntitlement?.user_id ?? "Signed in" : "Signed out");
+  const upgradeRequiresIdentity = Boolean(currentEntitlement?.user_id?.startsWith("cid:")) && !hasSignedInIdentity;
   const billingPortalAvailable = Boolean(
     billingStatus?.stripe_customer_id &&
     !billingStatus.stripe_customer_id.startsWith("cus_mock_") &&
@@ -1842,6 +1918,8 @@ export default function Page() {
         usageLoading={usageLoading}
         usageError={usageError ?? entitlementWarning}
         accountUserId={currentEntitlement?.user_id ?? null}
+        accountIdentityLabel={accountIdentityLabel}
+        accountSignedIn={Boolean(authState.signedIn)}
         accountSource={currentEntitlement?.source ?? null}
         accountProExpiresAt={currentEntitlement?.pro_expires_at_utc ?? null}
         billingStatus={billingStatus?.subscription_status ?? null}
@@ -1849,9 +1927,11 @@ export default function Page() {
         billingRenewalAt={billingStatus?.current_period_end_utc ?? null}
         billingPortalAvailable={billingPortalAvailable}
         upgradeRequiresIdentity={upgradeRequiresIdentity}
+        showInternalLoginLink={internalLoginEnabled}
         accountError={accountError}
         onUpgradeIntent={(source) => { void startUpgradeCheckout(source); }}
         onManageBillingIntent={(source) => { void openBillingPortal(source); }}
+        onSignOutIntent={() => { void signOutCurrentUser(); }}
         showBrand={!isStudioMode}
           />
         </div>

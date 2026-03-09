@@ -9,6 +9,7 @@
     "report:fonts:build": "powershell -NoProfile -Command \"$env:NEXT_DIST_DIR='.next-font-report'; next build; if ($LASTEXITCODE -eq 0) { node scripts/report-font-usage.mjs }\""
   },
   "dependencies": {
+    "@clerk/nextjs": "^5.7.5",
     "next": "^14.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

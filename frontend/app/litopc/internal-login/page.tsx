@@ -2,10 +2,19 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getAccessToken, getDevEmail, getDevUserId, setAccessToken, setDevEmail, setDevUserId } from "../../../lib/auth";
+import {
+  getStoredAccessToken,
+  getStoredDevEmail,
+  getStoredDevUserId,
+  isInternalLoginEnabled,
+  setAccessToken,
+  setDevEmail,
+  setDevUserId,
+} from "../../../lib/auth";
 
 export default function InternalLoginPage() {
   const router = useRouter();
+  const internalLoginEnabled = isInternalLoginEnabled();
   const [userId, setUserId] = useState("");
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
@@ -13,10 +22,11 @@ export default function InternalLoginPage() {
   const [returnTo, setReturnTo] = useState("/litopc");
 
   useEffect(() => {
+    if (!internalLoginEnabled) return;
     try {
-      setUserId(getDevUserId() ?? "");
-      setEmail(getDevEmail() ?? "");
-      setToken(getAccessToken() ?? "");
+      setUserId(getStoredDevUserId() ?? "");
+      setEmail(getStoredDevEmail() ?? "");
+      setToken(getStoredAccessToken() ?? "");
       const params = new URLSearchParams(window.location.search);
       const reason = (params.get("reason") || "").trim();
       const nextUrl = (params.get("return_to") || "/litopc").trim();
@@ -27,7 +37,7 @@ export default function InternalLoginPage() {
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Could not read the tester session from browser storage.");
     }
-  }, []);
+  }, [internalLoginEnabled]);
 
   const navigateToReturn = useCallback(() => {
     try {
@@ -45,7 +55,7 @@ export default function InternalLoginPage() {
       setDevUserId(uid);
       setDevEmail(nextEmail);
       setAccessToken(nextToken);
-      if ((getDevUserId() ?? "") !== uid || (getDevEmail() ?? "") !== nextEmail || (getAccessToken() ?? "") !== nextToken) {
+      if ((getStoredDevUserId() ?? "") !== uid || (getStoredDevEmail() ?? "") !== nextEmail || (getStoredAccessToken() ?? "") !== nextToken) {
         setMessage("Browser storage is not persisting the tester session. Check storage/privacy settings for localhost.");
         return;
       }
@@ -64,7 +74,7 @@ export default function InternalLoginPage() {
       setUserId("");
       setEmail("");
       setToken("");
-      if (getDevUserId() || getDevEmail() || getAccessToken()) {
+      if (getStoredDevUserId() || getStoredDevEmail() || getStoredAccessToken()) {
         setMessage("Browser storage did not clear. Check storage/privacy settings for localhost.");
         return;
       }
@@ -73,6 +83,19 @@ export default function InternalLoginPage() {
       setMessage(err instanceof Error ? err.message : "Could not clear the tester session.");
     }
   }, []);
+
+  if (!internalLoginEnabled) {
+    return (
+      <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: "24px", background: "linear-gradient(180deg, #eef3fb 0%, #f7f9fc 100%)" }}>
+        <section style={{ width: "min(520px, 100%)", borderRadius: 18, border: "1px solid rgba(25,40,62,0.14)", background: "rgba(255,255,255,0.9)", boxShadow: "0 16px 40px rgba(31,46,74,0.12)", padding: 20 }}>
+          <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.1 }}>Internal Login Disabled</h1>
+          <p style={{ marginTop: 8, marginBottom: 0, color: "rgba(23,35,53,0.74)", fontSize: 14 }}>
+            Internal tester login is disabled in this environment. Use the public sign-in flow from the simulator.
+          </p>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: "24px", background: "linear-gradient(180deg, #eef3fb 0%, #f7f9fc 100%)" }}>

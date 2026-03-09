@@ -1,5 +1,5 @@
 import type { Plan } from "./types";
-import { getAccessToken, getDevEmail, getDevUserId } from "./auth";
+import { getAccessToken, getDevEmail, getDevUserId, getRuntimeAuthState, isInternalLoginEnabled } from "./auth";
 import { getApiBase } from "./api-base";
 
 const API_BASE = getApiBase();
@@ -70,13 +70,16 @@ export function clientHeaders(extra?: Record<string, string>): Record<string, st
   if (token) {
     base.Authorization = `Bearer ${token}`;
   }
-  const userId = getDevUserId();
-  if (userId) {
-    base["x-litopc-user-id"] = userId;
-  }
-  const email = getDevEmail();
-  if (email) {
-    base["x-litopc-email"] = email;
+  const runtimeAuth = getRuntimeAuthState();
+  if (!runtimeAuth.signedIn && isInternalLoginEnabled()) {
+    const userId = getDevUserId();
+    if (userId) {
+      base["x-litopc-user-id"] = userId;
+    }
+    const email = getDevEmail();
+    if (email) {
+      base["x-litopc-email"] = email;
+    }
   }
   return extra ? { ...base, ...extra } : base;
 }

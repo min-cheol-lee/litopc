@@ -52,7 +52,7 @@ from .models import (
     UsageOp,
     Plan,
 )
-from .auth import resolve_auth_identity
+from .auth import AuthIdentity, require_authenticated_identity, resolve_auth_identity
 from .store import (
     consume_usage_quota as db_consume_usage_quota,
     ensure_db,
@@ -364,17 +364,32 @@ def _resolve_client_id(request: Request) -> str:
     request.state.litopc_client_id = fallback
     return fallback
 
-def _resolve_user_id(request: Request) -> str:
-    cached = getattr(request.state, "litopc_user_id", None)
-    if isinstance(cached, str) and cached:
-        return cached
-    # Function-level calls (tests/smoke) can bypass middleware.
+def _resolve_identity(request: Request) -> AuthIdentity:
+    cached_user_id = getattr(request.state, "litopc_user_id", None)
+    if isinstance(cached_user_id, str) and cached_user_id:
+        return AuthIdentity(
+            user_id=cached_user_id,
+            email=getattr(request.state, "litopc_email", None),
+            source=str(getattr(request.state, "litopc_auth_source", "cached")),
+            authenticated=bool(getattr(request.state, "litopc_authenticated", False)),
+        )
     identity = resolve_auth_identity(request)
     request.state.litopc_user_id = identity.user_id
     request.state.litopc_auth_source = identity.source
     request.state.litopc_authenticated = identity.authenticated
     request.state.litopc_email = identity.email
-    return identity.user_id
+    return identity
+
+def _resolve_user_id(request: Request) -> str:
+    return _resolve_identity(request).user_id
+
+def _require_authenticated_identity(request: Request, *, require_email: bool = True) -> AuthIdentity:
+    identity = require_authenticated_identity(request, require_email=require_email)
+    request.state.litopc_user_id = identity.user_id
+    request.state.litopc_auth_source = identity.source
+    request.state.litopc_authenticated = identity.authenticated
+    request.state.litopc_email = identity.email
+    return identity
 
 def _resolve_actor_id(request: Request) -> str:
     uid = _resolve_user_id(request)
@@ -1069,17 +1084,18 @@ def admin_list_invites(request: Request, limit: int = 200):
 
 @app.get("/billing/me", response_model=BillingStatusResponse)
 def billing_me(request: Request):
-    user_id = _resolve_user_id(request)
-    return _resolve_billing_status_for_user(user_id)
+    identity = _require_authenticated_identity(request, require_email=True)
+    return _resolve_billing_status_for_user(identity.user_id)
 
 
 @app.post("/billing/checkout/session", response_model=BillingCheckoutResponse)
 def billing_checkout_session(payload: BillingCheckoutRequest, request: Request):
     mode = _billing_mode()
-    user_id = _resolve_user_id(request)
+    identity = _require_authenticated_identity(request, require_email=True)
+    user_id = identity.user_id
     success_url = _validate_return_url(payload.success_url, "success_url")
     cancel_url = _validate_return_url(payload.cancel_url, "cancel_url")
-    email = getattr(request.state, "litopc_email", None)
+    email = identity.email
 
     if mode == "stub":
         customer = get_billing_customer_by_user(user_id)
@@ -1160,7 +1176,8 @@ def billing_checkout_session(payload: BillingCheckoutRequest, request: Request):
 @app.post("/billing/portal/session", response_model=BillingPortalResponse)
 def billing_portal_session(payload: BillingPortalRequest, request: Request):
     mode = _billing_mode()
-    user_id = _resolve_user_id(request)
+    identity = _require_authenticated_identity(request, require_email=True)
+    user_id = identity.user_id
     return_url = _validate_return_url(payload.return_url, "return_url")
     customer = get_billing_customer_by_user(user_id)
     if customer is None:
