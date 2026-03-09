@@ -254,6 +254,7 @@ export default function Page() {
   const workspaceScrollRef = useRef<HTMLDivElement | null>(null);
   const workspacePinchRef = useRef<{ startDistance: number; startScale: number } | null>(null);
   const authIntentHandledRef = useRef<string | null>(null);
+  const accountRefreshPromiseRef = useRef<Promise<void> | null>(null);
 
   const grid = plan === "PRO" ? 768 : 512;
   const returnIntensity = true;
@@ -391,44 +392,60 @@ export default function Page() {
 
   async function refreshAccountState() {
     if (!authState.ready) return;
-    setAccountError(null);
-    const hasExplicitLogin = Boolean(authState.signedIn || storedDevUserId || storedDevEmail || storedDevAccessToken);
-    let nextPlan: "FREE" | "PRO" = "FREE";
-    try {
-      try {
-        const me = await fetchCurrentEntitlement();
-        setCurrentEntitlement(me);
-        nextPlan = me.plan;
-        setPlan((prev) => (prev === me.plan ? prev : me.plan));
-      } catch (err) {
-        setCurrentEntitlement(null);
-        setPlan("FREE");
-        if (hasExplicitLogin) {
-          throw err;
-        }
-      }
+    if (accountRefreshPromiseRef.current) {
+      await accountRefreshPromiseRef.current;
+      return;
+    }
 
-      if (hasExplicitLogin) {
+    const task = (async () => {
+      setAccountError(null);
+      const hasExplicitLogin = Boolean(authState.signedIn || storedDevUserId || storedDevEmail || storedDevAccessToken);
+      let nextPlan: "FREE" | "PRO" = "FREE";
+      try {
         try {
-          const billing = await fetchBillingStatus();
-          setBillingStatus(billing);
+          const me = await fetchCurrentEntitlement();
+          setCurrentEntitlement(me);
+          nextPlan = me.plan;
+          setPlan((prev) => (prev === me.plan ? prev : me.plan));
         } catch (err) {
-          setBillingStatus(null);
-          const message = toUiFetchError(err, "Failed to load billing status.");
-          if (message.toLowerCase().includes("authentication required")) {
-            setAccountError("Sign in to manage billing.");
-          } else {
-            setAccountError(message);
+          setCurrentEntitlement(null);
+          setPlan("FREE");
+          if (hasExplicitLogin) {
+            throw err;
           }
         }
-      } else {
-        setBillingStatus(null);
+
+        if (hasExplicitLogin) {
+          try {
+            const billing = await fetchBillingStatus();
+            setBillingStatus(billing);
+          } catch (err) {
+            setBillingStatus(null);
+            const message = toUiFetchError(err, "Failed to load billing status.");
+            if (message.toLowerCase().includes("authentication required")) {
+              setAccountError("Sign in to manage billing.");
+            } else {
+              setAccountError(message);
+            }
+          }
+        } else {
+          setBillingStatus(null);
+        }
+      } catch (err) {
+        setPlan("FREE");
+        setAccountError(toUiFetchError(err, "Failed to load account state."));
+      } finally {
+        void refreshUsageStatus(nextPlan);
       }
-    } catch (err) {
-      setPlan("FREE");
-      setAccountError(toUiFetchError(err, "Failed to load account state."));
+    })();
+
+    accountRefreshPromiseRef.current = task;
+    try {
+      await task;
     } finally {
-      void refreshUsageStatus(nextPlan);
+      if (accountRefreshPromiseRef.current === task) {
+        accountRefreshPromiseRef.current = null;
+      }
     }
   }
 
@@ -496,17 +513,29 @@ export default function Page() {
     const portalState = qp.get("litopc_portal") ?? qp.get("opclab_portal");
     const authIntent = qp.get("litopc_auth_intent");
     const upgradeSource = qp.get("upgrade_source") ?? "account_panel";
+    const clearBillingReturnParams = () => {
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("litopc_checkout");
+      cleanUrl.searchParams.delete("opclab_checkout");
+      cleanUrl.searchParams.delete("litopc_portal");
+      cleanUrl.searchParams.delete("opclab_portal");
+      cleanUrl.searchParams.delete("billing_source");
+      window.history.replaceState({}, "", cleanUrl.toString());
+    };
     if (checkoutState === "stub") {
       setAccountError("Checkout session created. Ask admin to complete entitlement via billing webhook mock.");
+      clearBillingReturnParams();
       void refreshAccountState();
       return;
     }
     if (checkoutState === "success" || portalState === "return") {
+      clearBillingReturnParams();
       void refreshAccountState();
       return;
     }
     if (checkoutState === "cancel") {
       setAccountError(null);
+      clearBillingReturnParams();
     }
     if (authIntent === "upgrade" && authState.signedIn) {
       const authIntentKey = `${authIntent}:${upgradeSource}:${authState.userId ?? "unknown"}`;
