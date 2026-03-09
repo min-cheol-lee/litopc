@@ -283,6 +283,7 @@ export function ControlPanel(props: {
   const [sweepLogY, setSweepLogY] = useState(false);
   const [sweepSnapshotName, setSweepSnapshotName] = useState("");
   const [planPanelCollapsed, setPlanPanelCollapsed] = useState(false);
+  const [accountIdCopied, setAccountIdCopied] = useState(false);
   const [editStudioOpen, setEditStudioOpen] = useState(true);
   const [geometryInspectorOpen, setGeometryInspectorOpen] = useState(true);
   const maskFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -443,6 +444,17 @@ export function ControlPanel(props: {
     onManageBillingIntent(source);
   }
 
+  async function copyAccountId() {
+    if (!accountUserId || typeof navigator === "undefined" || !navigator.clipboard?.writeText) return;
+    try {
+      await navigator.clipboard.writeText(accountUserId);
+      setAccountIdCopied(true);
+      window.setTimeout(() => setAccountIdCopied(false), 1800);
+    } catch {
+      setAccountIdCopied(false);
+    }
+  }
+
   useEffect(() => {
     markUpgradePromptViewed("custom_shape_limit", customShapePromptVisible);
   }, [customShapePromptVisible, plan]);
@@ -543,6 +555,24 @@ export function ControlPanel(props: {
                   <span className="plan-summary-k">Identity</span>
                   <span className="plan-summary-v mono">{planIdentityLabel}</span>
                 </div>
+                {accountSignedIn && accountUserId && (
+                  <div className="plan-summary-line">
+                    <span className="plan-summary-k">Account ID</span>
+                    <div className="plan-summary-value-row">
+                      <span className="plan-summary-v mono" title={accountUserId}>
+                        {accountUserId}
+                      </span>
+                      <button
+                        className="mini-btn slim plan-copy-id-btn"
+                        onClick={copyAccountId}
+                        type="button"
+                        title="Copy account ID"
+                      >
+                        {accountIdCopied ? "Copied" : "Copy ID"}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="plan-summary-chip-row">
                   <span className="plan-summary-chip">{planSourceLabel}</span>
                   <span className="plan-summary-chip">{planStatusLabel}</span>
