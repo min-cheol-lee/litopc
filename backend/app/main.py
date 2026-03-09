@@ -871,6 +871,13 @@ def _stripe_period_end_from_object(obj: dict[str, object]) -> str | None:
     return None
 
 
+def _stripe_cancellation_scheduled(obj: dict[str, object]) -> bool:
+    if bool(obj.get("cancel_at_period_end")):
+        return True
+    cancel_at = obj.get("cancel_at")
+    return isinstance(cancel_at, (int, float)) and int(cancel_at) > 0
+
+
 def _apply_billing_state(
     *,
     user_id: str,
@@ -931,7 +938,7 @@ def _handle_stripe_event(event_type: str, obj: dict[str, object]) -> None:
                 live_obj = obj
         customer_id = live_obj.get("customer") if isinstance(live_obj.get("customer"), str) else customer_id
         status = str(live_obj.get("status") or "").strip().lower() or None
-        cancel_at_period_end = bool(live_obj.get("cancel_at_period_end"))
+        cancel_at_period_end = _stripe_cancellation_scheduled(live_obj)
         period_end = _stripe_period_end_from_object(live_obj)
     elif event_type == "customer.subscription.deleted":
         subscription_id = obj.get("id") if isinstance(obj.get("id"), str) else None
