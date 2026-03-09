@@ -665,6 +665,46 @@ def _stripe_api_request(
     return payload
 
 
+def _stripe_api_get(path: str, params: list[tuple[str, str]] | None = None) -> dict[str, object]:
+    query = f"?{urlencode(params or [])}" if params else ""
+    req = urlrequest.Request(f"https://api.stripe.com{path}{query}", method="GET")
+    req.add_header("Authorization", f"Bearer {_stripe_secret_key()}")
+    api_version = _env_first("STRIPE_API_VERSION")
+    if api_version:
+        req.add_header("Stripe-Version", api_version)
+    try:
+        with urlrequest.urlopen(req, timeout=20) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except urlerror.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            payload = {}
+        message = None
+        if isinstance(payload, dict):
+            error_payload = payload.get("error")
+            if isinstance(error_payload, dict):
+                message = error_payload.get("message")
+        detail = str(message or raw or "Stripe request failed.")
+        raise HTTPException(status_code=502, detail=f"Stripe API error: {detail}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Stripe API request failed.") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=502, detail="Stripe API returned an invalid payload.")
+    return payload
+
+
+def _stripe_subscription_state(subscription_id: str) -> dict[str, object]:
+    sid = (subscription_id or "").strip()
+    if not sid:
+        raise HTTPException(status_code=400, detail="Stripe subscription id is required.")
+    payload = _stripe_api_get(f"/v1/subscriptions/{sid}")
+    if str(payload.get("id") or "") != sid:
+        raise HTTPException(status_code=502, detail="Stripe API returned an unexpected subscription payload.")
+    return payload
+
+
 def _stripe_ensure_customer(user_id: str, email: str | None) -> dict[str, str | None]:
     existing = get_billing_customer_by_user(user_id)
     normalized_email = (email or "").strip().lower() or None
@@ -801,7 +841,7 @@ def _billing_user_from_stripe_object(obj: dict[str, object]) -> str:
 
 
 def _stripe_period_end_from_object(obj: dict[str, object]) -> str | None:
-    for key in ("current_period_end",):
+    for key in ("current_period_end", "cancel_at"):
         period_end = _stripe_unix_to_iso(obj.get(key))
         if period_end:
             return period_end
@@ -816,6 +856,16 @@ def _stripe_period_end_from_object(obj: dict[str, object]) -> str | None:
                 if not isinstance(period, dict):
                     continue
                 period_end = _stripe_unix_to_iso(period.get("end"))
+                if period_end:
+                    return period_end
+    items = obj.get("items")
+    if isinstance(items, dict):
+        data = items.get("data")
+        if isinstance(data, list):
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                period_end = _stripe_unix_to_iso(item.get("current_period_end"))
                 if period_end:
                     return period_end
     return None
@@ -873,9 +923,16 @@ def _handle_stripe_event(event_type: str, obj: dict[str, object]) -> None:
         period_end = _stripe_period_end_from_object(obj)
     elif event_type == "customer.subscription.updated":
         subscription_id = obj.get("id") if isinstance(obj.get("id"), str) else None
-        status = str(obj.get("status") or "").strip().lower() or None
-        cancel_at_period_end = bool(obj.get("cancel_at_period_end"))
-        period_end = _stripe_period_end_from_object(obj)
+        live_obj = obj
+        if subscription_id:
+            try:
+                live_obj = _stripe_subscription_state(subscription_id)
+            except HTTPException:
+                live_obj = obj
+        customer_id = live_obj.get("customer") if isinstance(live_obj.get("customer"), str) else customer_id
+        status = str(live_obj.get("status") or "").strip().lower() or None
+        cancel_at_period_end = bool(live_obj.get("cancel_at_period_end"))
+        period_end = _stripe_period_end_from_object(live_obj)
     elif event_type == "customer.subscription.deleted":
         subscription_id = obj.get("id") if isinstance(obj.get("id"), str) else None
         status = "canceled"
