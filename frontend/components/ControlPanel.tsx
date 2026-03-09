@@ -558,19 +558,14 @@ export function ControlPanel(props: {
                 {accountSignedIn && accountUserId && (
                   <div className="plan-summary-line">
                     <span className="plan-summary-k">Account ID</span>
-                    <div className="plan-summary-value-row">
-                      <span className="plan-summary-v mono" title={accountUserId}>
-                        {accountUserId}
-                      </span>
-                      <button
-                        className="mini-btn slim plan-copy-id-btn"
-                        onClick={copyAccountId}
-                        type="button"
-                        title="Copy account ID"
-                      >
-                        {accountIdCopied ? "Copied" : "Copy ID"}
-                      </button>
-                    </div>
+                    <button
+                      className="mini-btn slim plan-copy-id-btn"
+                      onClick={copyAccountId}
+                      type="button"
+                      title="Copy account ID"
+                    >
+                      {accountIdCopied ? "Copied" : "Copy ID"}
+                    </button>
                   </div>
                 )}
                 <div className="plan-summary-chip-row">
