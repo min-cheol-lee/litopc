@@ -22,6 +22,7 @@ import type {
 import type { SavedScenario } from "../lib/scenarios";
 import type { UsageStatus } from "../lib/usage";
 import { trackProductEvent } from "../lib/telemetry";
+import { FreeSimulatorAd } from "./FreeSimulatorAd";
 
 type CustomMaskPreset = {
   id: string;
@@ -1142,6 +1143,8 @@ export function ControlPanel(props: {
             Educational approximation. Not calibrated for sign-off.
           </p>
         </div>
+
+        {plan === "FREE" && !usageLoading && <FreeSimulatorAd />}
       </div>
     </div>
   );

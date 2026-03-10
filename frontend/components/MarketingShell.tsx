@@ -2,6 +2,7 @@ import Link from "next/link";
 import React from "react";
 import { Manrope } from "next/font/google";
 import { getSiteHostInfo } from "../lib/site-host";
+import { AdSenseAutoAds } from "./AdSenseAutoAds";
 
 const manrope = Manrope({
   subsets: ["latin"],
@@ -22,10 +23,11 @@ export function MarketingShell({
   navItems?: NavItem[];
 }) {
   const year = new Date().getFullYear();
-  const { simulatorHref } = getSiteHostInfo();
+  const { simulatorHref, isMarketingHost } = getSiteHostInfo();
 
   return (
     <div className={`${manrope.className} landing-shell`}>
+      {isMarketingHost && <AdSenseAutoAds />}
       <div className="landing-bg-grid" aria-hidden="true" />
       <div className="landing-bg-orb landing-bg-orb-a" aria-hidden="true" />
       <div className="landing-bg-orb landing-bg-orb-b" aria-hidden="true" />

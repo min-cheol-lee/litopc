@@ -1070,6 +1070,33 @@ select:focus {
   white-space: nowrap;
 }
 
+.simulator-ad-card {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px;
+}
+
+.simulator-ad-label {
+  font-size: 10px;
+  font-weight: 680;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(25, 41, 62, 0.52);
+}
+
+.simulator-ad-slot-shell {
+  min-height: 108px;
+  border: 1px dashed rgba(104, 134, 172, 0.28);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(244, 248, 254, 0.62));
+  padding: 8px;
+}
+
+.simulator-adsbygoogle {
+  min-height: 90px;
+}
+
 /* Marketing landing */
 
 .landing-shell {

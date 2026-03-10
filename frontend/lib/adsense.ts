@@ -1,0 +1,3 @@
+export const ADSENSE_ACCOUNT_ID = "ca-pub-3497543025675458";
+export const ADSENSE_PUBLISHER_ID = "pub-3497543025675458";
+export const ADSENSE_SELLER_ID = "f08c47fec0942fa0";
