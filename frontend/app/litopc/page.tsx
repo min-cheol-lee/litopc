@@ -1645,14 +1645,14 @@ export default function Page() {
     return Math.hypot(dx, dy);
   };
 
-  const onWorkspaceTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+  const onScaleTouchStart = (e: React.TouchEvent<HTMLElement>) => {
     if (e.touches.length !== 2) return;
     const d = touchDistance(e.touches[0], e.touches[1]);
     if (d <= 8) return;
     workspacePinchRef.current = { startDistance: d, startScale: workspaceScale };
   };
 
-  const onWorkspaceTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+  const onScaleTouchMove = (e: React.TouchEvent<HTMLElement>) => {
     const pinch = workspacePinchRef.current;
     if (!pinch || e.touches.length !== 2) return;
     const d = touchDistance(e.touches[0], e.touches[1]);
@@ -1663,7 +1663,7 @@ export default function Page() {
     setWorkspaceScale((prev) => (Math.abs(prev - clamped) < 0.002 ? prev : Number(clamped.toFixed(3))));
   };
 
-  const onWorkspaceTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+  const onScaleTouchEnd = (e: React.TouchEvent<HTMLElement>) => {
     if (e.touches.length < 2) {
       workspacePinchRef.current = null;
     }
@@ -1676,6 +1676,12 @@ export default function Page() {
   const surfacePanelVisible = isFocusMode ? focusSurfaceVisible : studioSurfaceVisible;
   const surfacePanelActive = plan === "PRO" && surfacePanelVisible;
   const effectiveWorkspaceScale = isFocusMode ? workspaceScale : Math.min(workspaceScale, 1);
+  const inverseSidebarScale = Number((100 / effectiveWorkspaceScale).toFixed(3));
+  const sidebarScaleStyle = {
+    zoom: effectiveWorkspaceScale,
+    width: `${inverseSidebarScale}%`,
+    height: `${inverseSidebarScale}%`,
+  };
   const sidebarToggleLabel = sidebarVisible ? "Hide" : "Show";
   const sidebarToggleTitle = isFocusMode
     ? (sidebarVisible ? "Hide set-up overlay" : "Show set-up overlay")
@@ -1853,141 +1859,149 @@ export default function Page() {
         <span className="sr-only">{editPanelVisible ? "Hide Edit Panel" : "Show Edit Panel"}</span>
       </button>
       <div className={`litopc-shell ${isFocusMode || !sidebarExpanded ? "shell-sidebar-collapsed" : ""} ${isFocusMode ? "shell-focus-mode" : ""}`}>
-        <div className={`litopc-sidebar ${isFocusMode ? "focus-overlay-sidebar" : ""} ${sidebarVisible ? "" : "is-hidden"}`}>
-          <ControlPanel
-        plan={plan}
-        maskMode={maskMode}
-        setMaskMode={setMaskMode}
-        onEnterCustomEditMode={switchToCustomEditMode}
-        activeEditLayer={activeEditLayer}
-        onSetActiveEditLayer={setTargetLayer}
-        editorTool={editorTool}
-        onSetEditorTool={setEditorTool}
-        presetId={presetId}
-        setPresetId={setPresetId}
-        templateId={templateId}
-        setTemplateId={handleTemplateSelection}
-        templateOptions={templateOptions}
-        targetGuide={targetGuide}
-        targetMetrics={targetMetrics}
-        onCopyTargetToMask={copyTargetToMask}
-        onCopyMaskToTarget={copyMaskToTarget}
-        onClearTargetLayer={clearTargetLayer}
-        advancedTemplatesDisabled={!ENABLE_ADVANCED_CORNER_TEMPLATES}
-        dose={dose}
-        setDose={setDose}
-        params={params}
-        setParams={setParams}
-        editableShapes={editableShapes}
-        maskShapes={resolvedMaskShapes}
-        targetShapes={targetShapes}
-        presetAnchorShapes={presetAnchorShapes}
-        currentPresetFeatureRect={currentPresetFeatureRect}
-        presetFeatureOverrideActive={(activeEditLayer === "TARGET" ? presetTargetOverrides : presetFeatureOverrides).some((entry) => entry.anchorIndex === selectedPresetAnchorIndex)}
-        onUpdatePresetFeatureRect={updatePresetFeatureRect}
-        onResetPresetFeatureRect={resetPresetFeatureRect}
-        selectedPresetAnchorIndex={selectedPresetAnchorIndex}
-        onSetSelectedPresetAnchorIndex={selectPresetAnchor}
-        selectedCustomShapeIndex={selectedCustomShapeIndex}
-        selectedCustomShapeIndexes={selectedCustomShapeIndexes}
-        onSelectCustomShapeChip={selectCustomShape}
-        onDeleteCustomShape={deleteCustomShape}
-        onUpdateCustomShape={updateCustomShape}
-        onAddHammerheadToSelected={addHammerheadToSelected}
-        onAddSerifToSelected={addSerifToSelected}
-        onAddMousebiteToSelected={addMousebiteToSelected}
-        hammerheadEdge={hammerheadEdge}
-        onSetHammerheadEdge={setHammerheadEdge}
-        serifCorner={serifCorner}
-        onSetSerifCorner={setSerifCorner}
-        mousebiteEdge={mousebiteEdge}
-        onSetMousebiteEdge={setMousebiteEdge}
-        srafOrientation={srafOrientation}
-        onSetSrafOrientation={setSrafOrientation}
-        freeCustomRectLimit={FREE_CUSTOM_RECT_LIMIT}
-        proCustomShapeLimit={PRO_CUSTOM_SHAPE_LIMIT}
-        customLimitReached={customLimitReached}
-        customLimitNotice={customLimitNotice}
-        customMaskPresets={customMaskPresets}
-        onSaveCustomMaskPreset={saveCustomMaskPreset}
-        onLoadCustomMaskPreset={loadCustomMaskPreset}
-        onDeleteCustomMaskPreset={deleteCustomMaskPreset}
-        onExportCustomMaskFile={exportCustomMaskPresetFile}
-        onImportCustomMaskFile={(file) => { void importCustomMaskPresetFile(file); }}
-        customMaskFileStatus={customMaskFileStatus}
-        loading={loading}
-        onRun={runSim}
-        scenarios={scenarios}
-        scenarioLimit={scenarioLimit}
-        scenarioLimitReached={scenarioLimitReached}
-        onSaveScenario={saveCurrentScenario}
-        onLoadScenario={loadScenarioById}
-        onDeleteScenario={deleteScenarioById}
-        freeDoseMin={FREE_DOSE_MIN}
-        freeDoseMax={FREE_DOSE_MAX}
-        runHistory={runHistory}
-        currentRunId={currentRunId}
-        onLoadHistoryRun={loadHistoryRun}
-        onClearHistory={clearHistory}
-        compareEnabled={compareEnabled}
-        onSetCompareEnabled={setCompareEnabled}
-        compareAId={compareAId}
-        onSetCompareAId={setCompareAId}
-        compareBId={compareBId}
-        onSetCompareBId={setCompareBId}
-        sweepParam={sweepParam}
-        sweepGeometryScope={sweepGeometryScope}
-        onSetSweepGeometryScope={setSweepGeometryScope}
-        onSetSweepParam={setSweepParam}
-        sweepStart={sweepStart}
-        sweepCustomTargetIndex={sweepCustomTargetIndex}
-        onSetSweepCustomTargetIndex={setSweepCustomTargetIndex}
-        onSetSweepStart={setSweepStart}
-        sweepStop={sweepStop}
-        onSetSweepStop={setSweepStop}
-        sweepStep={sweepStep}
-        onSetSweepStep={setSweepStep}
-        sweepLoading={sweepLoading}
-        sweepResult={sweepResult}
-        sweepCompareA={sweepCompareA}
-        sweepCompareB={sweepCompareB}
-        sweepCompareALabel={compareA?.label ?? null}
-        sweepCompareBLabel={compareB?.label ?? null}
-        sweepLocked={sweepLocked}
-        onRunSweep={runSweep}
-        sweepSavedSnapshots={savedSweeps.map((s) => ({ id: s.id, name: s.name, createdAt: s.createdAt, count: s.main.count, param: s.param }))}
-        onSaveSweepSnapshot={saveSweepSnapshot}
-        onLoadSweepSnapshot={loadSweepSnapshot}
-        onDeleteSweepSnapshot={deleteSweepSnapshot}
-        onExportSweepCsv={() => { void exportSweepResultCsv(); }}
-        usageStatus={usageStatus}
-        usageLoading={usageLoading}
-        usageError={usageError ?? entitlementWarning}
-        accountUserId={currentEntitlement?.user_id ?? null}
-        accountIdentityLabel={accountIdentityLabel}
-        accountSignedIn={Boolean(authState.signedIn)}
-        accountSource={currentEntitlement?.source ?? null}
-        accountProExpiresAt={currentEntitlement?.pro_expires_at_utc ?? null}
-        billingStatus={billingStatus?.subscription_status ?? null}
-        billingCancelAtPeriodEnd={Boolean(billingStatus?.cancel_at_period_end)}
-        billingRenewalAt={billingStatus?.current_period_end_utc ?? null}
-        billingPortalAvailable={billingPortalAvailable}
-        upgradeRequiresIdentity={upgradeRequiresIdentity}
-        showInternalLoginLink={internalLoginEnabled}
-        accountError={accountError}
-        onUpgradeIntent={(source) => { void startUpgradeCheckout(source); }}
-        onManageBillingIntent={(source) => { void openBillingPortal(source); }}
-        onSignOutIntent={() => { void signOutCurrentUser(); }}
-        showBrand={!isStudioMode}
-          />
+        <div
+          className={`litopc-sidebar ${isFocusMode ? "focus-overlay-sidebar" : ""} ${sidebarVisible ? "" : "is-hidden"}`}
+          onTouchStart={onScaleTouchStart}
+          onTouchMove={onScaleTouchMove}
+          onTouchEnd={onScaleTouchEnd}
+          onTouchCancel={onScaleTouchEnd}
+        >
+          <div className="litopc-sidebar-scale-wrap" style={sidebarScaleStyle}>
+            <ControlPanel
+              plan={plan}
+              maskMode={maskMode}
+              setMaskMode={setMaskMode}
+              onEnterCustomEditMode={switchToCustomEditMode}
+              activeEditLayer={activeEditLayer}
+              onSetActiveEditLayer={setTargetLayer}
+              editorTool={editorTool}
+              onSetEditorTool={setEditorTool}
+              presetId={presetId}
+              setPresetId={setPresetId}
+              templateId={templateId}
+              setTemplateId={handleTemplateSelection}
+              templateOptions={templateOptions}
+              targetGuide={targetGuide}
+              targetMetrics={targetMetrics}
+              onCopyTargetToMask={copyTargetToMask}
+              onCopyMaskToTarget={copyMaskToTarget}
+              onClearTargetLayer={clearTargetLayer}
+              advancedTemplatesDisabled={!ENABLE_ADVANCED_CORNER_TEMPLATES}
+              dose={dose}
+              setDose={setDose}
+              params={params}
+              setParams={setParams}
+              editableShapes={editableShapes}
+              maskShapes={resolvedMaskShapes}
+              targetShapes={targetShapes}
+              presetAnchorShapes={presetAnchorShapes}
+              currentPresetFeatureRect={currentPresetFeatureRect}
+              presetFeatureOverrideActive={(activeEditLayer === "TARGET" ? presetTargetOverrides : presetFeatureOverrides).some((entry) => entry.anchorIndex === selectedPresetAnchorIndex)}
+              onUpdatePresetFeatureRect={updatePresetFeatureRect}
+              onResetPresetFeatureRect={resetPresetFeatureRect}
+              selectedPresetAnchorIndex={selectedPresetAnchorIndex}
+              onSetSelectedPresetAnchorIndex={selectPresetAnchor}
+              selectedCustomShapeIndex={selectedCustomShapeIndex}
+              selectedCustomShapeIndexes={selectedCustomShapeIndexes}
+              onSelectCustomShapeChip={selectCustomShape}
+              onDeleteCustomShape={deleteCustomShape}
+              onUpdateCustomShape={updateCustomShape}
+              onAddHammerheadToSelected={addHammerheadToSelected}
+              onAddSerifToSelected={addSerifToSelected}
+              onAddMousebiteToSelected={addMousebiteToSelected}
+              hammerheadEdge={hammerheadEdge}
+              onSetHammerheadEdge={setHammerheadEdge}
+              serifCorner={serifCorner}
+              onSetSerifCorner={setSerifCorner}
+              mousebiteEdge={mousebiteEdge}
+              onSetMousebiteEdge={setMousebiteEdge}
+              srafOrientation={srafOrientation}
+              onSetSrafOrientation={setSrafOrientation}
+              freeCustomRectLimit={FREE_CUSTOM_RECT_LIMIT}
+              proCustomShapeLimit={PRO_CUSTOM_SHAPE_LIMIT}
+              customLimitReached={customLimitReached}
+              customLimitNotice={customLimitNotice}
+              customMaskPresets={customMaskPresets}
+              onSaveCustomMaskPreset={saveCustomMaskPreset}
+              onLoadCustomMaskPreset={loadCustomMaskPreset}
+              onDeleteCustomMaskPreset={deleteCustomMaskPreset}
+              onExportCustomMaskFile={exportCustomMaskPresetFile}
+              onImportCustomMaskFile={(file) => { void importCustomMaskPresetFile(file); }}
+              customMaskFileStatus={customMaskFileStatus}
+              loading={loading}
+              onRun={runSim}
+              scenarios={scenarios}
+              scenarioLimit={scenarioLimit}
+              scenarioLimitReached={scenarioLimitReached}
+              onSaveScenario={saveCurrentScenario}
+              onLoadScenario={loadScenarioById}
+              onDeleteScenario={deleteScenarioById}
+              freeDoseMin={FREE_DOSE_MIN}
+              freeDoseMax={FREE_DOSE_MAX}
+              runHistory={runHistory}
+              currentRunId={currentRunId}
+              onLoadHistoryRun={loadHistoryRun}
+              onClearHistory={clearHistory}
+              compareEnabled={compareEnabled}
+              onSetCompareEnabled={setCompareEnabled}
+              compareAId={compareAId}
+              onSetCompareAId={setCompareAId}
+              compareBId={compareBId}
+              onSetCompareBId={setCompareBId}
+              sweepParam={sweepParam}
+              sweepGeometryScope={sweepGeometryScope}
+              onSetSweepGeometryScope={setSweepGeometryScope}
+              onSetSweepParam={setSweepParam}
+              sweepStart={sweepStart}
+              sweepCustomTargetIndex={sweepCustomTargetIndex}
+              onSetSweepCustomTargetIndex={setSweepCustomTargetIndex}
+              onSetSweepStart={setSweepStart}
+              sweepStop={sweepStop}
+              onSetSweepStop={setSweepStop}
+              sweepStep={sweepStep}
+              onSetSweepStep={setSweepStep}
+              sweepLoading={sweepLoading}
+              sweepResult={sweepResult}
+              sweepCompareA={sweepCompareA}
+              sweepCompareB={sweepCompareB}
+              sweepCompareALabel={compareA?.label ?? null}
+              sweepCompareBLabel={compareB?.label ?? null}
+              sweepLocked={sweepLocked}
+              onRunSweep={runSweep}
+              sweepSavedSnapshots={savedSweeps.map((s) => ({ id: s.id, name: s.name, createdAt: s.createdAt, count: s.main.count, param: s.param }))}
+              onSaveSweepSnapshot={saveSweepSnapshot}
+              onLoadSweepSnapshot={loadSweepSnapshot}
+              onDeleteSweepSnapshot={deleteSweepSnapshot}
+              onExportSweepCsv={() => { void exportSweepResultCsv(); }}
+              usageStatus={usageStatus}
+              usageLoading={usageLoading}
+              usageError={usageError ?? entitlementWarning}
+              accountUserId={currentEntitlement?.user_id ?? null}
+              accountIdentityLabel={accountIdentityLabel}
+              accountSignedIn={Boolean(authState.signedIn)}
+              accountSource={currentEntitlement?.source ?? null}
+              accountProExpiresAt={currentEntitlement?.pro_expires_at_utc ?? null}
+              billingStatus={billingStatus?.subscription_status ?? null}
+              billingCancelAtPeriodEnd={Boolean(billingStatus?.cancel_at_period_end)}
+              billingRenewalAt={billingStatus?.current_period_end_utc ?? null}
+              billingPortalAvailable={billingPortalAvailable}
+              upgradeRequiresIdentity={upgradeRequiresIdentity}
+              showInternalLoginLink={internalLoginEnabled}
+              accountError={accountError}
+              onUpgradeIntent={(source) => { void startUpgradeCheckout(source); }}
+              onManageBillingIntent={(source) => { void openBillingPortal(source); }}
+              onSignOutIntent={() => { void signOutCurrentUser(); }}
+              showBrand={!isStudioMode}
+            />
+          </div>
         </div>
         <div
           ref={workspaceScrollRef}
           className="litopc-workspace-scroll"
-          onTouchStart={onWorkspaceTouchStart}
-          onTouchMove={onWorkspaceTouchMove}
-          onTouchEnd={onWorkspaceTouchEnd}
-          onTouchCancel={onWorkspaceTouchEnd}
+          onTouchStart={onScaleTouchStart}
+          onTouchMove={onScaleTouchMove}
+          onTouchEnd={onScaleTouchEnd}
+          onTouchCancel={onScaleTouchEnd}
         >
           <div
             className="litopc-workspace-inner"

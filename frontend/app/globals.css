@@ -102,6 +102,19 @@ select:focus {
   transition: opacity 200ms ease, transform 220ms ease, width 220ms ease;
 }
 
+.litopc-sidebar-scale-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  transform-origin: top left;
+}
+
+.litopc-sidebar-scale-wrap > .litopc-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .litopc-sidebar > .litopc-panel {
   flex: 1 1 auto;
   min-height: 0;
