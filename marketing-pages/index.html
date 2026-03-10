@@ -1,168 +1,149 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>litopc | Educational OPC Simulator</title>
+    <title>litopc | mask-to-silicon OPC simulator</title>
     <meta
       name="description"
-      content="Visualize why OPC matters with practical Contact Raw vs Contact Serif examples, then launch the simulator."
+      content="Interactive photolithography and OPC simulator for seeing how masks print nanometer-scale patterns on silicon."
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="bg-grid" aria-hidden="true"></div>
+    <div class="landing-bg-grid" aria-hidden="true"></div>
+    <div class="landing-bg-orb landing-bg-orb-a" aria-hidden="true"></div>
+    <div class="landing-bg-orb landing-bg-orb-b" aria-hidden="true"></div>
 
     <header class="topbar">
-      <a class="brand" href="#" aria-label="litopc.">
-        <span class="brand-text">litopc</span>
-        <span class="brand-dot" aria-hidden="true">.</span>
+      <a class="brand" href="/" aria-label="litopc home">
+        <span class="brand-lit">lit</span><span class="brand-opc">opc</span>
       </a>
       <nav class="top-actions" aria-label="Primary">
-        <a class="btn btn-subtle" href="#why-opc">Why OPC matters?</a>
-        <a class="btn btn-subtle" href="#contact-example">Contact Example</a>
-        <a class="btn btn-primary" data-launch href="#" target="_blank" rel="noopener noreferrer">Open Simulator</a>
+        <a class="nav-link" href="#why-opc">Why OPC</a>
+        <a class="nav-link" href="#why-litopc">Why litopc</a>
       </nav>
+      <a class="nav-link open-link" data-launch href="#" target="_blank" rel="noopener noreferrer">
+        <span>Open</span>
+        <span class="logo-word">litopc</span>
+      </a>
     </header>
 
     <main class="page">
       <section class="hero" data-reveal>
         <div class="hero-copy">
-          <p class="kicker">Educational OPC Simulator</p>
-          <h1>See mask choices become wafer reality.</h1>
-          <p>
-            Fast visual examples first. Then run your own cases in the full simulator.
+          <h1>We need OPC to print nanometer-scale patterns correctly on silicon.</h1>
+          <p class="hero-lead">
+            <span class="logo-word">litopc</span> = lithography + OPC.
           </p>
-          <div class="hero-actions">
-            <a class="btn btn-primary" data-launch href="#" target="_blank" rel="noopener noreferrer">Launch litopc Simulator</a>
-            <a class="btn btn-subtle" href="#contact-example">View Practical Example</a>
-          </div>
+          <p class="hero-body">
+            Lithography is to shine light through a mask to print patterns on silicon. OPC means optical proximity
+            correction: intentionally changing the mask so the printed semiconductor pattern comes out closer to the
+            target.
+          </p>
         </div>
 
-        <figure class="hero-visual" aria-label="Contact print target preview">
-          <div class="hero-panel">
-            <svg viewBox="0 0 520 320" role="img" aria-label="Target and printed contour preview">
-              <defs>
-                <linearGradient id="heroBg" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stop-color="#0f1f37" />
-                  <stop offset="100%" stop-color="#091322" />
-                </linearGradient>
-                <radialGradient id="heroAerial" cx="50%" cy="50%" r="52%">
-                  <stop offset="0%" stop-color="rgba(255,226,131,0.95)" />
-                  <stop offset="100%" stop-color="rgba(255,141,84,0.15)" />
-                </radialGradient>
-              </defs>
-              <rect x="0" y="0" width="520" height="320" rx="26" fill="url(#heroBg)" />
-              <rect x="192" y="92" width="136" height="136" rx="14" fill="none" stroke="rgba(151,197,255,0.85)" stroke-dasharray="6 6" stroke-width="2.2" />
-              <circle cx="260" cy="160" r="76" fill="url(#heroAerial)" />
-              <path d="M194,88 C176,112 176,208 194,232 C218,250 302,250 326,232 C344,208 344,112 326,88 C302,70 218,70 194,88 Z" fill="none" stroke="rgba(255,244,219,0.96)" stroke-width="2.4" />
-            </svg>
-            <div class="hero-panel-note">Target square vs printed contour</div>
+        <figure class="hero-visual">
+          <div class="hero-frame">
+            <img
+              src="./marketing/hero-shot-dense-ls.png"
+              alt="litopc simulator screenshot with dense line-space mask, contour, aerial image, and 3D preview"
+            />
           </div>
+          <figcaption>Actual output from the litopc simulator.</figcaption>
         </figure>
       </section>
 
-      <section class="why-card" id="why-opc" data-reveal>
-        <h2>Why OPC matters?</h2>
-        <p>
-          In semiconductor industry photolithography, light diffraction and scattering distort tiny mask shapes, so the printed pattern can miss transistor targets.
-          OPC pre-corrects the mask so wafer prints land on target dimensions for better yield and performance.
-        </p>
-      </section>
-
-      <section class="physics-card" data-reveal>
-        <div class="physics-copy">
-          <h3>Why a simple square contact can print wrong</h3>
-          <p>
-            Even with a square opening on the mask, optical diffraction and scattering blur the aerial image, so corners round off and the print shifts from the intended target.
-          </p>
-        </div>
-        <figure class="physics-figure" aria-label="Diffraction and scattering schematic">
-          <svg viewBox="0 0 800 220" role="img" aria-label="Mask to optics to wafer print schematic">
-            <defs>
-              <linearGradient id="pbg" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="#f3f8ff" />
-                <stop offset="100%" stop-color="#e7effb" />
-              </linearGradient>
-            </defs>
-            <rect x="0" y="0" width="800" height="220" rx="18" fill="url(#pbg)" />
-            <rect x="30" y="44" width="190" height="132" rx="12" fill="white" stroke="rgba(20,42,72,0.2)" />
-            <text x="125" y="70" text-anchor="middle">Mask (Square Contact)</text>
-            <rect x="98" y="92" width="54" height="54" fill="rgba(255,132,189,0.26)" stroke="rgba(206,82,140,0.78)" stroke-width="2" />
-
-            <rect x="300" y="44" width="190" height="132" rx="12" fill="white" stroke="rgba(20,42,72,0.2)" />
-            <text x="395" y="70" text-anchor="middle">Optics</text>
-            <path d="M326 140 C346 118,368 118,388 140 C408 162,430 162,450 140" fill="none" stroke="rgba(38,95,214,0.92)" stroke-width="2.2" />
-            <path d="M326 116 C346 94,368 94,388 116 C408 138,430 138,450 116" fill="none" stroke="rgba(38,95,214,0.52)" stroke-width="2.2" />
-            <text x="395" y="164" text-anchor="middle">Diffraction + Scattering</text>
-
-            <rect x="570" y="44" width="200" height="132" rx="12" fill="white" stroke="rgba(20,42,72,0.2)" />
-            <text x="670" y="70" text-anchor="middle">Wafer Print</text>
-            <rect x="629" y="92" width="82" height="82" fill="none" stroke="rgba(109,140,185,0.7)" stroke-dasharray="5 5" stroke-width="2" />
-            <path d="M634,96 C616,114 616,152 634,170 C652,188 688,188 706,170 C724,152 724,114 706,96 C688,78 652,78 634,96 Z" fill="rgba(255,169,86,0.28)" stroke="rgba(228,120,41,0.92)" stroke-width="2.2" />
-
-            <path d="M235 110 L284 110" stroke="rgba(36,62,96,0.75)" stroke-width="2.4" marker-end="url(#arrow)" />
-            <path d="M505 110 L554 110" stroke="rgba(36,62,96,0.75)" stroke-width="2.4" marker-end="url(#arrow)" />
-            <defs>
-              <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
-                <path d="M0,0 L0,6 L8,3 z" fill="rgba(36,62,96,0.75)" />
-              </marker>
-            </defs>
-          </svg>
-        </figure>
-      </section>
-
-      <section class="example-section" id="contact-example" data-reveal>
+      <section class="section" id="why-opc" data-reveal>
         <div class="section-head">
-          <h2>Practical Contact Example</h2>
-          <p>Simulator templates: Contact Raw (non-OPC) vs Contact Serif (OPC).</p>
+          <div class="eyebrow">Why OPC</div>
+          <h2>The silicon print is not the mask.</h2>
+          <p>
+            A clean L-shape on the mask can miss the target after lithography. OPC changes the mask first so the contour
+            on silicon lands closer to the shape you actually want.
+          </p>
         </div>
 
-        <div class="example-grid">
-          <article class="example-card bad">
-            <div class="example-top">
-              <h3>Contact Raw (non-OPC)</h3>
-              <span class="status-badge bad">Not hitting target</span>
+        <div class="compare-grid">
+          <article class="compare-card">
+            <div class="compare-label">
+              <span class="compare-kicker">Without correction</span>
+              <h3>Non-OPC</h3>
             </div>
-            <svg viewBox="0 0 460 320" role="img" aria-label="Contact Raw not hitting square target">
-              <rect x="0" y="0" width="460" height="320" rx="22" fill="#0f1b2f" />
-              <text x="230" y="32" text-anchor="middle" fill="rgba(224,236,255,0.92)">Target vs Printed</text>
-              <rect x="160" y="92" width="140" height="140" rx="12" fill="none" stroke="rgba(132,183,255,0.95)" stroke-dasharray="6 6" stroke-width="2.4" />
-              <path d="M165,99 C143,121 143,203 165,225 C187,247 273,247 295,225 C317,203 317,121 295,99 C273,77 187,77 165,99 Z" fill="rgba(255,143,143,0.2)" stroke="rgba(255,132,132,0.95)" stroke-width="2.4" />
-              <text x="230" y="270" text-anchor="middle" fill="rgba(255,196,196,0.96)">No good: rounded print misses square target</text>
-            </svg>
+            <div class="compare-image-wrap">
+              <img src="./marketing/non-opc.svg?v=20260310d" alt="Non-OPC L-shape print example" />
+            </div>
           </article>
 
-          <article class="example-card good">
-            <div class="example-top">
-              <h3>Contact Serif (OPC)</h3>
-              <span class="status-badge good">Hitting target</span>
+          <article class="compare-card">
+            <div class="compare-label">
+              <span class="compare-kicker">Mask tuned for print</span>
+              <h3>OPC</h3>
             </div>
-            <svg viewBox="0 0 460 320" role="img" aria-label="Contact Serif hitting square target">
-              <rect x="0" y="0" width="460" height="320" rx="22" fill="#0f1b2f" />
-              <text x="230" y="32" text-anchor="middle" fill="rgba(224,236,255,0.92)">Target vs Printed</text>
-              <rect x="160" y="92" width="140" height="140" rx="12" fill="none" stroke="rgba(132,183,255,0.95)" stroke-dasharray="6 6" stroke-width="2.4" />
-              <rect x="166" y="98" width="128" height="128" rx="11" fill="rgba(120,233,174,0.2)" stroke="rgba(105,233,162,0.96)" stroke-width="2.4" />
-              <g fill="rgba(255,168,212,0.3)" stroke="rgba(255,157,207,0.9)" stroke-width="1.7">
-                <rect x="152" y="84" width="20" height="20" />
-                <rect x="288" y="84" width="20" height="20" />
-                <rect x="152" y="220" width="20" height="20" />
-                <rect x="288" y="220" width="20" height="20" />
-              </g>
-              <text x="230" y="270" text-anchor="middle" fill="rgba(187,255,217,0.96)">Good: OPC serif keeps print on target</text>
-            </svg>
+            <div class="compare-image-wrap">
+              <img src="./marketing/opc.svg?v=20260310d" alt="OPC corrected L-shape print example" />
+            </div>
           </article>
         </div>
       </section>
 
-      <section class="cta-band" data-reveal>
-        <h2>Now run it in the simulator.</h2>
-        <p>Try Contact Raw and Contact Serif directly, then sweep dose and compare.</p>
-        <a class="btn btn-primary btn-large" data-launch href="#" target="_blank" rel="noopener noreferrer">Launch Simulator</a>
+      <section class="section" id="why-litopc" data-reveal>
+        <div class="section-head">
+          <div class="eyebrow">Why litopc</div>
+          <h2>Why <span class="logo-word">litopc</span></h2>
+          <p>
+            <span class="logo-word">litopc</span> is built for educational use. It keeps OPC easy to approach, easy to
+            visualize, and easy to test before you move on to heavier tools.
+          </p>
+        </div>
+
+        <div class="feature-rail">
+          <article class="feature-line">
+            <div class="feature-index">01</div>
+            <div>
+              <h3>Easy to approach</h3>
+              <p>Start from representative masks instead of a full process stack or research codebase.</p>
+            </div>
+          </article>
+          <article class="feature-line">
+            <div class="feature-index">02</div>
+            <div>
+              <h3>Easy to visualize</h3>
+              <p>Read mask, aerial image, contour, and silicon-side behavior in one workspace.</p>
+            </div>
+          </article>
+          <article class="feature-line">
+            <div class="feature-index">03</div>
+            <div>
+              <h3>Easy to test</h3>
+              <p>Edit the mask, compare runs, and see what the correction actually changes.</p>
+            </div>
+          </article>
+        </div>
+
+        <div class="builtins-grid" aria-label="Built-in features">
+          <div class="builtins-item"><span class="builtins-bullet" aria-hidden="true">&bull;</span><span>Representative OPC templates</span></div>
+          <div class="builtins-item"><span class="builtins-bullet" aria-hidden="true">&bull;</span><span>Manual mask edit</span></div>
+          <div class="builtins-item"><span class="builtins-bullet" aria-hidden="true">&bull;</span><span>2D mask / aerial / contour view</span></div>
+          <div class="builtins-item"><span class="builtins-bullet" aria-hidden="true">&bull;</span><span>3D silicon-style view</span></div>
+          <div class="builtins-item"><span class="builtins-bullet" aria-hidden="true">&bull;</span><span>A/B compare and sweep</span></div>
+          <div class="builtins-item"><span class="builtins-bullet" aria-hidden="true">&bull;</span><span>Preset optics and source settings</span></div>
+        </div>
+      </section>
+
+      <section class="cta-strip" data-reveal>
+        <div>
+          <div class="eyebrow">Start here</div>
+          <h2>Open litopc and test an OPC example in seconds.</h2>
+        </div>
+        <a class="nav-link open-link" data-launch href="#" target="_blank" rel="noopener noreferrer">
+          <span>Open</span>
+          <span class="logo-word">litopc</span>
+        </a>
       </section>
     </main>
 
-    <footer class="foot">
+    <footer class="footer">
       <small>Educational simulator. Not a sign-off tool.</small>
     </footer>
 
@@ -170,4 +151,3 @@
     <script src="./site.js"></script>
   </body>
 </html>
-
