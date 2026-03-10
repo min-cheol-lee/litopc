@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { MarketingShell } from "../components/MarketingShell";
 
 export const metadata: Metadata = {
@@ -33,6 +35,15 @@ const builtIns = [
 ];
 
 export default function Home() {
+  const requestHost = (headers().get("x-forwarded-host") ?? headers().get("host") ?? "")
+    .split(",")[0]
+    .trim()
+    .toLowerCase();
+
+  if (requestHost === "app.litopc.com" || requestHost.startsWith("app.litopc.com:")) {
+    redirect("/litopc");
+  }
+
   return (
     <MarketingShell>
       <section className="landing-hero landing-hero-stack landing-anchor">
