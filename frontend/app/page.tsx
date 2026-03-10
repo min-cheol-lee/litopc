@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
+import LitopcPage from "./litopc/page";
 import { MarketingShell } from "../components/MarketingShell";
 import { getSiteHostInfo } from "../lib/site-host";
 
@@ -37,7 +37,7 @@ export default function Home() {
   const { isAppHost, simulatorHref } = getSiteHostInfo();
 
   if (isAppHost) {
-    redirect("/litopc");
+    return <LitopcPage />;
   }
 
   return (
