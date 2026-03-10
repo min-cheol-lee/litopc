@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { MarketingShell } from "../components/MarketingShell";
+import { getSiteHostInfo } from "../lib/site-host";
 
 export const metadata: Metadata = {
   title: "litopc | mask-to-silicon OPC simulator",
   description:
-    "Interactive photolithography and OPC simulator for seeing how masks print nanometer-scale transistor patterns on silicon.",
+    "Interactive photolithography and OPC simulator for seeing how masks print nanometer-scale patterns on silicon.",
 };
 
 const featureRail = [
@@ -35,12 +34,9 @@ const builtIns = [
 ];
 
 export default function Home() {
-  const requestHost = (headers().get("x-forwarded-host") ?? headers().get("host") ?? "")
-    .split(",")[0]
-    .trim()
-    .toLowerCase();
+  const { isAppHost, simulatorHref } = getSiteHostInfo();
 
-  if (requestHost === "app.litopc.com" || requestHost.startsWith("app.litopc.com:")) {
+  if (isAppHost) {
     redirect("/litopc");
   }
 
@@ -59,7 +55,10 @@ export default function Home() {
         </div>
         <div className="landing-hero-shot-wrap">
           <div className="landing-hero-shot" aria-label="litopc simulator screenshot">
-            <img src="/marketing/hero-shot-dense-ls.png" alt="litopc simulator screenshot with dense line-space mask, contour, aerial image, and 3D preview" />
+            <img
+              src="/marketing/hero-shot-dense-ls.png"
+              alt="litopc simulator screenshot with dense line-space mask, contour, aerial image, and 3D preview"
+            />
           </div>
           <div className="landing-hero-shot-note">Actual output from the litopc simulator.</div>
         </div>
@@ -80,14 +79,22 @@ export default function Home() {
               <span className="landing-visual-kicker">Without correction</span>
               <h3>Non-OPC</h3>
             </div>
-            <img className="landing-example-image landing-example-image-non-opc" src="/marketing/non-opc.svg?v=20260310b" alt="Non-OPC L-shape print example" />
+            <img
+              className="landing-example-image landing-example-image-non-opc"
+              src="/marketing/non-opc.svg?v=20260310b"
+              alt="Non-OPC L-shape print example"
+            />
           </article>
           <article className="landing-visual-block landing-visual-block-plain">
             <div className="landing-visual-label">
               <span className="landing-visual-kicker">Mask tuned for print</span>
               <h3>OPC</h3>
             </div>
-            <img className="landing-example-image landing-example-image-opc" src="/marketing/opc.svg?v=20260310b" alt="OPC corrected L-shape print example" />
+            <img
+              className="landing-example-image landing-example-image-opc"
+              src="/marketing/opc.svg?v=20260310b"
+              alt="OPC corrected L-shape print example"
+            />
           </article>
         </div>
       </section>
@@ -119,7 +126,7 @@ export default function Home() {
         <div className="landing-builtins">
           {builtIns.map((item) => (
             <div key={item} className="landing-builtins-item">
-              <span className="landing-builtins-index" aria-hidden="true">•</span>
+              <span className="landing-builtins-index" aria-hidden="true">&bull;</span>
               <span className="landing-builtins-copy">{item}</span>
             </div>
           ))}
@@ -131,10 +138,10 @@ export default function Home() {
           <div className="landing-eyebrow">Start here</div>
           <h2>Open litopc and test an OPC example in seconds.</h2>
         </div>
-        <Link href="/litopc" className="landing-nav-link landing-open-link">
+        <a href={simulatorHref} className="landing-nav-link landing-open-link">
           <span>Open</span>
           <span className="landing-logo-word">litopc</span>
-        </Link>
+        </a>
       </section>
     </MarketingShell>
   );

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import React from "react";
 import { Manrope } from "next/font/google";
+import { getSiteHostInfo } from "../lib/site-host";
 
 const manrope = Manrope({
   subsets: ["latin"],
@@ -21,6 +22,7 @@ export function MarketingShell({
   navItems?: NavItem[];
 }) {
   const year = new Date().getFullYear();
+  const { simulatorHref } = getSiteHostInfo();
 
   return (
     <div className={`${manrope.className} landing-shell`}>
@@ -38,6 +40,14 @@ export function MarketingShell({
         {navItems.length > 0 && (
           <nav className="landing-nav" aria-label="Primary">
             {navItems.map((item) => {
+              if (item.href === "/litopc") {
+                return (
+                  <a key={item.href} href={simulatorHref} className="landing-nav-link">
+                    {item.label}
+                  </a>
+                );
+              }
+
               const internal = item.href.startsWith("/");
               return internal ? (
                 <Link key={item.href} href={item.href} className="landing-nav-link">
@@ -51,10 +61,10 @@ export function MarketingShell({
             })}
           </nav>
         )}
-        <Link href="/litopc" className="landing-nav-link landing-open-link">
+        <a href={simulatorHref} className="landing-nav-link landing-open-link">
           <span>Open</span>
           <span className="landing-logo-word">litopc</span>
-        </Link>
+        </a>
       </header>
 
       <main className="landing-main">{children}</main>
@@ -70,7 +80,7 @@ export function MarketingShell({
           <div className="landing-footer-block">
             <div className="landing-footer-title">Product</div>
             <div className="landing-footer-links">
-              <Link href="/litopc">Simulator</Link>
+              <a href={simulatorHref}>Simulator</a>
               <Link href="/about">About</Link>
               <Link href="/contact">Contact</Link>
             </div>

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { MarketingShell } from "../../components/MarketingShell";
+import { getSiteHostInfo } from "../../lib/site-host";
 
 export const metadata: Metadata = {
   title: "About | litopc",
@@ -17,6 +17,8 @@ function AboutSection({ title, children }: { title: string; children: React.Reac
 }
 
 export default function AboutPage() {
+  const { simulatorHref } = getSiteHostInfo();
+
   return (
     <MarketingShell
       navItems={[
@@ -57,9 +59,9 @@ export default function AboutPage() {
         </AboutSection>
 
         <div className="marketing-doc-cta">
-          <Link href="/litopc" className="landing-cta-btn landing-cta-btn-primary">
+          <a href={simulatorHref} className="landing-cta-btn landing-cta-btn-primary">
             Open Simulator
-          </Link>
+          </a>
         </div>
       </article>
     </MarketingShell>
