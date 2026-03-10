@@ -254,6 +254,12 @@ select:focus {
   z-index: 1;
 }
 
+.canvas-command-primary > .canvas-mode-strip,
+.canvas-command-primary > .canvas-toolbar-inline {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
 .canvas-command-secondary {
   display: flex;
   align-items: center;
@@ -5691,14 +5697,30 @@ input[type="range"] {
 
 @media (max-width: 1280px) {
   .canvas-command-primary {
-    flex-wrap: wrap;
-    align-items: flex-start;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    column-gap: 8px;
     row-gap: 6px;
   }
 
-  .canvas-command-primary > .canvas-mode-strip,
+  .canvas-command-logo {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    align-self: start;
+    margin-right: 0;
+  }
+
+  .canvas-command-primary > .canvas-mode-strip {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+
   .canvas-command-primary > .canvas-toolbar-inline {
-    margin-left: auto;
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
   }
 
   .viewport-frame-focus .viewport-panels-grid {
@@ -5797,7 +5819,7 @@ input[type="range"] {
 
   .canvas-command-strip,
   .canvas-command-strip.has-overlay-rail {
-    left: 10px;
+    left: calc(10px + var(--canvas-left-inset, 0px));
     right: 10px;
   }
 
@@ -5805,7 +5827,23 @@ input[type="range"] {
     right: calc(var(--overlay-rail-width, 342px) + 20px);
   }
 
+  .canvas-command-primary {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: end;
+  }
+
+  .canvas-command-logo {
+    justify-self: start;
+    margin-right: 0;
+  }
+
+  .canvas-command-logo-lit,
+  .canvas-command-logo-opc {
+    font-size: clamp(20px, 4.6vw, 25px);
+  }
+
   .canvas-mode-strip {
+    width: 100%;
     max-width: none;
     overflow: visible;
     flex-wrap: wrap;
@@ -5813,6 +5851,7 @@ input[type="range"] {
   }
 
   .canvas-toolbar-inline {
+    width: 100%;
     max-width: none;
     overflow: visible;
     flex-wrap: wrap;
@@ -5863,10 +5902,10 @@ input[type="range"] {
   }
 
   .litopc-sidebar.focus-overlay-sidebar {
-    top: 54px;
+    top: 14px;
     left: 14px;
     width: min(86vw, 320px);
-    max-height: calc(100dvh - 64px);
+    max-height: calc(100dvh - 28px);
   }
 
   .canvas-legend,
