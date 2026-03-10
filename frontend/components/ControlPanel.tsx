@@ -326,9 +326,11 @@ export function ControlPanel(props: {
     ? "canceling"
     : (billingStatus ?? (plan === "PRO" ? "active" : "none"));
   const accountIdPreview = accountUserId
-    ? (accountUserId.length > 24
-      ? `${accountUserId.slice(0, 16)}...${accountUserId.slice(-6)}`
-      : accountUserId)
+    ? (() => {
+      const compactId = accountUserId.replace(/^auth:/, "");
+      if (compactId.length <= 18) return compactId;
+      return `${compactId.slice(0, 9)}...${compactId.slice(-5)}`;
+    })()
     : null;
   const renewalLabel = (billingRenewalAt ?? accountProExpiresAt ?? "").replace("T", " ").slice(0, 16);
   const renewalPrefix = billingCancelAtPeriodEnd ? "Ends" : "Renews";

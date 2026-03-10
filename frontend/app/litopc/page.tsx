@@ -236,6 +236,7 @@ export default function Page() {
   const [usageStatus, setUsageStatus] = useState<UsageStatus | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
   const [usageError, setUsageError] = useState<string | null>(null);
+  const usageRetryCountRef = useRef(0);
   const [entitlementWarning, setEntitlementWarning] = useState<string | null>(null);
   const [currentEntitlement, setCurrentEntitlement] = useState<CurrentEntitlementResponse | null>(null);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
@@ -382,6 +383,7 @@ export default function Page() {
     try {
       const status = await fetchUsageStatus(nextPlan);
       setUsageStatus(status);
+      usageRetryCountRef.current = 0;
       setPlan((prev) => (prev === status.plan ? prev : status.plan));
     } catch (err) {
       setUsageError(toUiFetchError(err, "Failed to load usage status."));
@@ -491,6 +493,21 @@ export default function Page() {
   useEffect(() => {
     void refreshUsageStatus(plan);
   }, [plan]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const host = window.location.hostname;
+    const isLocalHost = host === "localhost" || host === "127.0.0.1";
+    if (!isLocalHost || !usageError || usageLoading || usageStatus) return;
+    if (usageRetryCountRef.current >= 12) return;
+
+    const timer = window.setTimeout(() => {
+      usageRetryCountRef.current += 1;
+      void refreshUsageStatus(plan);
+    }, 1500);
+
+    return () => window.clearTimeout(timer);
+  }, [plan, usageError, usageLoading, usageStatus]);
 
   useEffect(() => {
     async function checkParity() {
@@ -2077,6 +2094,12 @@ export default function Page() {
 
 function toUiFetchError(err: unknown, fallback: string): string {
   if (err instanceof TypeError && /fetch/i.test(err.message)) {
+    if (typeof window !== "undefined") {
+      const host = window.location.hostname;
+      if (host === "localhost" || host === "127.0.0.1") {
+        return `${fallback} Local backend is unreachable at http://127.0.0.1:8000. Start dev-backend.ps1 or set NEXT_PUBLIC_API_BASE.`;
+      }
+    }
     return `${fallback} Network/API connection issue detected. Check Vercel NEXT_PUBLIC_API_BASE and Railway CORS/allowlist settings.`;
   }
   return err instanceof Error ? err.message : fallback;
