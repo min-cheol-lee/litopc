@@ -40,7 +40,6 @@ frontend/.env.*
 
 # Local docs / launch materials
 docs/
-.github/workflows/
 notes*.txt
 dev-*.ps1
 opc-lab_marketing_idea.pptx
