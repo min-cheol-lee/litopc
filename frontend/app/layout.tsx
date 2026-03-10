@@ -20,6 +20,9 @@ const jost = Jost({
 export const metadata = {
   title: "litopc",
   description: "Educational optical proximity correction sandbox",
+  other: {
+    "google-adsense-account": "ca-pub-3497543025675458",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
