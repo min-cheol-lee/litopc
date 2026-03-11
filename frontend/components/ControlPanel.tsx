@@ -642,82 +642,96 @@ export function ControlPanel(props: {
               <option key={t.id} value={t.id}>{t.label}</option>
             ))}
           </select>
-          <div className="mask-seed-block">
-            <div className="mask-seed-copy">
-              <div className="mask-seed-eyebrow">Workspace Seed</div>
-              <div className="small-note tiny-note mask-seed-description">
-                Pick a pattern to seed the workspace, then keep editing the same mask with add, subtract, move, and resize tools.
-              </div>
+          <div className="mask-seed-block mask-seed-copy-block">
+            <div className="small-note tiny-note mask-seed-description">
+              Pick a pattern to seed the workspace, then keep editing with add, subtract, move, and resize tools.
             </div>
-            <div className="mask-seed-actions">
-              <button className="mini-btn mask-seed-btn" onClick={onReinitializeTemplate}>Reinitialize</button>
-              <button className="mini-btn mask-seed-btn secondary" onClick={onStartBlankWorkspace}>Start Blank</button>
+          </div>
+          <div className="mask-seed-block">
+            <div className="mask-action-stack">
+              <div className="mask-action-row">
+                <button className="mini-btn mask-seed-btn" onClick={onReinitializeTemplate}>Reinitialize</button>
+                <div className="small-note tiny-note mask-action-description">
+                  Restore the selected pattern's default seed.
+                </div>
+              </div>
+              <div className="mask-action-row">
+                <button className="mini-btn mask-seed-btn secondary" onClick={onStartBlankWorkspace}>Start Blank</button>
+                <div className="small-note tiny-note mask-action-description">
+                  Clear the workspace and begin from an empty mask.
+                </div>
+              </div>
             </div>
           </div>
 
-          {plan === "PRO" && (
-            <div className="mask-library mask-library-bottom">
-              <div className="small-note tiny-note">Mask Library (Pro)</div>
-              <div className="row">
-                <input
-                  type="text"
-                  placeholder="mask name"
-                  value={maskPresetName}
-                  onChange={(e) => setMaskPresetName(e.target.value)}
-                  style={{ flex: 1, minWidth: 0 }}
-                />
-                <button
-                  className="mini-btn"
-                  disabled={!maskPresetName.trim() || maskShapes.length === 0}
-                  onClick={() => {
-                    onSaveCustomMaskPreset(maskPresetName);
-                    setMaskPresetName("");
-                  }}
-                >
-                  Save
-                </button>
-              </div>
-              <div className="row" style={{ marginTop: 6 }}>
-                <button
-                  className="mini-btn"
-                  disabled={maskShapes.length === 0}
-                  onClick={() => onExportCustomMaskFile(maskPresetName)}
-                  title="Download current mask as a litopc mask data file."
-                >
-                  Save File
-                </button>
-                <button
-                  className="mini-btn"
-                  onClick={() => maskFileInputRef.current?.click()}
-                  title="Import a saved litopc mask data file and keep it in Mask Library."
-                >
-                  Load File
-                </button>
-                <input
-                  ref={maskFileInputRef}
-                  type="file"
-                  accept=".opcmask,.json,.opcmask.json"
-                  style={{ display: "none" }}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    e.currentTarget.value = "";
-                    if (!file) return;
-                    void onImportCustomMaskFile(file);
-                  }}
-                />
-              </div>
-              {customMaskFileStatus && <div className="small-note tiny-note" style={{ marginTop: 6 }}>{customMaskFileStatus}</div>}
-              <div className="shape-chip-list pro">
-                {customMaskPresets.length === 0 && <div className="small-note tiny-note">No saved masks.</div>}
-                {customMaskPresets.map((m) => (
-                  <div key={m.id} className="shape-chip">
-                    <button className="mini-btn slim" onClick={() => onLoadCustomMaskPreset(m.id)}>{m.name}</button>
-                    <button className="mini-btn slim danger" onClick={() => onDeleteCustomMaskPreset(m.id)} aria-label={`Delete ${m.name}`}>x</button>
-                  </div>
-                ))}
-              </div>
+          <div className="mask-seed-block mask-library-block">
+            <div className="mask-library-head">
+              <div className="mask-library-title">Mask Library</div>
             </div>
-          )}
+            <div className="mask-library-save-row">
+              <input
+                type="text"
+                placeholder="mask name"
+                value={maskPresetName}
+                onChange={(e) => setMaskPresetName(e.target.value)}
+                style={{ minWidth: 0 }}
+              />
+              <button
+                className="mini-btn mask-seed-btn"
+                disabled={plan !== "PRO" || !maskPresetName.trim() || maskShapes.length === 0}
+                onClick={() => {
+                  onSaveCustomMaskPreset(maskPresetName);
+                  setMaskPresetName("");
+                }}
+                title={plan !== "PRO" ? "Pro only: save reusable mask snapshots to the local library." : undefined}
+              >
+                Save
+              </button>
+            </div>
+            {plan !== "PRO" && (
+              <div className="small-note tiny-note mask-library-lock-note">
+                Saving to Mask Library is available in Pro mode. File import/export stays available.
+              </div>
+            )}
+            <div className="mask-library-file-row">
+              <button
+                className="mini-btn mask-seed-btn secondary"
+                disabled={maskShapes.length === 0}
+                onClick={() => onExportCustomMaskFile(maskPresetName)}
+                title="Download current mask as a litopc mask data file."
+              >
+                Save File
+              </button>
+              <button
+                className="mini-btn mask-seed-btn secondary"
+                onClick={() => maskFileInputRef.current?.click()}
+                title="Import a saved litopc mask data file and keep it in Mask Library."
+              >
+                Load File
+              </button>
+              <input
+                ref={maskFileInputRef}
+                type="file"
+                accept=".opcmask,.json,.opcmask.json"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.currentTarget.value = "";
+                  if (!file) return;
+                  void onImportCustomMaskFile(file);
+                }}
+              />
+            </div>
+            <div className="shape-chip-list pro">
+              {customMaskPresets.length === 0 && <div className="small-note tiny-note mask-library-empty">No saved masks.</div>}
+              {customMaskPresets.map((m) => (
+                <div key={m.id} className="shape-chip">
+                  <button className="mini-btn slim" onClick={() => onLoadCustomMaskPreset(m.id)}>{m.name}</button>
+                  <button className="mini-btn slim danger" onClick={() => onDeleteCustomMaskPreset(m.id)} aria-label={`Delete ${m.name}`}>x</button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="group-card compact">
@@ -758,14 +772,17 @@ export function ControlPanel(props: {
             </div>
             {analysisTab === "COMPARE" && (
               <div className="analysis-panel">
-                <div className="analysis-head">
+                <div className="analysis-head analysis-copy-card">
                   <div className="analysis-title">A/B Compare</div>
                   <div className="analysis-sub">
-                    Pin two saved runs to inspect contour deltas, CD shifts, and recipe tradeoffs side by side in the viewport.
+                    Pin two saved runs to inspect contour deltas, CD shifts, and recipe tradeoffs side by side.
                   </div>
                 </div>
-                <label className="analysis-switch-row">
-                  <span>Overlay compare</span>
+                <label className="analysis-switch-row analysis-switch-card">
+                  <span className="analysis-switch-copy">
+                    <strong>Overlay compare</strong>
+                    <small>Blend both selected runs in the viewport for a quick visual delta check.</small>
+                  </span>
                   <input type="checkbox" checked={compareEnabled} onChange={(e) => onSetCompareEnabled(e.target.checked)} />
                 </label>
                 <div className="row">
@@ -800,16 +817,16 @@ export function ControlPanel(props: {
             )}
             {analysisTab === "SWEEP" && (
               <div className="analysis-panel">
-                <div className="analysis-head">
+                <div className="analysis-head analysis-copy-card">
                   <div className="analysis-title">Sweep Studio</div>
                   <div className="analysis-sub">
                     {geometrySweepScopeVisible
                       ? sweepGeometryScope === "LOCAL"
                         ? (localTemplateSweepAvailable
-                            ? "Local geometry sweep changes only the selected mask feature from Edit Studio."
-                            : "Select a mask feature in Edit Studio to enable local geometry sweep.")
-                        : "Global geometry sweep changes pattern-wide parameters. Dense L/S keeps repetition linked to width and pitch."
-                      : "Width, height, and dose are baseline options. Pitch is available only for Dense L/S, and Serif is available only for Square OPC or L-Shape OPC."}
+                            ? "Local sweep changes only the selected mask feature from Edit Studio."
+                            : "Select a mask feature in Edit Studio to enable local sweep.")
+                        : "Global sweep changes pattern-wide parameters. Dense L/S keeps repetition linked to width and pitch."
+                      : "Width, height, and dose are baseline options. Pitch is for Dense L/S, and Serif is for Square OPC or L-Shape OPC."}
                   </div>
                 </div>
                 {sweepLocked && (
@@ -853,7 +870,7 @@ export function ControlPanel(props: {
                     </button>
                   </div>
                 )}
-                <div className="sweep-grid">
+                <div className="sweep-grid sweep-controls-card">
                   <label className="label" style={{ marginBottom: 0 }}>
                     Parameter
                     <select
@@ -1012,18 +1029,18 @@ export function ControlPanel(props: {
             <p className="group-title">History</p>
             <span className="history-panel-count">{runHistory.length} run{runHistory.length === 1 ? "" : "s"}</span>
           </div>
-          <div className="analysis-head history-panel-copy">
+          <div className="analysis-head history-panel-copy history-copy-card">
             <div className="analysis-title">Recent simulation states</div>
             <div className="analysis-sub">Reopen prior runs or send them directly into A/B compare.</div>
           </div>
           <div className="history-panel-toolbar">
-            <div className="small-note tiny-note">
+            <div className="small-note tiny-note history-toolbar-note">
               {currentRun ? `Current run: ${currentRun.label}` : "Runs are stored automatically after each simulation."}
             </div>
             <button className="mini-btn slim" onClick={onClearHistory} disabled={!runHistory.length}>Clear</button>
           </div>
           <div className="analysis-list history-panel-list">
-            {runHistory.length === 0 && <div className="small-note tiny-note">No runs yet.</div>}
+            {runHistory.length === 0 && <div className="small-note tiny-note analysis-empty-card">No runs yet.</div>}
             {orderedHistory.map((h) => (
               <div
                 key={h.id}

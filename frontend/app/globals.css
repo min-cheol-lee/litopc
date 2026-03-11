@@ -2861,14 +2861,18 @@ a.plan-action-link {
 .mask-seed-block {
   margin-top: 10px;
   display: grid;
-  gap: 10px;
-  padding: 10px;
+  gap: 8px;
+  padding: 9px 10px;
   border: 1px solid rgba(64, 90, 128, 0.14);
   border-radius: 12px;
   background:
     radial-gradient(130% 120% at 10% 0%, rgba(118, 170, 242, 0.12), rgba(118, 170, 242, 0)),
     linear-gradient(180deg, rgba(246, 249, 252, 0.88), rgba(234, 240, 247, 0.82));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
+.mask-seed-copy-block {
+  gap: 0;
 }
 
 .mask-seed-copy {
@@ -2886,13 +2890,28 @@ a.plan-action-link {
 
 .mask-seed-description {
   margin: 0;
+  font-size: 11px;
+  line-height: 1.3;
   color: rgba(46, 64, 89, 0.72);
 }
 
-.mask-seed-actions {
+.mask-action-stack {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 7px;
+}
+
+.mask-action-row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 7px;
+  align-items: center;
+}
+
+.mask-action-description {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.3;
+  color: rgba(46, 64, 89, 0.66);
 }
 
 .mask-seed-btn {
@@ -2919,6 +2938,59 @@ a.plan-action-link {
 .mask-seed-btn.secondary:hover {
   border-color: rgba(63, 79, 102, 0.28);
   background: linear-gradient(180deg, rgba(252, 253, 255, 0.97), rgba(242, 246, 250, 0.94));
+}
+
+.mask-library-block {
+  gap: 9px;
+}
+
+.mask-library-head {
+  display: grid;
+  gap: 4px;
+}
+
+.mask-library-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(43, 67, 99, 0.68);
+}
+
+.mask-library-description {
+  margin: 0;
+  color: rgba(46, 64, 89, 0.66);
+}
+
+.mask-library-save-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 104px;
+  gap: 8px;
+}
+
+.mask-library-file-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mask-library-file-row .mask-seed-btn {
+  width: 100%;
+}
+
+.mask-library-lock-note {
+  margin: 0;
+  padding: 7px 9px;
+  border-radius: 10px;
+  border: 1px dashed rgba(58, 80, 110, 0.18);
+  background: rgba(248, 250, 253, 0.82);
+  color: rgba(47, 67, 93, 0.62);
+}
+
+.mask-library-status,
+.mask-library-empty {
+  margin: 0;
+  color: rgba(46, 64, 89, 0.62);
 }
 
 .draw-action-row {
@@ -4584,11 +4656,30 @@ input[type="range"] {
   gap: 2px;
 }
 
+.history-copy-card,
+.analysis-copy-card {
+  padding: 10px 11px;
+  border: 1px solid rgba(28, 46, 74, 0.12);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at top left, rgba(175, 211, 255, 0.18), transparent 44%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(242, 247, 253, 0.9));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
+}
+
 .history-panel-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+
+.history-toolbar-note {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(244, 248, 253, 0.88);
+  color: rgba(37, 56, 82, 0.66);
 }
 
 .history-panel-list {
@@ -4912,6 +5003,16 @@ input[type="range"] {
   gap: 8px;
 }
 
+.sweep-controls-card {
+  padding: 10px 11px;
+  border: 1px solid rgba(28, 46, 74, 0.12);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at top left, rgba(175, 211, 255, 0.14), transparent 44%),
+    linear-gradient(180deg, rgba(249, 251, 255, 0.94), rgba(241, 246, 252, 0.9));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
+}
+
 .sweep-list {
   max-height: 210px;
 }
@@ -4939,6 +5040,15 @@ input[type="range"] {
   font-size: 11px;
   color: rgba(23, 36, 56, 0.58);
   line-height: 1.35;
+}
+
+.analysis-empty-card {
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px dashed rgba(42, 62, 92, 0.16);
+  border-radius: 10px;
+  background: rgba(247, 250, 253, 0.82);
+  color: rgba(40, 58, 84, 0.58);
 }
 
 .analysis-list {
@@ -5674,6 +5784,11 @@ input[type="range"] {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid rgba(28, 46, 74, 0.12);
+  border-radius: 11px;
+  background: linear-gradient(180deg, rgba(248, 251, 255, 0.94), rgba(240, 245, 251, 0.88));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
 }
 
 .upgrade-inline-cta {
@@ -5780,6 +5895,37 @@ input[type="range"] {
   font-size: 13px;
   font-weight: 560;
   color: rgba(20, 30, 44, 0.88);
+}
+
+.analysis-switch-card {
+  gap: 12px;
+  padding: 10px 11px;
+  border: 1px solid rgba(28, 46, 74, 0.12);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(248, 251, 255, 0.94), rgba(239, 245, 252, 0.88));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
+}
+
+.analysis-switch-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.analysis-switch-copy strong {
+  font-size: 12px;
+  font-weight: 660;
+  color: rgba(21, 35, 56, 0.9);
+}
+
+.analysis-switch-copy small {
+  font-size: 10.8px;
+  line-height: 1.35;
+  color: rgba(39, 57, 84, 0.6);
+}
+
+.analysis-switch-card input[type="checkbox"] {
+  flex: 0 0 auto;
 }
 
 @media (max-width: 1680px) {
@@ -6160,6 +6306,11 @@ input[type="range"] {
 .sweep-scale-row {
   justify-content: space-between;
   align-items: center;
+  padding: 8px 10px;
+  border: 1px solid rgba(28, 46, 74, 0.12);
+  border-radius: 11px;
+  background: linear-gradient(180deg, rgba(248, 251, 255, 0.9), rgba(241, 246, 252, 0.86));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.84);
 }
 
 .sweep-scale-toggle {
@@ -6221,16 +6372,16 @@ input[type="range"] {
 
 .run-sweep-btn {
   min-width: 120px;
-  font-weight: 650;
-  border-color: rgba(10, 132, 255, 0.5);
-  background: linear-gradient(180deg, rgba(232, 244, 255, 0.98), rgba(207, 230, 255, 0.98));
-  color: #0b5cab;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 6px 14px rgba(9, 73, 141, 0.18);
+  font-weight: 640;
+  border-color: rgba(56, 85, 120, 0.22);
+  background: linear-gradient(180deg, rgba(247, 250, 255, 0.96), rgba(233, 240, 248, 0.92));
+  color: rgba(38, 62, 94, 0.84);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.84);
 }
 
 .run-sweep-btn:hover {
-  border-color: rgba(10, 132, 255, 0.66);
-  background: linear-gradient(180deg, rgba(242, 250, 255, 1), rgba(214, 236, 255, 1));
+  border-color: rgba(56, 85, 120, 0.34);
+  background: linear-gradient(180deg, rgba(250, 252, 255, 0.98), rgba(238, 244, 250, 0.96));
 }
 
 .sweep-target-list {
