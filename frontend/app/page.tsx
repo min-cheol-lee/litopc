@@ -81,7 +81,7 @@ export default function Home() {
             </div>
             <img
               className="landing-example-image landing-example-image-non-opc"
-              src="/marketing/non-opc.svg?v=20260310b"
+              src="/marketing/non-opc.svg?v=20260311d"
               alt="Non-OPC L-shape print example"
             />
           </article>
@@ -92,7 +92,7 @@ export default function Home() {
             </div>
             <img
               className="landing-example-image landing-example-image-opc"
-              src="/marketing/opc.svg?v=20260310b"
+              src="/marketing/opc.svg?v=20260311d"
               alt="OPC corrected L-shape print example"
             />
           </article>
