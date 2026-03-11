@@ -90,7 +90,33 @@ DISABLED_TEMPLATES = {
     "L_CORNER",
 }
 
-FREE_CUSTOM_MAX_RECTS = 3
+ENABLED_TEMPLATES_BY_PRESET_FAMILY = {
+    "DUV": {
+        "ISO_LINE",
+        "DENSE_LS",
+        "CONTACT_RAW",
+        "CONTACT_OPC_SERIF",
+        "LINE_END_RAW",
+        "LINE_END_OPC_HAMMER",
+        "STAIRCASE",
+        "STAIRCASE_OPC",
+        "L_CORNER_RAW_DUV",
+        "L_CORNER_OPC_DUV",
+        "L_CORNER_RAW",
+        "L_CORNER_OPC_SERIF",
+        "L_CORNER",
+    },
+    "EUV": {
+        "ISO_LINE",
+        "DENSE_LS",
+        "CONTACT_RAW",
+        "CONTACT_OPC_SERIF",
+        # Keep EUV-specific L-shape and stepped presets disabled for now.
+        # Re-enable later by adding their canonical IDs here.
+    },
+}
+
+FREE_CUSTOM_MAX_RECTS = 5
 PRO_CUSTOM_MAX_SHAPES = 48
 FREE_SWEEP_MAX_POINTS = 24
 PRO_SWEEP_MAX_POINTS = 120
@@ -292,6 +318,11 @@ def _validate_template_access(req: SimRequest) -> None:
         and req.mask.template_id in DISABLED_TEMPLATES
     ):
         raise HTTPException(status_code=403, detail="This template is temporarily disabled.")
+    if req.mask.mode != "TEMPLATE" or not req.mask.template_id:
+        return
+    family = "EUV" if req.preset_id in {"EUV_LNA", "EUV_HNA"} else "DUV"
+    if req.mask.template_id not in ENABLED_TEMPLATES_BY_PRESET_FAMILY[family]:
+        raise HTTPException(status_code=403, detail=f"{family} preset currently does not expose this pattern.")
 
 def _validate_custom_mode(req: SimRequest) -> None:
     if req.mask.mode == "CUSTOM":

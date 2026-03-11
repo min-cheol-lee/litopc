@@ -1,9 +1,11 @@
 import type { MaskShape, ShapeOp, TemplateID } from "./types";
+import { normalizeTemplateId } from "./template-variants";
 
 export type PortableMaskPreset = {
   name: string;
-  mode: "TEMPLATE" | "CUSTOM";
+  mode?: "TEMPLATE" | "CUSTOM";
   template_id?: TemplateID;
+  seed_template_id?: TemplateID | null;
   params_nm: Record<string, number>;
   shapes: Array<MaskShape>;
   target_shapes?: Array<MaskShape>;
@@ -71,16 +73,17 @@ function normalizePortablePreset(input: Partial<PortableMaskPreset>): PortableMa
       if (cloned.type === "rect") return { ...cloned, op: "add" as const };
       return { ...cloned, op: "add" as const };
     });
-  const mode: "TEMPLATE" | "CUSTOM" =
+  const mode: "TEMPLATE" | "CUSTOM" | undefined =
     input.mode === "CUSTOM" || input.mode === "TEMPLATE"
       ? input.mode
-      : (shapes.length > 0 ? "CUSTOM" : "TEMPLATE");
+      : undefined;
   const paramsEntries = Object.entries(input.params_nm ?? {}).filter(([, value]) => isFiniteNumber(value));
   const params_nm = Object.fromEntries(paramsEntries);
   return {
     name: typeof input.name === "string" && input.name.trim() ? input.name.trim() : "Imported Mask",
     mode,
-    template_id: input.template_id,
+    template_id: normalizeTemplateId(input.template_id ?? null) ?? undefined,
+    seed_template_id: normalizeTemplateId(input.seed_template_id ?? input.template_id ?? null),
     params_nm,
     shapes,
     target_shapes,
@@ -134,8 +137,8 @@ export function parseCustomMaskFile(raw: string): PortableMaskPreset {
     throw new Error("Mask file does not contain a mask payload.");
   }
   const normalized = normalizePortablePreset(file.mask);
-  if (normalized.mode === "CUSTOM" && normalized.shapes.length === 0) {
-    throw new Error("Custom mask file does not contain any supported rectangular shapes.");
+  if ((normalized.mode ?? "CUSTOM") === "CUSTOM" && normalized.shapes.length === 0) {
+    throw new Error("Mask file does not contain any supported shapes.");
   }
   return normalized;
 }

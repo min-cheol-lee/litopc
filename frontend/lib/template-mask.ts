@@ -1,18 +1,19 @@
-import type { MaskShape, RectMaskShape, TemplateID } from "./types";
+import type { MaskShape, RectMaskShape, ShapeOp, TemplateID } from "./types";
+import { normalizeTemplateId } from "./template-variants";
 
 export type PresetFeatureOverride = {
   anchorIndex: number;
   rect: RectMaskShape;
 };
 
-type RectNm = { x: number; y: number; w: number; h: number };
+type RectNm = { x: number; y: number; w: number; h: number; op?: ShapeOp };
 
-function rect(x_nm: number, y_nm: number, w_nm: number, h_nm: number): RectMaskShape {
-  return { type: "rect", op: "add", x_nm, y_nm, w_nm, h_nm };
+function rect(x_nm: number, y_nm: number, w_nm: number, h_nm: number, op: ShapeOp = "add"): RectMaskShape {
+  return { type: "rect", op, x_nm, y_nm, w_nm, h_nm };
 }
 
-function pushRect(rects: RectNm[], x: number, y: number, w: number, h: number) {
-  rects.push({ x, y, w, h });
+function pushRect(rects: RectNm[], x: number, y: number, w: number, h: number, op: ShapeOp = "add") {
+  rects.push({ x, y, w, h, op });
 }
 
 function fitDenseLineCountInFov(cdNm: number, pitchNm: number, requestedN: number, fovNm: number): number {
@@ -26,30 +27,48 @@ function fitDenseLineCountInFov(cdNm: number, pitchNm: number, requestedN: numbe
   return Math.max(1, Math.min(nReq, maxN));
 }
 
-function appendLShapeRaw(rects: RectNm[], p: Record<string, number>, cx: number, cy: number) {
-  const cd = p.cd_nm ?? 92;
-  const horiz = p.length_nm ?? 470;
-  const vert = p.arm_nm ?? 432;
-  const elbowX = cx + (p.elbow_x_offset_nm ?? 170);
-  const elbowY = cy + (p.elbow_y_offset_nm ?? 132);
+function appendLShapeRaw(
+  rects: RectNm[],
+  p: Record<string, number>,
+  cx: number,
+  cy: number,
+  family: "DUV" | "EUV",
+) {
+  const cd = p.cd_nm ?? (family === "DUV" ? 100 : 96);
+  const horiz = p.length_nm ?? (family === "DUV" ? 450 : 440);
+  const vert = p.arm_nm ?? (family === "DUV" ? 420 : 408);
+  const elbowX = cx + (p.elbow_x_offset_nm ?? (family === "DUV" ? 160 : 164));
+  const elbowY = cy + (p.elbow_y_offset_nm ?? (family === "DUV" ? 140 : 136));
   pushRect(rects, elbowX - horiz, elbowY - cd, horiz, cd);
   pushRect(rects, elbowX - cd, elbowY - vert, cd, vert);
 }
 
-function appendLShapeOpc(rects: RectNm[], p: Record<string, number>, cx: number, cy: number) {
-  const cd = p.cd_nm ?? 92;
-  const horiz = p.length_nm ?? 470;
-  const vert = p.arm_nm ?? 432;
-  const elbowX = cx + (p.elbow_x_offset_nm ?? 170);
-  const elbowY = cy + (p.elbow_y_offset_nm ?? 132);
-  const horizExt = p.opc_h_ext_nm ?? 26;
-  const vertExt = p.opc_v_ext_nm ?? 30;
-  const bias = p.opc_bias_nm ?? 14;
-  const serif = p.serif_nm ?? 18;
-  const leftHammerW = p.left_hammer_w_nm ?? 28;
-  const leftHammerH = p.left_hammer_h_nm ?? 124;
-  const bottomHammerW = p.bottom_hammer_w_nm ?? 146;
-  const bottomHammerH = p.bottom_hammer_h_nm ?? 28;
+function appendLShapeOpc(
+  rects: RectNm[],
+  p: Record<string, number>,
+  cx: number,
+  cy: number,
+  family: "DUV" | "EUV",
+) {
+  if (
+    Number.isFinite(p.m1_x_nm) && Number.isFinite(p.m1_y_nm)
+    && Number.isFinite(p.m2_x_nm) && Number.isFinite(p.m2_y_nm)
+  ) {
+    const cd = p.cd_nm ?? (family === "DUV" ? 120 : 110);
+    const horiz = p.length_nm ?? (family === "DUV" ? 350 : 380);
+    const vert = p.arm_nm ?? (family === "DUV" ? 320 : 348);
+    pushRect(rects, p.m1_x_nm, p.m1_y_nm, horiz, cd);
+    pushRect(rects, p.m2_x_nm, p.m2_y_nm, cd, vert);
+    return;
+  }
+  const cd = p.cd_nm ?? (family === "DUV" ? 92 : 100);
+  const horiz = p.length_nm ?? (family === "DUV" ? 470 : 430);
+  const vert = p.arm_nm ?? (family === "DUV" ? 432 : 396);
+  const elbowX = cx + (p.elbow_x_offset_nm ?? (family === "DUV" ? 170 : 164));
+  const elbowY = cy + (p.elbow_y_offset_nm ?? (family === "DUV" ? 132 : 136));
+  const horizExt = p.opc_h_ext_nm ?? (family === "DUV" ? 38 : 22);
+  const vertExt = p.opc_v_ext_nm ?? (family === "DUV" ? 42 : 24);
+  const bias = p.opc_bias_nm ?? (family === "DUV" ? 18 : 10);
 
   const horizH = cd + bias;
   const vertW = cd + bias;
@@ -59,9 +78,6 @@ function appendLShapeOpc(rects: RectNm[], p: Record<string, number>, cx: number,
   const yv = elbowY - vert - vertExt;
   pushRect(rects, xh, yh, horiz + horizExt, horizH);
   pushRect(rects, xv, yv, vertW, vert + vertExt);
-  pushRect(rects, xh - 22, yh - 16, leftHammerW, leftHammerH);
-  pushRect(rects, xv - 18, yv - 20, bottomHammerW, bottomHammerH);
-  pushRect(rects, elbowX - serif * 0.28, elbowY - serif * 0.28, serif, serif);
 }
 
 function appendSteppedTrack(rects: RectNm[], x: number, y: number, thickness: number, run: number[], rise: number[]) {
@@ -100,7 +116,7 @@ function appendSteppedInterconnectOpc(rects: RectNm[], p: Record<string, number>
 }
 
 function rectsToShapes(rects: RectNm[]): RectMaskShape[] {
-  return rects.map((item) => rect(item.x, item.y, item.w, item.h));
+  return rects.map((item) => rect(item.x, item.y, item.w, item.h, item.op ?? "add"));
 }
 
 function rectsNearlyEqual(a: RectMaskShape, b: RectMaskShape): boolean {
@@ -111,16 +127,17 @@ function rectsNearlyEqual(a: RectMaskShape, b: RectMaskShape): boolean {
 }
 
 export function buildTemplateBaseShapes(templateId: TemplateID, params: Record<string, number>): RectMaskShape[] {
+  const normalizedTemplateId = normalizeTemplateId(templateId) ?? templateId;
   const fov = params.fov_nm ?? 1100;
   const cx = fov * 0.5;
   const cy = fov * 0.5;
   const rects: RectNm[] = [];
 
-  if (templateId === "ISO_LINE") {
+  if (normalizedTemplateId === "ISO_LINE") {
     const cd = params.cd_nm ?? 100;
     const h = params.length_nm ?? 900;
     pushRect(rects, cx - cd / 2, cy - h / 2, cd, h);
-  } else if (templateId === "DENSE_LS") {
+  } else if (normalizedTemplateId === "DENSE_LS") {
     const cd = params.cd_nm ?? 60;
     const pitch = params.pitch_nm ?? 140;
     const nReq = Math.max(1, Math.floor(params.n_lines ?? 7));
@@ -130,11 +147,11 @@ export function buildTemplateBaseShapes(templateId: TemplateID, params: Record<s
     for (let i = 0; i < n; i++) {
       pushRect(rects, start + i * pitch - cd / 2, cy - h / 2, cd, h);
     }
-  } else if (templateId === "LINE_END_RAW") {
+  } else if (normalizedTemplateId === "LINE_END_RAW") {
     const cd = params.cd_nm ?? 100;
     const h = params.length_nm ?? 900;
     pushRect(rects, cx - cd / 2, cy - h / 2, cd, h);
-  } else if (templateId === "LINE_END_OPC_HAMMER") {
+  } else if (normalizedTemplateId === "LINE_END_OPC_HAMMER") {
     const cd = params.cd_nm ?? 100;
     const h = params.length_nm ?? 900;
     const hammerW = params.hammer_w_nm ?? Math.max(1.8 * cd, cd + 40);
@@ -144,14 +161,18 @@ export function buildTemplateBaseShapes(templateId: TemplateID, params: Record<s
     pushRect(rects, x, y, cd, h);
     pushRect(rects, cx - hammerW / 2, y + h - hammerH / 2, hammerW, hammerH);
     pushRect(rects, cx - hammerW / 2, y - hammerH / 2, hammerW, hammerH);
-  } else if (templateId === "L_CORNER_RAW") {
-    appendLShapeRaw(rects, params, cx, cy);
-  } else if (templateId === "L_CORNER_OPC_SERIF") {
-    appendLShapeOpc(rects, params, cx, cy);
-  } else if (templateId === "CONTACT_RAW") {
+  } else if (normalizedTemplateId === "L_CORNER_RAW_DUV") {
+    appendLShapeRaw(rects, params, cx, cy, "DUV");
+  } else if (normalizedTemplateId === "L_CORNER_RAW_EUV") {
+    appendLShapeRaw(rects, params, cx, cy, "EUV");
+  } else if (normalizedTemplateId === "L_CORNER_OPC_DUV") {
+    appendLShapeOpc(rects, params, cx, cy, "DUV");
+  } else if (normalizedTemplateId === "L_CORNER_OPC_EUV") {
+    appendLShapeOpc(rects, params, cx, cy, "EUV");
+  } else if (normalizedTemplateId === "CONTACT_RAW") {
     const w = params.w_nm ?? params.cd_nm ?? 100;
     pushRect(rects, cx - w / 2, cy - w / 2, w, w);
-  } else if (templateId === "CONTACT_OPC_SERIF") {
+  } else if (normalizedTemplateId === "CONTACT_OPC_SERIF") {
     const w = params.w_nm ?? params.cd_nm ?? 100;
     const serif = params.serif_nm ?? Math.max(0.35 * w, 20);
     const half = w / 2;
@@ -160,9 +181,9 @@ export function buildTemplateBaseShapes(templateId: TemplateID, params: Record<s
     pushRect(rects, cx + half - serif / 2, cy - half - serif / 2, serif, serif);
     pushRect(rects, cx - half - serif / 2, cy + half - serif / 2, serif, serif);
     pushRect(rects, cx + half - serif / 2, cy + half - serif / 2, serif, serif);
-  } else if (templateId === "STAIRCASE") {
+  } else if (normalizedTemplateId === "STAIRCASE") {
     appendSteppedInterconnectRaw(rects, params, cx, cy);
-  } else if (templateId === "STAIRCASE_OPC") {
+  } else if (normalizedTemplateId === "STAIRCASE_OPC") {
     appendSteppedInterconnectOpc(rects, params, cx, cy);
   } else {
     const w = params.w_nm ?? params.cd_nm ?? 100;

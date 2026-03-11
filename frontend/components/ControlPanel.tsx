@@ -22,14 +22,16 @@ import type {
 import type { SavedScenario } from "../lib/scenarios";
 import type { UsageStatus } from "../lib/usage";
 import { trackProductEvent } from "../lib/telemetry";
+import { isLShapeOpcTemplate } from "../lib/template-variants";
 import { FreeSimulatorAd } from "./FreeSimulatorAd";
 
 type CustomMaskPreset = {
   id: string;
   name: string;
   createdAt: string;
-  mode: "TEMPLATE" | "CUSTOM";
+  mode?: "TEMPLATE" | "CUSTOM";
   template_id?: TemplateID;
+  seed_template_id?: TemplateID | null;
   params_nm: Record<string, number>;
   shapes: Array<MaskShape>;
   target_shapes?: Array<MaskShape>;
@@ -37,8 +39,9 @@ type CustomMaskPreset = {
 
 export function ControlPanel(props: {
   plan: Plan;
-  maskMode: "TEMPLATE" | "CUSTOM"; setMaskMode: (v: "TEMPLATE" | "CUSTOM") => void;
-  onEnterCustomEditMode: () => void;
+  maskMode: "TEMPLATE" | "CUSTOM";
+  onReinitializeTemplate: () => void;
+  onStartBlankWorkspace: () => void;
   activeEditLayer: EditorLayer;
   onSetActiveEditLayer: (v: EditorLayer) => void;
   editorTool: EditorTool;
@@ -162,8 +165,8 @@ export function ControlPanel(props: {
   const {
     plan,
     maskMode,
-    setMaskMode,
-    onEnterCustomEditMode,
+    onReinitializeTemplate,
+    onStartBlankWorkspace,
     activeEditLayer,
     onSetActiveEditLayer,
     editorTool,
@@ -313,13 +316,12 @@ export function ControlPanel(props: {
     return [pinned, ...runHistory.slice(0, idx), ...runHistory.slice(idx + 1)];
   }, [runHistory, currentRunId]);
   const pitchSweepAllowed = maskMode === "TEMPLATE" && templateId === "DENSE_LS";
-  const serifSweepAllowed = maskMode === "TEMPLATE" && (templateId === "CONTACT_OPC_SERIF" || templateId === "L_CORNER_OPC_SERIF");
+  const serifSweepAllowed = maskMode === "TEMPLATE" && (templateId === "CONTACT_OPC_SERIF" || isLShapeOpcTemplate(templateId));
   const steppedTemplate = templateId === "STAIRCASE" || templateId === "STAIRCASE_OPC";
   const squareTemplate = templateId === "CONTACT_RAW" || templateId === "CONTACT_OPC_SERIF";
   const customShapePromptVisible = plan === "FREE" && customLimitReached;
   const sweepPromptVisible = analysisTab === "SWEEP" && sweepLocked;
   const planLabel = plan === "PRO" ? "Pro" : "Free";
-  const planSourceLabel = (accountSource ?? "server_managed").replace(/_/g, " ");
   const upgradeLocked = plan === "PRO";
   const manageBillingVisible = billingPortalAvailable;
   const planIdentityLabel = accountIdentityLabel ?? (accountSignedIn ? "Signed in" : "Signed out");
@@ -335,6 +337,7 @@ export function ControlPanel(props: {
     : null;
   const renewalLabel = (billingRenewalAt ?? accountProExpiresAt ?? "").replace("T", " ").slice(0, 16);
   const renewalPrefix = billingCancelAtPeriodEnd ? "Ends" : "Renews";
+  const accountMetaLabel = renewalLabel ? `${renewalPrefix} ${renewalLabel}` : null;
   const internalTesterIdentity = Boolean(accountUserId?.startsWith("hdr:"));
   const legacyTesterPro = upgradeLocked && !manageBillingVisible && internalTesterIdentity && accountSource !== "stripe";
   const planActionLabel = manageBillingVisible
@@ -505,10 +508,9 @@ export function ControlPanel(props: {
           <div className="plan-row">
             <span className="group-title-inline">Plan</span>
             <div className="plan-row-controls">
-              <div className="plan-readonly-indicator" aria-label={`Current plan ${planLabel}`}>
-                <span className={`plan-status-pill ${plan === "PRO" ? "is-pro" : "is-free"}`}>{planLabel}</span>
-                <span className="plan-status-note">Server managed</span>
-              </div>
+              <span className={`plan-status-pill ${plan === "PRO" ? "is-pro" : "is-free"}`} aria-label={`Current plan ${planLabel}`}>
+                {planLabel}
+              </span>
               {showInternalLoginLink && (
                 <a href="/litopc/internal-login" className="plan-utility-link" title="Internal tester identity">
                   Tester
@@ -529,8 +531,9 @@ export function ControlPanel(props: {
                 onClick={() => setPlanPanelCollapsed((prev) => !prev)}
                 aria-expanded={!planPanelCollapsed}
                 title={planPanelCollapsed ? "Show plan details" : "Hide plan details"}
+                aria-label={planPanelCollapsed ? "Show plan details" : "Hide plan details"}
               >
-                {planPanelCollapsed ? "Show" : "Hide"}
+                {planPanelCollapsed ? "+" : "-"}
               </button>
             </div>
           </div>
@@ -544,7 +547,7 @@ export function ControlPanel(props: {
                     : "Usage unavailable"}
               </div>
               <div className="plan-collapsed-secondary">
-                {`${planLabel} - ${planSourceLabel}`}
+                {accountMetaLabel ?? `${planLabel} account`}
               </div>
             </div>
           ) : (
@@ -561,11 +564,11 @@ export function ControlPanel(props: {
               <div className="plan-summary-card">
                 <div className="plan-summary-line">
                   <span className="plan-summary-k">Identity</span>
-                  <span className="plan-summary-v mono">{planIdentityLabel}</span>
+                  <span className="plan-summary-v mono plan-summary-identity" title={planIdentityLabel}>{planIdentityLabel}</span>
                 </div>
                 {accountSignedIn && accountUserId && (
                   <div className="plan-summary-line">
-                    <span className="plan-summary-k">Account ID</span>
+                    <span className="plan-summary-k">ID</span>
                     <div className="plan-summary-value-row">
                       <span className="plan-summary-preview mono" title={accountUserId}>
                         {accountIdPreview}
@@ -582,9 +585,8 @@ export function ControlPanel(props: {
                   </div>
                 )}
                 <div className="plan-summary-chip-row">
-                  <span className="plan-summary-chip">{planSourceLabel}</span>
                   <span className="plan-summary-chip">{planStatusLabel}</span>
-                  {renewalLabel && <span className="plan-summary-chip">{`${renewalPrefix} ${renewalLabel}`}</span>}
+                  {accountMetaLabel && <span className="plan-summary-chip">{accountMetaLabel}</span>}
                 </div>
               </div>
 
@@ -619,17 +621,6 @@ export function ControlPanel(props: {
           )}
         </div>
 
-        <div className="group-card compact">
-          <p className="group-title">Optics Setup</p>
-          <label className="label">Imaging Tool</label>
-          <select value={presetId} onChange={(e) => setPresetId(e.target.value as any)} style={{ width: "100%" }}>
-            <option value="DUV_193_DRY">DUV | 193 nm Dry</option>
-            <option value="EUV_LNA">EUV | 13.5 nm Low-NA</option>
-            {plan === "PRO" && <option value="DUV_193_IMM">DUV | 193 nm Immersion (Pro)</option>}
-            {plan === "PRO" && <option value="EUV_HNA">EUV | 13.5 nm High-NA (Pro)</option>}
-          </select>
-        </div>
-
         <div className="group-card compact run-card">
           <button className="run-main-btn" onClick={onRun} disabled={loading}>
             {loading ? "Running..." : "Run Simulation"}
@@ -637,39 +628,32 @@ export function ControlPanel(props: {
         </div>
 
         <div className="group-card compact">
-          <p className="group-title">Mask & Geometry</p>
-          <label className="label">Mask Source</label>
-          <div className="mask-mode-seg" style={{ marginBottom: 8 }}>
-            <button onClick={() => setMaskMode("TEMPLATE")} disabled={maskMode === "TEMPLATE"}>
-              <span className="mode-btn-icon" aria-hidden="true">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="2.2" y="2.2" width="11.6" height="11.6" rx="2.1" />
-                  <path d="M5 5h6M5 8h6M5 11h4.2" />
-                </svg>
-              </span>
-              Preset
-            </button>
-            <button onClick={onEnterCustomEditMode} disabled={maskMode === "CUSTOM"}>
-              <span className="mode-btn-icon" aria-hidden="true">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M2.8 12.8h3.6v-3.6H2.8zM9.6 13.2l3.6-3.6M11.3 2.8h2v2h-2zM2.8 2.8h2v2h-2z" />
-                  <path d="M4.8 4.8l5 5M9.8 9.8l1.5 1.5" />
-                </svg>
-              </span>
-              Custom Edit
-            </button>
+          <p className="group-title">Mask Setup</p>
+          <label className="label">Imaging Tool</label>
+          <select value={presetId} onChange={(e) => setPresetId(e.target.value as any)} style={{ width: "100%" }}>
+            <option value="DUV_193_DRY">DUV | 193 nm Dry</option>
+            <option value="EUV_LNA">EUV | 13.5 nm Low-NA</option>
+            {plan === "PRO" && <option value="DUV_193_IMM">DUV | 193 nm Immersion (Pro)</option>}
+            {plan === "PRO" && <option value="EUV_HNA">EUV | 13.5 nm High-NA (Pro)</option>}
+          </select>
+          <label className="label" style={{ marginTop: 10 }}>Pattern</label>
+          <select value={templateId} onChange={(e) => setTemplateId(e.target.value as any)} style={{ width: "100%" }}>
+            {templateOptions.map((t) => (
+              <option key={t.id} value={t.id}>{t.label}</option>
+            ))}
+          </select>
+          <div className="mask-seed-block">
+            <div className="mask-seed-copy">
+              <div className="mask-seed-eyebrow">Workspace Seed</div>
+              <div className="small-note tiny-note mask-seed-description">
+                Pick a pattern to seed the workspace, then keep editing the same mask with add, subtract, move, and resize tools.
+              </div>
+            </div>
+            <div className="mask-seed-actions">
+              <button className="mini-btn mask-seed-btn" onClick={onReinitializeTemplate}>Reinitialize</button>
+              <button className="mini-btn mask-seed-btn secondary" onClick={onStartBlankWorkspace}>Start Blank</button>
+            </div>
           </div>
-
-          {maskMode === "TEMPLATE" && (
-            <>
-              <label className="label">Pattern</label>
-              <select value={templateId} onChange={(e) => setTemplateId(e.target.value as any)} style={{ width: "100%" }}>
-                {templateOptions.map((t) => (
-                  <option key={t.id} value={t.id}>{t.label}</option>
-                ))}
-              </select>
-            </>
-          )}
 
           {plan === "PRO" && (
             <div className="mask-library mask-library-bottom">
@@ -684,7 +668,7 @@ export function ControlPanel(props: {
                 />
                 <button
                   className="mini-btn"
-                  disabled={!maskPresetName.trim() || (maskMode === "CUSTOM" && maskShapes.length === 0)}
+                  disabled={!maskPresetName.trim() || maskShapes.length === 0}
                   onClick={() => {
                     onSaveCustomMaskPreset(maskPresetName);
                     setMaskPresetName("");
@@ -696,7 +680,7 @@ export function ControlPanel(props: {
               <div className="row" style={{ marginTop: 6 }}>
                 <button
                   className="mini-btn"
-                  disabled={maskMode === "CUSTOM" && maskShapes.length === 0}
+                  disabled={maskShapes.length === 0}
                   onClick={() => onExportCustomMaskFile(maskPresetName)}
                   title="Download current mask as a litopc mask data file."
                 >
@@ -727,12 +711,6 @@ export function ControlPanel(props: {
                 {customMaskPresets.length === 0 && <div className="small-note tiny-note">No saved masks.</div>}
                 {customMaskPresets.map((m) => (
                   <div key={m.id} className="shape-chip">
-                    <span
-                      className={`mask-type-badge ${m.mode === "CUSTOM" ? "custom" : "template"}`}
-                      title={m.mode === "CUSTOM" ? "Custom Mask" : "Preset Mask"}
-                    >
-                      {m.mode === "CUSTOM" ? "C" : "T"}
-                    </span>
                     <button className="mini-btn slim" onClick={() => onLoadCustomMaskPreset(m.id)}>{m.name}</button>
                     <button className="mini-btn slim danger" onClick={() => onDeleteCustomMaskPreset(m.id)} aria-label={`Delete ${m.name}`}>x</button>
                   </div>

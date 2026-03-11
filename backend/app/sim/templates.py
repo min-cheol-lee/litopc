@@ -3,6 +3,14 @@ from typing import Dict, List, Tuple
 from ..models import RectShape, TemplateID
 
 
+def _normalize_template_id(template_id: TemplateID) -> TemplateID:
+    if template_id in {"L_CORNER", "L_CORNER_RAW"}:
+        return "L_CORNER_RAW_DUV"
+    if template_id == "L_CORNER_OPC_SERIF":
+        return "L_CORNER_OPC_DUV"
+    return template_id
+
+
 def _fit_dense_line_count_in_fov(cd_nm: float, pitch_nm: float, requested_n: int, fov_nm: float) -> int:
     cd = max(0.0, float(cd_nm))
     pitch = abs(float(pitch_nm))
@@ -20,30 +28,85 @@ def _append_rect(shapes: List[RectShape], *, x_nm: float, y_nm: float, w_nm: flo
     shapes.append(RectShape(x_nm=x_nm, y_nm=y_nm, w_nm=w_nm, h_nm=h_nm))
 
 
-def _append_l_shape_raw(shapes: List[RectShape], p: Dict[str, float], cx: float, cy: float) -> None:
-    cd = float(p.get("cd_nm", 92.0))
-    horiz = float(p.get("length_nm", 470.0))
-    vert = float(p.get("arm_nm", 432.0))
-    elbow_x = cx + float(p.get("elbow_x_offset_nm", 170.0))
-    elbow_y = cy + float(p.get("elbow_y_offset_nm", 132.0))
+def _append_l_shape_raw(
+    shapes: List[RectShape],
+    p: Dict[str, float],
+    cx: float,
+    cy: float,
+    family: str,
+) -> None:
+    defaults = {
+        "DUV": {"cd_nm": 100.0, "length_nm": 450.0, "arm_nm": 420.0, "elbow_x_offset_nm": 160.0, "elbow_y_offset_nm": 140.0},
+        "EUV": {"cd_nm": 96.0, "length_nm": 440.0, "arm_nm": 408.0, "elbow_x_offset_nm": 164.0, "elbow_y_offset_nm": 136.0},
+    }[family]
+    cd = float(p.get("cd_nm", defaults["cd_nm"]))
+    horiz = float(p.get("length_nm", defaults["length_nm"]))
+    vert = float(p.get("arm_nm", defaults["arm_nm"]))
+    elbow_x = cx + float(p.get("elbow_x_offset_nm", defaults["elbow_x_offset_nm"]))
+    elbow_y = cy + float(p.get("elbow_y_offset_nm", defaults["elbow_y_offset_nm"]))
     _append_rect(shapes, x_nm=elbow_x - horiz, y_nm=elbow_y - cd, w_nm=horiz, h_nm=cd)
     _append_rect(shapes, x_nm=elbow_x - cd, y_nm=elbow_y - vert, w_nm=cd, h_nm=vert)
 
 
-def _append_l_shape_opc(shapes: List[RectShape], p: Dict[str, float], cx: float, cy: float) -> None:
-    cd = float(p.get("cd_nm", 92.0))
-    horiz = float(p.get("length_nm", 470.0))
-    vert = float(p.get("arm_nm", 432.0))
-    elbow_x = cx + float(p.get("elbow_x_offset_nm", 170.0))
-    elbow_y = cy + float(p.get("elbow_y_offset_nm", 132.0))
-    horiz_ext = float(p.get("opc_h_ext_nm", 26.0))
-    vert_ext = float(p.get("opc_v_ext_nm", 30.0))
-    bias = float(p.get("opc_bias_nm", 14.0))
-    serif = float(p.get("serif_nm", 18.0))
-    left_hammer_w = float(p.get("left_hammer_w_nm", 28.0))
-    left_hammer_h = float(p.get("left_hammer_h_nm", 124.0))
-    bottom_hammer_w = float(p.get("bottom_hammer_w_nm", 146.0))
-    bottom_hammer_h = float(p.get("bottom_hammer_h_nm", 28.0))
+def _append_l_shape_opc(
+    shapes: List[RectShape],
+    p: Dict[str, float],
+    cx: float,
+    cy: float,
+    family: str,
+) -> None:
+    if all(key in p for key in ("m1_x_nm", "m1_y_nm", "m2_x_nm", "m2_y_nm")):
+        cd = float(p.get("cd_nm", 120.0 if family == "DUV" else 110.0))
+        horiz = float(p.get("length_nm", 350.0 if family == "DUV" else 380.0))
+        vert = float(p.get("arm_nm", 320.0 if family == "DUV" else 348.0))
+        _append_rect(shapes, x_nm=float(p["m1_x_nm"]), y_nm=float(p["m1_y_nm"]), w_nm=horiz, h_nm=cd)
+        _append_rect(shapes, x_nm=float(p["m2_x_nm"]), y_nm=float(p["m2_y_nm"]), w_nm=cd, h_nm=vert)
+        return
+    if family == "DUV":
+        defaults = {
+            "cd_nm": 92.0,
+            "length_nm": 470.0,
+            "arm_nm": 432.0,
+            "elbow_x_offset_nm": 170.0,
+            "elbow_y_offset_nm": 132.0,
+            "opc_h_ext_nm": 26.0,
+            "opc_v_ext_nm": 30.0,
+            "opc_bias_nm": 14.0,
+            "serif_nm": 18.0,
+            "left_hammer_w_nm": 28.0,
+            "left_hammer_h_nm": 124.0,
+            "bottom_hammer_w_nm": 146.0,
+            "bottom_hammer_h_nm": 28.0,
+        }
+    else:
+        defaults = {
+            "cd_nm": 100.0,
+            "length_nm": 430.0,
+            "arm_nm": 396.0,
+            "elbow_x_offset_nm": 164.0,
+            "elbow_y_offset_nm": 136.0,
+            "opc_h_ext_nm": 22.0,
+            "opc_v_ext_nm": 24.0,
+            "opc_bias_nm": 10.0,
+            "serif_nm": 14.0,
+            "left_hammer_w_nm": 22.0,
+            "left_hammer_h_nm": 92.0,
+            "bottom_hammer_w_nm": 96.0,
+            "bottom_hammer_h_nm": 22.0,
+        }
+    cd = float(p.get("cd_nm", defaults["cd_nm"]))
+    horiz = float(p.get("length_nm", defaults["length_nm"]))
+    vert = float(p.get("arm_nm", defaults["arm_nm"]))
+    elbow_x = cx + float(p.get("elbow_x_offset_nm", defaults["elbow_x_offset_nm"]))
+    elbow_y = cy + float(p.get("elbow_y_offset_nm", defaults["elbow_y_offset_nm"]))
+    horiz_ext = float(p.get("opc_h_ext_nm", defaults["opc_h_ext_nm"]))
+    vert_ext = float(p.get("opc_v_ext_nm", defaults["opc_v_ext_nm"]))
+    bias = float(p.get("opc_bias_nm", defaults["opc_bias_nm"]))
+    serif = float(p.get("serif_nm", defaults["serif_nm"]))
+    left_hammer_w = float(p.get("left_hammer_w_nm", defaults["left_hammer_w_nm"]))
+    left_hammer_h = float(p.get("left_hammer_h_nm", defaults["left_hammer_h_nm"]))
+    bottom_hammer_w = float(p.get("bottom_hammer_w_nm", defaults["bottom_hammer_w_nm"]))
+    bottom_hammer_h = float(p.get("bottom_hammer_h_nm", defaults["bottom_hammer_h_nm"]))
 
     horiz_h = cd + bias
     vert_w = cd + bias
@@ -127,6 +190,8 @@ def template_to_shapes(template_id: TemplateID, p: Dict[str, float]) -> Tuple[Li
 
     shapes: List[RectShape] = []
 
+    template_id = _normalize_template_id(template_id)
+
     if template_id == "ISO_LINE":
         cd = float(p.get("cd_nm", 80.0))
         h = float(p.get("length_nm", 900.0))
@@ -160,11 +225,17 @@ def template_to_shapes(template_id: TemplateID, p: Dict[str, float]) -> Tuple[Li
         shapes.append(RectShape(x_nm=cx - hammer_w / 2, y_nm=y + h - hammer_h / 2, w_nm=hammer_w, h_nm=hammer_h))
         shapes.append(RectShape(x_nm=cx - hammer_w / 2, y_nm=y - hammer_h / 2, w_nm=hammer_w, h_nm=hammer_h))
 
-    elif template_id == "L_CORNER" or template_id == "L_CORNER_RAW":
-        _append_l_shape_raw(shapes, p, cx, cy)
+    elif template_id == "L_CORNER_RAW_DUV":
+        _append_l_shape_raw(shapes, p, cx, cy, "DUV")
 
-    elif template_id == "L_CORNER_OPC_SERIF":
-        _append_l_shape_opc(shapes, p, cx, cy)
+    elif template_id == "L_CORNER_RAW_EUV":
+        _append_l_shape_raw(shapes, p, cx, cy, "EUV")
+
+    elif template_id == "L_CORNER_OPC_DUV":
+        _append_l_shape_opc(shapes, p, cx, cy, "DUV")
+
+    elif template_id == "L_CORNER_OPC_EUV":
+        _append_l_shape_opc(shapes, p, cx, cy, "EUV")
 
     elif template_id == "CONTACT" or template_id == "CONTACT_RAW":
         w = float(p.get("w_nm", p.get("cd_nm", 80.0)))

@@ -1,4 +1,5 @@
 import type { MaskShape, PresetID, RectMaskShape, ShapeOp, SimResponse, TemplateID } from "./types";
+import { isLShapeOpcTemplate, isLShapeRawTemplate, normalizeTemplateId } from "./template-variants";
 
 export type EditorLayer = "MASK" | "TARGET";
 export type EditorTool = "SELECT" | "DRAW_ADD_RECT" | "DRAW_SUBTRACT_RECT" | "PLACE_SRAF";
@@ -77,17 +78,18 @@ function fitDenseLineCountInFov(cdNm: number, pitchNm: number, requestedN: numbe
 }
 
 function templateRawShapes(templateId: TemplateID, params: Record<string, number>): Array<MaskShape> {
+  const normalizedTemplateId = normalizeTemplateId(templateId) ?? templateId;
   const fov = params.fov_nm ?? 1100;
   const cx = fov * 0.5;
   const cy = fov * 0.5;
 
-  if (templateId === "ISO_LINE" || templateId === "LINE_END_RAW" || templateId === "LINE_END_OPC_HAMMER") {
+  if (normalizedTemplateId === "ISO_LINE" || normalizedTemplateId === "LINE_END_RAW" || normalizedTemplateId === "LINE_END_OPC_HAMMER") {
     const cd = params.cd_nm ?? 100;
     const h = params.length_nm ?? 900;
     return [rect(cx - cd / 2, cy - h / 2, cd, h)];
   }
 
-  if (templateId === "DENSE_LS") {
+  if (normalizedTemplateId === "DENSE_LS") {
     const cd = params.cd_nm ?? 60;
     const pitch = params.pitch_nm ?? 140;
     const nReq = Math.max(1, Math.floor(params.n_lines ?? 7));
@@ -97,24 +99,25 @@ function templateRawShapes(templateId: TemplateID, params: Record<string, number
     return Array.from({ length: n }, (_, index) => rect(start + index * pitch - cd / 2, cy - h / 2, cd, h));
   }
 
-  if (templateId === "CONTACT_RAW" || templateId === "CONTACT_OPC_SERIF") {
+  if (normalizedTemplateId === "CONTACT_RAW" || normalizedTemplateId === "CONTACT_OPC_SERIF") {
     const w = params.w_nm ?? params.cd_nm ?? 116;
     return [rect(cx - w / 2, cy - w / 2, w, w)];
   }
 
-  if (templateId === "L_CORNER_RAW" || templateId === "L_CORNER_OPC_SERIF") {
-    const cd = params.cd_nm ?? 92;
-    const horiz = params.length_nm ?? 470;
-    const vert = params.arm_nm ?? 432;
-    const elbowX = cx + (params.elbow_x_offset_nm ?? 170);
-    const elbowY = cy + (params.elbow_y_offset_nm ?? 132);
+  if (isLShapeRawTemplate(normalizedTemplateId) || isLShapeOpcTemplate(normalizedTemplateId)) {
+    const family = normalizedTemplateId === "L_CORNER_RAW_EUV" || normalizedTemplateId === "L_CORNER_OPC_EUV" ? "EUV" : "DUV";
+    const cd = params.cd_nm ?? (family === "DUV" ? 100 : 96);
+    const horiz = params.length_nm ?? (family === "DUV" ? 450 : 440);
+    const vert = params.arm_nm ?? (family === "DUV" ? 420 : 408);
+    const elbowX = cx + (params.elbow_x_offset_nm ?? (family === "DUV" ? 160 : 164));
+    const elbowY = cy + (params.elbow_y_offset_nm ?? (family === "DUV" ? 140 : 136));
     return [
       rect(elbowX - horiz, elbowY - cd, horiz, cd),
       rect(elbowX - cd, elbowY - vert, cd, vert),
     ];
   }
 
-  if (templateId === "STAIRCASE" || templateId === "STAIRCASE_OPC") {
+  if (normalizedTemplateId === "STAIRCASE" || normalizedTemplateId === "STAIRCASE_OPC") {
     const run = params.step_w_nm ?? 180;
     const rise = params.step_h_nm ?? 110;
     const thickness = params.thickness_nm ?? params.cd_nm ?? 88;
@@ -243,47 +246,33 @@ function simplifyOrthogonalLoop(points: Array<{ x: number; y: number }>): Array<
 }
 
 function presetTargetGuide(templateId: TemplateID, presetId: PresetID, params: Record<string, number>): TargetGuide {
+  const normalizedTemplateId = normalizeTemplateId(templateId) ?? templateId;
   const subtitle = defaultPresetSubtitle(presetId);
-  const rawShapes = templateRawShapes(templateId, params);
+  const rawShapes = templateRawShapes(normalizedTemplateId, params);
 
-  if (templateId === "L_CORNER_RAW" || templateId === "L_CORNER_OPC_SERIF") {
-    const fov = params.fov_nm ?? 1100;
-    const cx = fov * 0.5;
-    const cy = fov * 0.5;
-    const cd = params.cd_nm ?? 92;
-    const horiz = params.length_nm ?? 470;
-    const vert = params.arm_nm ?? 432;
-    const elbowX = cx + (params.elbow_x_offset_nm ?? 170);
-    const elbowY = cy + (params.elbow_y_offset_nm ?? 132);
-    const left = elbowX - horiz;
-    const right = elbowX;
-    const bottom = elbowY - vert;
-    const elbowInner = elbowX - cd;
+  if (isLShapeRawTemplate(normalizedTemplateId) || isLShapeOpcTemplate(normalizedTemplateId)) {
+    const targetShapes = [
+      rect(260, 590, 450, 100),
+      rect(610, 270, 100, 420),
+    ];
+    const isEuvVariant = normalizedTemplateId === "L_CORNER_RAW_EUV" || normalizedTemplateId === "L_CORNER_OPC_EUV";
     return {
-      title: "L-Shape Target",
+      title: isEuvVariant ? "L-Shape Target (EUV)" : "L-Shape Target (DUV)",
       subtitle,
-      objective: "Recover line-end pullback and the lower terminal without printing detached islands.",
-      hint: "Connected hammerheads and modest local bias are more stable here than tiny floating assists.",
+      objective: isEuvVariant
+        ? "Compare how EUV holds the elbow and terminal with lighter correction than the 193 nm DUV case."
+        : "Recover line-end pullback and the lower terminal without printing detached islands.",
+      hint: isEuvVariant
+        ? "Use smaller corner pads and shorter hammerheads. EUV usually benefits from subtler edits than 193 nm dry."
+        : "Connected hammerheads and modest local bias are more stable here than tiny floating assists.",
       hotspotThresholdNm: 22,
-      baselineShapeCount: templateId === "L_CORNER_OPC_SERIF" ? 0 : 0,
-      targetShapes: rawShapes,
-      targetContours: [
-        {
-          points_nm: [
-            { x: left, y: elbowY },
-            { x: right, y: elbowY },
-            { x: right, y: bottom },
-            { x: elbowInner, y: bottom },
-            { x: elbowInner, y: elbowY - cd },
-            { x: left, y: elbowY - cd },
-            { x: left, y: elbowY },
-          ],
-        },
-      ],
+      baselineShapeCount: isLShapeOpcTemplate(normalizedTemplateId) ? 0 : 0,
+      targetShapes,
+      targetContours: rectContours(targetShapes),
     };
   }
 
-  if (templateId === "STAIRCASE" || templateId === "STAIRCASE_OPC") {
+  if (normalizedTemplateId === "STAIRCASE" || normalizedTemplateId === "STAIRCASE_OPC") {
     const fov = params.fov_nm ?? 1100;
     const cx = fov * 0.5;
     const cy = fov * 0.5;
@@ -325,7 +314,7 @@ function presetTargetGuide(templateId: TemplateID, presetId: PresetID, params: R
     };
   }
 
-  if (templateId === "CONTACT_RAW" || templateId === "CONTACT_OPC_SERIF") {
+  if (normalizedTemplateId === "CONTACT_RAW" || normalizedTemplateId === "CONTACT_OPC_SERIF") {
     return {
       title: "Square Target",
       subtitle,
@@ -338,7 +327,7 @@ function presetTargetGuide(templateId: TemplateID, presetId: PresetID, params: R
     };
   }
 
-  if (templateId === "DENSE_LS") {
+  if (normalizedTemplateId === "DENSE_LS") {
     return {
       title: "Dense L/S Target",
       subtitle,

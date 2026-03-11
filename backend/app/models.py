@@ -32,6 +32,10 @@ TemplateID = Literal[
     "CONTACT_OPC_SERIF",
     "LINE_END_RAW",
     "LINE_END_OPC_HAMMER",
+    "L_CORNER_RAW_DUV",
+    "L_CORNER_OPC_DUV",
+    "L_CORNER_RAW_EUV",
+    "L_CORNER_OPC_EUV",
     "L_CORNER_RAW",
     "L_CORNER_OPC_SERIF",
 ]
@@ -58,12 +62,17 @@ class PolygonShape(BaseModel):
 
 Shape = Union[RectShape, PolygonShape]
 
+class PresetFeatureOverride(BaseModel):
+    anchorIndex: int = Field(..., ge=0)
+    rect: RectShape
+
 class MaskSpec(BaseModel):
     mode: MaskMode = "TEMPLATE"
     template_id: Optional[TemplateID] = None
     params_nm: Dict[str, float] = Field(default_factory=dict)
     shapes: List[Shape] = Field(default_factory=list)  # for CUSTOM (Phase 2)
     target_shapes: List[Shape] = Field(default_factory=list)
+    preset_feature_overrides: List[PresetFeatureOverride] = Field(default_factory=list)
 
 class SimRequest(BaseModel):
     plan: Plan = "FREE"

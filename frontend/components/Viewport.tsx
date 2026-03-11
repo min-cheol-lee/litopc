@@ -6,6 +6,7 @@ import { getShapeOp } from "../lib/opc-workspace";
 import { exportPngWithMeta, exportRunsCsv, exportSvgWithMeta, type ExportSweepPayload } from "../lib/export";
 import { consumeUsage } from "../lib/usage";
 import { trackProductEvent } from "../lib/telemetry";
+import { isLShapeOpcTemplate, isLShapeRawTemplate } from "../lib/template-variants";
 
 const DEFAULT_FOV = 1100;
 const COMPARE_A_COLOR = "#2f7dff";
@@ -37,6 +38,7 @@ export function Viewport(props: {
   presetAnchorShapes?: Array<Extract<MaskShape, { type: "rect" }>>;
   selectedPresetAnchorIndex?: number;
   onSelectPresetAnchor?: (i: number) => void;
+  onUpdatePresetFeatureRect?: (rect: Extract<MaskShape, { type: "rect" }>) => void;
   selectedCustomShapeIndex?: number;
   selectedCustomShapeIndexes?: number[];
   onSelectCustomShape?: (i: number, additive?: boolean) => void;
@@ -78,6 +80,7 @@ export function Viewport(props: {
     presetAnchorShapes = [],
     selectedPresetAnchorIndex = 0,
     onSelectPresetAnchor,
+    onUpdatePresetFeatureRect,
     selectedCustomShapeIndex = -1,
     selectedCustomShapeIndexes = [],
     onSelectCustomShape,
@@ -785,10 +788,12 @@ export function Viewport(props: {
       const centerX = (base.x0 + base.x1) * 0.5;
       const y = base.y;
 
-      const hasCustomSelection = req.mask.mode === "CUSTOM" && (
-        selectedCustomShapeIndexes.length > 0 || selectedCustomShapeIndex >= 0
-      );
-      if (hasCustomSelection && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "[", "]", "{", "}"].includes(e.key)) {
+      const hasManualSelection = selectedCustomShapeIndexes.length > 0 || selectedCustomShapeIndex >= 0;
+      const hasPresetSelection = req.mask.mode === "TEMPLATE"
+        && selectedCustomShapeIndexes.length === 0
+        && selectedPresetAnchorIndex >= 0
+        && selectedPresetAnchorIndex < presetAnchorShapes.length;
+      if ((hasManualSelection || hasPresetSelection) && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "[", "]", "{", "}"].includes(e.key)) {
         return;
       }
 
@@ -836,18 +841,12 @@ export function Viewport(props: {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedRuler, maskRuler, contourRuler, fovNm, req.mask.mode, selectedCustomShapeIndex, selectedCustomShapeIndexes, rulerAxis]);
+  }, [selectedRuler, maskRuler, contourRuler, fovNm, req.mask.mode, selectedCustomShapeIndex, selectedCustomShapeIndexes, selectedPresetAnchorIndex, presetAnchorShapes, rulerAxis]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (!onEditableShapesChange) return;
       const target = e.target as HTMLElement | null;
       if (target && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
-      const shapes = editableShapes;
-      const activeIndexes = selectedCustomShapeIndexes.length
-        ? selectedCustomShapeIndexes
-        : (selectedCustomShapeIndex >= 0 ? [selectedCustomShapeIndex] : []);
-      if (!activeIndexes.length) return;
 
       const step = e.shiftKey ? 10 : 1;
       let dx = 0;
@@ -867,17 +866,41 @@ export function Viewport(props: {
       } else {
         return;
       }
-      const set = new Set(activeIndexes);
-      onEditableShapesChange(
-        shapes.map((s, i) => {
-          if (!set.has(i) || s.type !== "rect") return s;
-          return clampRectToFov({ ...s, x_nm: s.x_nm + dx, y_nm: s.y_nm + dy }, fovNm);
-        })
+      const activeIndexes = selectedCustomShapeIndexes.length
+        ? selectedCustomShapeIndexes
+        : (selectedCustomShapeIndex >= 0 ? [selectedCustomShapeIndex] : []);
+      if (activeIndexes.length && onEditableShapesChange) {
+        const set = new Set(activeIndexes);
+        onEditableShapesChange(
+          editableShapes.map((s, i) => {
+            if (!set.has(i) || s.type !== "rect") return s;
+            return clampRectToFov({ ...s, x_nm: s.x_nm + dx, y_nm: s.y_nm + dy }, fovNm);
+          })
+        );
+        return;
+      }
+
+      const canMovePreset = req.mask.mode === "TEMPLATE"
+        && selectedPresetAnchorIndex >= 0
+        && selectedPresetAnchorIndex < presetAnchorShapes.length
+        && !!onUpdatePresetFeatureRect;
+      if (!canMovePreset) return;
+      const selectedPreset = presetAnchorShapes[selectedPresetAnchorIndex];
+      if (!selectedPreset) return;
+      onUpdatePresetFeatureRect?.(
+        clampRectToFov(
+          {
+            ...selectedPreset,
+            x_nm: selectedPreset.x_nm + dx,
+            y_nm: selectedPreset.y_nm + dy,
+          },
+          fovNm,
+        ),
       );
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedRuler, editableShapes, selectedCustomShapeIndex, selectedCustomShapeIndexes, onEditableShapesChange, fovNm]);
+  }, [selectedRuler, editableShapes, selectedCustomShapeIndex, selectedCustomShapeIndexes, onEditableShapesChange, fovNm, req.mask.mode, selectedPresetAnchorIndex, presetAnchorShapes, onUpdatePresetFeatureRect]);
 
   function clampScale(v: number) {
     const safe = Number.isFinite(v) ? v : 1;
@@ -3686,35 +3709,43 @@ function appendLShapeRaw(
   p: Record<string, number>,
   cx: number,
   cy: number,
+  family: "DUV" | "EUV",
 ) {
-  const cd = p.cd_nm ?? 92;
-  const horiz = p.length_nm ?? 470;
-  const vert = p.arm_nm ?? 432;
-  const elbowX = cx + (p.elbow_x_offset_nm ?? 170);
-  const elbowY = cy + (p.elbow_y_offset_nm ?? 132);
+  const cd = p.cd_nm ?? (family === "DUV" ? 100 : 96);
+  const horiz = p.length_nm ?? (family === "DUV" ? 450 : 440);
+  const vert = p.arm_nm ?? (family === "DUV" ? 420 : 408);
+  const elbowX = cx + (p.elbow_x_offset_nm ?? (family === "DUV" ? 160 : 164));
+  const elbowY = cy + (p.elbow_y_offset_nm ?? (family === "DUV" ? 140 : 136));
   pushRect(rects, elbowX - horiz, elbowY - cd, horiz, cd);
   pushRect(rects, elbowX - cd, elbowY - vert, cd, vert);
 }
 
 function appendLShapeOpc(
-  rects: Array<{ x: number; y: number; w: number; h: number }>,
+  rects: Array<{ x: number; y: number; w: number; h: number; op?: "add" | "subtract" }>,
   p: Record<string, number>,
   cx: number,
   cy: number,
+  family: "DUV" | "EUV",
 ) {
-  const cd = p.cd_nm ?? 92;
-  const horiz = p.length_nm ?? 470;
-  const vert = p.arm_nm ?? 432;
-  const elbowX = cx + (p.elbow_x_offset_nm ?? 170);
-  const elbowY = cy + (p.elbow_y_offset_nm ?? 132);
-  const horizExt = p.opc_h_ext_nm ?? 26;
-  const vertExt = p.opc_v_ext_nm ?? 30;
-  const bias = p.opc_bias_nm ?? 14;
-  const serif = p.serif_nm ?? 18;
-  const leftHammerW = p.left_hammer_w_nm ?? 28;
-  const leftHammerH = p.left_hammer_h_nm ?? 124;
-  const bottomHammerW = p.bottom_hammer_w_nm ?? 146;
-  const bottomHammerH = p.bottom_hammer_h_nm ?? 28;
+  if (
+    Number.isFinite(p.m1_x_nm) && Number.isFinite(p.m1_y_nm)
+    && Number.isFinite(p.m2_x_nm) && Number.isFinite(p.m2_y_nm)
+  ) {
+    const cd = p.cd_nm ?? (family === "DUV" ? 120 : 110);
+    const horiz = p.length_nm ?? (family === "DUV" ? 350 : 380);
+    const vert = p.arm_nm ?? (family === "DUV" ? 320 : 348);
+    pushRect(rects, p.m1_x_nm, p.m1_y_nm, horiz, cd);
+    pushRect(rects, p.m2_x_nm, p.m2_y_nm, cd, vert);
+    return;
+  }
+  const cd = p.cd_nm ?? (family === "DUV" ? 92 : 100);
+  const horiz = p.length_nm ?? (family === "DUV" ? 470 : 430);
+  const vert = p.arm_nm ?? (family === "DUV" ? 432 : 396);
+  const elbowX = cx + (p.elbow_x_offset_nm ?? (family === "DUV" ? 170 : 164));
+  const elbowY = cy + (p.elbow_y_offset_nm ?? (family === "DUV" ? 132 : 136));
+  const horizExt = p.opc_h_ext_nm ?? (family === "DUV" ? 38 : 22);
+  const vertExt = p.opc_v_ext_nm ?? (family === "DUV" ? 42 : 24);
+  const bias = p.opc_bias_nm ?? (family === "DUV" ? 18 : 10);
 
   const horizH = cd + bias;
   const vertW = cd + bias;
@@ -3724,9 +3755,6 @@ function appendLShapeOpc(
   const yv = elbowY - vert - vertExt;
   pushRect(rects, xh, yh, horiz + horizExt, horizH);
   pushRect(rects, xv, yv, vertW, vert + vertExt);
-  pushRect(rects, xh - 22, yh - 16, leftHammerW, leftHammerH);
-  pushRect(rects, xv - 18, yv - 20, bottomHammerW, bottomHammerH);
-  pushRect(rects, elbowX - serif * 0.28, elbowY - serif * 0.28, serif, serif);
 }
 
 function appendSteppedTrack(
@@ -3843,12 +3871,12 @@ function maskRectsFromTemplate(req: SimRequest, fovNm: number): Array<{ x: numbe
     rects.push({ x: cx - hammerW / 2, y: y - hammerH / 2, w: hammerW, h: hammerH });
   }
 
-  else if (t === "L_CORNER_RAW") {
-    appendLShapeRaw(rects, p, cx, cy);
+  else if (isLShapeRawTemplate(t)) {
+    appendLShapeRaw(rects, p, cx, cy, t === "L_CORNER_RAW_EUV" ? "EUV" : "DUV");
   }
 
-  else if (t === "L_CORNER_OPC_SERIF") {
-    appendLShapeOpc(rects, p, cx, cy);
+  else if (isLShapeOpcTemplate(t)) {
+    appendLShapeOpc(rects, p, cx, cy, t === "L_CORNER_OPC_EUV" ? "EUV" : "DUV");
   }
 
   else if (t === "CONTACT_RAW") {

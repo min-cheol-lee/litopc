@@ -11,6 +11,7 @@ import type {
   TargetGuide,
 } from "../lib/opc-workspace";
 import { trackProductEvent } from "../lib/telemetry";
+import { isLShapeOpcTemplate, isLShapeRawTemplate, normalizeTemplateId } from "../lib/template-variants";
 
 function StudioToolIcon(props: { kind: "select" | "add" | "subtract" | "sraf" }) {
   const stroke = {
@@ -63,7 +64,8 @@ function AssistActionIcon() {
 }
 
 function templateInspectorLabel(templateId: TemplateID) {
-  switch (templateId) {
+  const normalizedTemplateId = normalizeTemplateId(templateId) ?? templateId;
+  switch (normalizedTemplateId) {
     case "ISO_LINE":
       return "Isolated Line";
     case "DENSE_LS":
@@ -72,10 +74,14 @@ function templateInspectorLabel(templateId: TemplateID) {
       return "Square";
     case "CONTACT_OPC_SERIF":
       return "Square OPC";
-    case "L_CORNER_RAW":
-      return "L-Shape";
-    case "L_CORNER_OPC_SERIF":
-      return "L-Shape OPC";
+    case "L_CORNER_RAW_DUV":
+      return "L-Shape (DUV)";
+    case "L_CORNER_OPC_DUV":
+      return "L-Shape OPC (DUV)";
+    case "L_CORNER_RAW_EUV":
+      return "L-Shape (EUV)";
+    case "L_CORNER_OPC_EUV":
+      return "L-Shape OPC (EUV)";
     case "STAIRCASE":
       return "Stepped Interconnect";
     case "STAIRCASE_OPC":
@@ -209,13 +215,7 @@ export function EditStudioDock(props: {
   const canUseGlobalInspector = maskMode === "TEMPLATE" && activeEditLayer === "MASK";
   const [inspectorScope, setInspectorScope] = useState<"LOCAL" | "GLOBAL">("LOCAL");
   const globalInspector = canUseGlobalInspector && inspectorScope === "GLOBAL";
-  const dockMeta = useMemo(
-    () =>
-      maskMode === "TEMPLATE"
-        ? "Preset"
-        : "Custom",
-    [maskMode],
-  );
+  const dockMeta = useMemo(() => "Workspace", []);
   useEffect(() => {
     if (!canUseGlobalInspector && inspectorScope !== "LOCAL") {
       setInspectorScope("LOCAL");
@@ -414,13 +414,11 @@ export function EditStudioDock(props: {
                 </button>
               </div>
             </div>
-            {maskMode === "CUSTOM" && (
-              <div className="workspace-inline-actions workspace-layer-actions">
-                <button className="mini-btn slim" onClick={onCopyTargetToMask}>Target -&gt; Mask</button>
-                <button className="mini-btn slim" onClick={onCopyMaskToTarget}>Mask -&gt; Target</button>
-                <button className="mini-btn slim" onClick={onClearTargetLayer}>Clear</button>
-              </div>
-            )}
+            <div className="workspace-inline-actions workspace-layer-actions">
+              <button className="mini-btn slim" onClick={onCopyTargetToMask}>Target -&gt; Mask</button>
+              <button className="mini-btn slim" onClick={onCopyMaskToTarget}>Mask -&gt; Target</button>
+              <button className="mini-btn slim" onClick={onClearTargetLayer}>Clear</button>
+            </div>
           </div>
 
           <div className="workspace-edit-dock-row">
@@ -728,28 +726,28 @@ export function EditStudioDock(props: {
                   200,
                 )}
 
-                {(templateId === "L_CORNER_RAW" || templateId === "L_CORNER_OPC_SERIF") && renderInspectorControl(
+                {(isLShapeRawTemplate(templateId) || isLShapeOpcTemplate(templateId)) && renderInspectorControl(
                   "Width (nm)",
                   params.cd_nm ?? 92,
                   (next) => setGlobalWidth(next),
                   1,
                   300,
                 )}
-                {(templateId === "L_CORNER_RAW" || templateId === "L_CORNER_OPC_SERIF") && renderInspectorControl(
+                {(isLShapeRawTemplate(templateId) || isLShapeOpcTemplate(templateId)) && renderInspectorControl(
                   "Horizontal Arm (nm)",
                   params.length_nm ?? 470,
                   (next) => setParam("length_nm", next),
                   80,
                   900,
                 )}
-                {(templateId === "L_CORNER_RAW" || templateId === "L_CORNER_OPC_SERIF") && renderInspectorControl(
+                {(isLShapeRawTemplate(templateId) || isLShapeOpcTemplate(templateId)) && renderInspectorControl(
                   "Vertical Arm (nm)",
                   params.arm_nm ?? 432,
                   (next) => setParam("arm_nm", next),
                   80,
                   900,
                 )}
-                {templateId === "L_CORNER_OPC_SERIF" && renderInspectorControl(
+                {isLShapeOpcTemplate(templateId) && renderInspectorControl(
                   "Serif Size (nm)",
                   params.serif_nm ?? 18,
                   (next) => setParam("serif_nm", next),

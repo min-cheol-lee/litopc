@@ -115,16 +115,66 @@ def _pro_intensity_target(req: SimRequest, shapes, fov_nm: float) -> int:
 
     return min(grid, target)
 
+def _apply_preset_feature_overrides(shapes, overrides):
+    if not overrides:
+        return shapes
+    next_shapes = [shape.model_copy(deep=True) for shape in shapes]
+    rect_indexes = [idx for idx, shape in enumerate(next_shapes) if getattr(shape, "type", "rect") == "rect"]
+    for override in overrides:
+        anchor_index = int(getattr(override, "anchorIndex", -1))
+        if anchor_index < 0 or anchor_index >= len(rect_indexes):
+            continue
+        next_shapes[rect_indexes[anchor_index]] = override.rect.model_copy(deep=True)
+    return next_shapes
+
+
+def _shape_debug_summary(shapes):
+    summary = []
+    for shape in shapes:
+        if getattr(shape, "type", "rect") != "rect":
+            continue
+        summary.append({
+            "op": getattr(shape, "op", "add"),
+            "x_nm": round(float(shape.x_nm), 2),
+            "y_nm": round(float(shape.y_nm), 2),
+            "w_nm": round(float(shape.w_nm), 2),
+            "h_nm": round(float(shape.h_nm), 2),
+        })
+    return summary
+
 def run_simulation(req: SimRequest) -> SimResponse:
     preset = PRESETS[req.preset_id]
 
     # 1) Build shapes (TEMPLATE -> shapes) or use CUSTOM shapes
     if req.mask.mode == "TEMPLATE":
         base_shapes, fov_nm = template_to_shapes(req.mask.template_id, req.mask.params_nm)
+        base_shapes = _apply_preset_feature_overrides(base_shapes, req.mask.preset_feature_overrides)
         shapes = [*base_shapes, *(req.mask.shapes or [])]
     else:
         shapes = req.mask.shapes
         fov_nm = req.mask.params_nm.get("fov_nm", 1100.0)  # fallback
+
+    if req.mask.template_id in {"L_CORNER_OPC_SERIF", "L_CORNER_OPC_DUV", "L_CORNER_OPC_EUV"}:
+        print(
+            "[litopc backend] L-shape OPC resolved shapes",
+            {
+                "params_nm": req.mask.params_nm,
+                "preset_feature_overrides": [
+                    {
+                        "anchorIndex": int(getattr(override, "anchorIndex", -1)),
+                        "rect": {
+                            "x_nm": round(float(override.rect.x_nm), 2),
+                            "y_nm": round(float(override.rect.y_nm), 2),
+                            "w_nm": round(float(override.rect.w_nm), 2),
+                            "h_nm": round(float(override.rect.h_nm), 2),
+                        },
+                    }
+                    for override in (req.mask.preset_feature_overrides or [])
+                ],
+                "resolved_rects": _shape_debug_summary(shapes),
+            },
+            flush=True,
+        )
 
     grid = int(req.grid)
     nm_per_pixel = float(fov_nm) / float(grid)
