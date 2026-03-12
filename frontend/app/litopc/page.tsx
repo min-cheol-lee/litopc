@@ -78,6 +78,7 @@ const FREE_TEMPLATES_BASE: Array<NonNullable<SimRequest["mask"]["template_id"]>>
   "ISO_LINE",
   "DENSE_LS",
   "CONTACT_RAW",
+  "CONTACT_OPC_SERIF",
   "L_CORNER_RAW_DUV",
   "L_CORNER_OPC_DUV",
   "L_CORNER_RAW_EUV",
