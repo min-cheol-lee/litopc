@@ -98,8 +98,8 @@ ENABLED_TEMPLATES_BY_PRESET_FAMILY = {
         "CONTACT_OPC_SERIF",
         "LINE_END_RAW",
         "LINE_END_OPC_HAMMER",
-        "STAIRCASE",
-        "STAIRCASE_OPC",
+        # Keep DUV staircase presets disabled for now.
+        # Re-enable later by adding them back here.
         "L_CORNER_RAW_DUV",
         "L_CORNER_OPC_DUV",
         "L_CORNER_RAW",
@@ -109,11 +109,27 @@ ENABLED_TEMPLATES_BY_PRESET_FAMILY = {
     "EUV": {
         "ISO_LINE",
         "DENSE_LS",
-        "CONTACT_RAW",
-        "CONTACT_OPC_SERIF",
-        # Keep EUV-specific L-shape and stepped presets disabled for now.
+        # Keep EUV-specific square, L-shape, and stepped presets disabled for now.
         # Re-enable later by adding their canonical IDs here.
     },
+}
+
+ENABLED_PRESETS_BY_PLAN = {
+    "FREE": (
+        "DUV_193_DRY",
+        "EUV_LNA",
+    ),
+    "PRO": (
+        "DUV_193_DRY",
+        "EUV_LNA",
+        # Keep DUV_193_IMM and EUV_HNA disabled for now.
+        # Re-enable later by adding them back here.
+    ),
+}
+
+DISABLED_PRESET_FALLBACKS = {
+    "DUV_193_IMM": "DUV_193_DRY",
+    "EUV_HNA": "EUV_LNA",
 }
 
 FREE_CUSTOM_MAX_RECTS = 5
@@ -324,6 +340,16 @@ def _validate_template_access(req: SimRequest) -> None:
     if req.mask.template_id not in ENABLED_TEMPLATES_BY_PRESET_FAMILY[family]:
         raise HTTPException(status_code=403, detail=f"{family} preset currently does not expose this pattern.")
 
+def _normalize_enabled_preset(req: SimRequest) -> None:
+    enabled = ENABLED_PRESETS_BY_PLAN[req.plan]
+    if req.preset_id in enabled:
+        return
+    fallback = DISABLED_PRESET_FALLBACKS.get(req.preset_id)
+    if fallback and fallback in enabled:
+        req.preset_id = fallback
+        return
+    req.preset_id = enabled[0]
+
 def _validate_custom_mode(req: SimRequest) -> None:
     if req.mask.mode == "CUSTOM":
         shapes = req.mask.shapes or []
@@ -352,12 +378,10 @@ def _enforce_plan(req: SimRequest) -> None:
     # Enforce FREE constraints server-side
     if req.plan == "FREE":
         req.grid = 512
-        # FREE: EUV is low-NA only
-        if req.preset_id == "EUV_HNA":
-            req.preset_id = "EUV_LNA"
 
 def _apply_request_policy(req: SimRequest) -> SimRequest:
     out = req.model_copy(deep=True)
+    _normalize_enabled_preset(out)
     _validate_template_access(out)
     _validate_custom_mode(out)
     _enforce_plan(out)

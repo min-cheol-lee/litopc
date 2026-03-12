@@ -170,11 +170,11 @@ export function buildTemplateBaseShapes(templateId: TemplateID, params: Record<s
   } else if (normalizedTemplateId === "L_CORNER_OPC_EUV") {
     appendLShapeOpc(rects, params, cx, cy, "EUV");
   } else if (normalizedTemplateId === "CONTACT_RAW") {
-    const w = params.w_nm ?? params.cd_nm ?? 100;
+    const w = params.w_nm ?? params.cd_nm ?? 200;
     pushRect(rects, cx - w / 2, cy - w / 2, w, w);
   } else if (normalizedTemplateId === "CONTACT_OPC_SERIF") {
-    const w = params.w_nm ?? params.cd_nm ?? 100;
-    const serif = params.serif_nm ?? Math.max(0.35 * w, 20);
+    const w = params.w_nm ?? params.cd_nm ?? 170;
+    const serif = params.serif_nm ?? 112;
     const half = w / 2;
     pushRect(rects, cx - half, cy - half, w, w);
     pushRect(rects, cx - half - serif / 2, cy - half - serif / 2, serif, serif);
@@ -186,7 +186,7 @@ export function buildTemplateBaseShapes(templateId: TemplateID, params: Record<s
   } else if (normalizedTemplateId === "STAIRCASE_OPC") {
     appendSteppedInterconnectOpc(rects, params, cx, cy);
   } else {
-    const w = params.w_nm ?? params.cd_nm ?? 100;
+    const w = params.w_nm ?? params.cd_nm ?? 160;
     pushRect(rects, cx - w / 2, cy - w / 2, w, w);
   }
 

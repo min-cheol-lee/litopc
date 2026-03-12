@@ -102,6 +102,10 @@ export function EditStudioDock(props: {
   templateId: TemplateID;
   params: Record<string, number>;
   setParams: (v: Record<string, number>) => void;
+  targetTemplateId: TemplateID | null;
+  targetParams: Record<string, number>;
+  onSetTargetParams: (v: Record<string, number>) => void;
+  targetCanUseGlobalInspector: boolean;
   targetGuide: TargetGuide | null;
   editableShapes: Array<MaskShape>;
   maskShapes: Array<MaskShape>;
@@ -149,6 +153,10 @@ export function EditStudioDock(props: {
     templateId,
     params,
     setParams,
+    targetTemplateId,
+    targetParams,
+    onSetTargetParams,
+    targetCanUseGlobalInspector,
     targetGuide,
     editableShapes,
     maskShapes,
@@ -188,8 +196,11 @@ export function EditStudioDock(props: {
 
   const targetEditing = activeEditLayer === "TARGET";
   const canUseSubtractTools = !targetEditing;
-  const presetAnchorAvailable = maskMode === "TEMPLATE" && presetAnchorShapes.length > 0;
-  const hasManualSelection = selectedCustomShapeIndexes.length > 0;
+  const presetAnchorAvailable = maskMode === "TEMPLATE" && !targetEditing && presetAnchorShapes.length > 0;
+  const manualSelectionCount = selectedCustomShapeIndexes.length > 0
+    ? selectedCustomShapeIndexes.length
+    : (selectedCustomShapeIndex >= 0 ? 1 : 0);
+  const hasManualSelection = manualSelectionCount > 0;
   const hasPresetSelection =
     presetAnchorAvailable &&
     !hasManualSelection &&
@@ -199,8 +210,12 @@ export function EditStudioDock(props: {
     ? selectedCustomShapeIndexes[0]
     : selectedCustomShapeIndex;
   const selectedShape = selectedManualIndex >= 0 ? editableShapes[selectedManualIndex] ?? null : null;
-  const hasMultiManualSelection = selectedCustomShapeIndexes.length > 1;
-  const manualSelectedRect = selectedCustomShapeIndexes.length === 1 && selectedShape?.type === "rect" ? selectedShape : null;
+  const hasMultiManualSelection = manualSelectionCount > 1;
+  const hasSingleManualSelection =
+    !hasMultiManualSelection &&
+    selectedManualIndex >= 0 &&
+    !!selectedShape;
+  const manualSelectedRect = hasSingleManualSelection && selectedShape?.type === "rect" ? selectedShape : null;
   const editingPresetFeature =
     maskMode === "TEMPLATE" &&
     !hasManualSelection &&
@@ -210,9 +225,14 @@ export function EditStudioDock(props: {
   const fovNm = params.fov_nm ?? 1100;
   const maxRectX = selectedRect ? Math.max(0, fovNm - selectedRect.w_nm) : fovNm;
   const maxRectY = selectedRect ? Math.max(0, fovNm - selectedRect.h_nm) : fovNm;
-  const steppedTemplate = templateId === "STAIRCASE" || templateId === "STAIRCASE_OPC";
-  const squareTemplate = templateId === "CONTACT_RAW" || templateId === "CONTACT_OPC_SERIF";
-  const canUseGlobalInspector = maskMode === "TEMPLATE" && activeEditLayer === "MASK";
+  const inspectorTemplateId = targetEditing ? (targetTemplateId ?? templateId) : templateId;
+  const inspectorParams = targetEditing ? targetParams : params;
+  const activeInspectorTemplateId = inspectorTemplateId ?? templateId;
+  const steppedTemplate = inspectorTemplateId === "STAIRCASE" || inspectorTemplateId === "STAIRCASE_OPC";
+  const squareTemplate = inspectorTemplateId === "CONTACT_RAW" || inspectorTemplateId === "CONTACT_OPC_SERIF";
+  const canUseGlobalInspector = targetEditing
+    ? targetCanUseGlobalInspector
+    : (maskMode === "TEMPLATE" && activeEditLayer === "MASK");
   const [inspectorScope, setInspectorScope] = useState<"LOCAL" | "GLOBAL">("LOCAL");
   const globalInspector = canUseGlobalInspector && inspectorScope === "GLOBAL";
   const dockMeta = useMemo(() => "Workspace", []);
@@ -224,13 +244,17 @@ export function EditStudioDock(props: {
   const inspectorChip = useMemo(() => {
     if (globalInspector) {
       return {
-        label: templateInspectorLabel(templateId),
+        label: templateInspectorLabel(activeInspectorTemplateId),
         kind: "template" as const,
-        title: "Pattern-wide parameters",
+        title: targetEditing ? "Target-wide parameters" : "Pattern-wide parameters",
       };
     }
     if (hasMultiManualSelection) {
-      return { label: `${selectedCustomShapeIndexes.length} edits`, kind: "multi" as const, title: "Multiple manual edits selected" };
+      return {
+        label: `${manualSelectionCount} ${targetEditing ? "targets" : "edits"}`,
+        kind: "multi" as const,
+        title: targetEditing ? "Multiple target shapes selected" : "Multiple manual edits selected",
+      };
     }
     if (editingPresetFeature) {
       return {
@@ -240,6 +264,13 @@ export function EditStudioDock(props: {
       };
     }
     if (manualSelectedRect && selectedManualIndex >= 0) {
+      if (targetEditing) {
+        return {
+          label: `T${selectedManualIndex + 1}`,
+          kind: "target" as const,
+          title: `Target shape T${selectedManualIndex + 1}`,
+        };
+      }
       const prefix = manualSelectedRect.op === "subtract" ? "-" : "+";
       return {
         label: `${prefix}R${selectedManualIndex + 1}`,
@@ -247,14 +278,22 @@ export function EditStudioDock(props: {
         title: manualSelectedRect.op === "subtract" ? "Subtract edit" : "Add edit",
       };
     }
-    return { label: "Template", kind: "template" as const, title: "Template defaults" };
-  }, [globalInspector, templateId, hasMultiManualSelection, selectedCustomShapeIndexes.length, editingPresetFeature, selectedPresetAnchorIndex, activeEditLayer, manualSelectedRect, selectedManualIndex]);
+    return { label: "Template", kind: "template" as const, title: targetEditing ? "Target defaults" : "Template defaults" };
+  }, [globalInspector, activeInspectorTemplateId, hasMultiManualSelection, manualSelectionCount, editingPresetFeature, selectedPresetAnchorIndex, activeEditLayer, manualSelectedRect, selectedManualIndex, targetEditing]);
+
+  const isManualShapeSelected = (index: number) =>
+    selectedCustomShapeIndexes.includes(index)
+    || (selectedCustomShapeIndexes.length === 0 && selectedCustomShapeIndex === index);
 
   function clamp(v: number, lo: number, hi: number) {
     return Math.max(lo, Math.min(hi, v));
   }
 
   function setParam(key: string, v: number) {
+    if (targetEditing) {
+      onSetTargetParams({ ...inspectorParams, [key]: v });
+      return;
+    }
     setParams({ ...params, [key]: v });
   }
 
@@ -310,7 +349,7 @@ export function EditStudioDock(props: {
 
   function setGlobalWidth(v: number) {
     const bounded = clamp(v, 1, 900);
-    const next = { ...params };
+    const next = { ...inspectorParams };
     if (squareTemplate) {
       next.w_nm = bounded;
       next.cd_nm = bounded;
@@ -319,6 +358,10 @@ export function EditStudioDock(props: {
       next.cd_nm = bounded;
     } else {
       next.cd_nm = bounded;
+    }
+    if (targetEditing) {
+      onSetTargetParams(next);
+      return;
     }
     setParams(next);
   }
@@ -425,7 +468,7 @@ export function EditStudioDock(props: {
             <div className="workspace-studio-block">
               <div className="workspace-mini-head">
                 <span>Edit Tools</span>
-                <span>{targetEditing ? "Target locked" : "Mask editing"}</span>
+                <span>{targetEditing ? "Target editing" : "Mask editing"}</span>
               </div>
               <div className="draw-action-row workspace-tool-grid workspace-tool-grid-compact">
                 <button
@@ -459,14 +502,18 @@ export function EditStudioDock(props: {
               </div>
             </div>
 
-            {(presetAnchorAvailable || !targetEditing) && (
+            {(presetAnchorAvailable || editableShapes.length > 0 || !targetEditing) && (
               <div className="workspace-studio-block">
                 <div className="workspace-mini-head">
-                  <span>{presetAnchorAvailable ? "Selections" : "Manual Edits"}</span>
+                  <span>{targetEditing ? "Target Shapes" : (presetAnchorAvailable ? "Selections" : "Manual Edits")}</span>
                   <span>
-                    {presetAnchorAvailable
+                    {targetEditing
                       ? hasManualSelection
-                        ? `${selectedCustomShapeIndexes.length} edit${selectedCustomShapeIndexes.length > 1 ? "s" : ""} selected`
+                        ? `${manualSelectionCount} target${manualSelectionCount > 1 ? "s" : ""} selected`
+                        : `${editableShapes.length}/${plan === "FREE" ? freeCustomRectLimit : proCustomShapeLimit} used`
+                      : presetAnchorAvailable
+                      ? hasManualSelection
+                        ? `${manualSelectionCount} edit${manualSelectionCount > 1 ? "s" : ""} selected`
                         : hasPresetSelection
                           ? "Feature selected"
                           : "None selected"
@@ -475,9 +522,7 @@ export function EditStudioDock(props: {
                 </div>
                 {presetAnchorAvailable && (
                   <div className="workspace-selection-section">
-                    <div className="workspace-selection-label">
-                      {activeEditLayer === "TARGET" ? "Target Feature" : "Mask Feature"}
-                    </div>
+                    <div className="workspace-selection-label">Mask Feature</div>
                     <div className="shape-chip-list workspace-chip-row">
                       {presetAnchorShapes.map((_, i) => (
                         <div
@@ -506,7 +551,27 @@ export function EditStudioDock(props: {
                   </div>
                 )}
 
-                {!targetEditing && (
+                {targetEditing ? (
+                  <div className="workspace-selection-section">
+                    <div className="workspace-selection-label">Target Shapes</div>
+                    <div className="shape-chip-list workspace-chip-row">
+                      {editableShapes.length === 0 && (
+                        <div className="workspace-empty-chip">No targets yet</div>
+                      )}
+                      {editableShapes.map((_, i) => (
+                        <div key={`target-shape-${i}`} className={`shape-chip ${isManualShapeSelected(i) ? "selected target" : ""}`}>
+                          <button
+                            className="mini-btn slim"
+                            onClick={(e) => onSelectCustomShapeChip(i, e.shiftKey || e.ctrlKey || e.metaKey)}
+                          >
+                            {`T${i + 1}`}
+                          </button>
+                          <button className="mini-btn slim danger" onClick={() => onDeleteCustomShape(i)} aria-label={`Delete target ${i + 1}`}>x</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
                   <>
                     {(customLimitReached || customLimitNotice) && (
                       <div className="upgrade-inline-wrap">
@@ -533,7 +598,7 @@ export function EditStudioDock(props: {
                         {editableShapes.map((shape, i) => {
                           const label = `${shape.op === "subtract" ? "-" : "+"}R${i + 1}`;
                           return (
-                            <div key={i} className={`shape-chip ${selectedCustomShapeIndexes.includes(i) ? "selected" : ""}`}>
+                            <div key={i} className={`shape-chip ${isManualShapeSelected(i) ? "selected" : ""}`}>
                               <button
                                 className="mini-btn slim"
                                 onClick={(e) => onSelectCustomShapeChip(i, e.shiftKey || e.ctrlKey || e.metaKey)}
@@ -674,7 +739,7 @@ export function EditStudioDock(props: {
                 )}
                 <div className="workspace-layer-meta">
                   {globalInspector
-                    ? "Pattern parameters"
+                    ? (targetEditing ? "Target parameters" : "Pattern parameters")
                     : hasMultiManualSelection
                       ? "Move only"
                       : selectedRect
@@ -686,102 +751,110 @@ export function EditStudioDock(props: {
 
             {globalInspector ? (
               <>
-                {(templateId === "ISO_LINE" || templateId === "DENSE_LS") && renderInspectorControl(
+                {(activeInspectorTemplateId === "ISO_LINE" || activeInspectorTemplateId === "DENSE_LS") && renderInspectorControl(
                   "Width (nm)",
-                  params.cd_nm ?? 100,
+                  inspectorParams.cd_nm ?? 100,
                   (next) => setGlobalWidth(next),
                   1,
                   900,
                 )}
-                {(templateId === "ISO_LINE" || templateId === "DENSE_LS") && renderInspectorControl(
+                {(activeInspectorTemplateId === "ISO_LINE" || activeInspectorTemplateId === "DENSE_LS") && renderInspectorControl(
                   "Height (nm)",
-                  params.length_nm ?? 900,
+                  inspectorParams.length_nm ?? 900,
                   (next) => setGlobalHeight(next),
                   10,
                   900,
                 )}
-                {templateId === "DENSE_LS" && renderInspectorControl(
+                {activeInspectorTemplateId === "DENSE_LS" && renderInspectorControl(
                   "Pitch (nm)",
-                  params.pitch_nm ?? 140,
+                  inspectorParams.pitch_nm ?? 140,
                   (next) => setParam("pitch_nm", next),
                   60,
                   300,
                 )}
 
-                {(templateId === "CONTACT_RAW" || templateId === "CONTACT_OPC_SERIF") && renderInspectorControl(
+                {(activeInspectorTemplateId === "CONTACT_RAW" || activeInspectorTemplateId === "CONTACT_OPC_SERIF") && renderInspectorControl(
                   "Side (nm)",
-                  params.w_nm ?? params.cd_nm ?? 100,
+                  inspectorParams.w_nm ?? inspectorParams.cd_nm ?? 100,
                   (next) => {
                     const bounded = clamp(next, 1, 900);
+                    if (targetEditing) {
+                      onSetTargetParams({ ...inspectorParams, w_nm: bounded, cd_nm: bounded });
+                      return;
+                    }
                     setParams({ ...params, w_nm: bounded, cd_nm: bounded });
                   },
                   1,
                   900,
                 )}
-                {templateId === "CONTACT_OPC_SERIF" && renderInspectorControl(
+                {activeInspectorTemplateId === "CONTACT_OPC_SERIF" && renderInspectorControl(
                   "Serif Size (nm)",
-                  params.serif_nm ?? 28,
+                  inspectorParams.serif_nm ?? 28,
                   (next) => setParam("serif_nm", next),
                   5,
                   200,
                 )}
 
-                {(isLShapeRawTemplate(templateId) || isLShapeOpcTemplate(templateId)) && renderInspectorControl(
+                {(isLShapeRawTemplate(activeInspectorTemplateId) || isLShapeOpcTemplate(activeInspectorTemplateId)) && renderInspectorControl(
                   "Width (nm)",
-                  params.cd_nm ?? 92,
+                  inspectorParams.cd_nm ?? 92,
                   (next) => setGlobalWidth(next),
                   1,
                   300,
                 )}
-                {(isLShapeRawTemplate(templateId) || isLShapeOpcTemplate(templateId)) && renderInspectorControl(
+                {(isLShapeRawTemplate(activeInspectorTemplateId) || isLShapeOpcTemplate(activeInspectorTemplateId)) && renderInspectorControl(
                   "Horizontal Arm (nm)",
-                  params.length_nm ?? 470,
+                  inspectorParams.length_nm ?? 470,
                   (next) => setParam("length_nm", next),
                   80,
                   900,
                 )}
-                {(isLShapeRawTemplate(templateId) || isLShapeOpcTemplate(templateId)) && renderInspectorControl(
+                {(isLShapeRawTemplate(activeInspectorTemplateId) || isLShapeOpcTemplate(activeInspectorTemplateId)) && renderInspectorControl(
                   "Vertical Arm (nm)",
-                  params.arm_nm ?? 432,
+                  inspectorParams.arm_nm ?? 432,
                   (next) => setParam("arm_nm", next),
                   80,
                   900,
                 )}
-                {isLShapeOpcTemplate(templateId) && renderInspectorControl(
+                {isLShapeOpcTemplate(activeInspectorTemplateId) && renderInspectorControl(
                   "Serif Size (nm)",
-                  params.serif_nm ?? 18,
+                  inspectorParams.serif_nm ?? 18,
                   (next) => setParam("serif_nm", next),
                   5,
                   200,
                 )}
 
-                {(templateId === "STAIRCASE" || templateId === "STAIRCASE_OPC") && renderInspectorControl(
+                {(activeInspectorTemplateId === "STAIRCASE" || activeInspectorTemplateId === "STAIRCASE_OPC") && renderInspectorControl(
                   "Track Width (nm)",
-                  params.thickness_nm ?? params.cd_nm ?? 88,
+                  inspectorParams.thickness_nm ?? inspectorParams.cd_nm ?? 88,
                   (next) => {
                     const bounded = clamp(next, 1, 400);
+                    if (targetEditing) {
+                      onSetTargetParams({ ...inspectorParams, thickness_nm: bounded, cd_nm: bounded });
+                      return;
+                    }
                     setParams({ ...params, thickness_nm: bounded, cd_nm: bounded });
                   },
                   1,
                   400,
                 )}
-                {(templateId === "STAIRCASE" || templateId === "STAIRCASE_OPC") && renderInspectorControl(
+                {(activeInspectorTemplateId === "STAIRCASE" || activeInspectorTemplateId === "STAIRCASE_OPC") && renderInspectorControl(
                   "Step Run (nm)",
-                  params.step_w_nm ?? 180,
+                  inspectorParams.step_w_nm ?? 180,
                   (next) => setParam("step_w_nm", next),
                   30,
                   400,
                 )}
-                {(templateId === "STAIRCASE" || templateId === "STAIRCASE_OPC") && renderInspectorControl(
+                {(activeInspectorTemplateId === "STAIRCASE" || activeInspectorTemplateId === "STAIRCASE_OPC") && renderInspectorControl(
                   "Step Rise (nm)",
-                  params.step_h_nm ?? 110,
+                  inspectorParams.step_h_nm ?? 110,
                   (next) => setParam("step_h_nm", next),
                   20,
                   300,
                 )}
-                {templateId === "STAIRCASE_OPC" && renderInspectorControl(
+                {activeInspectorTemplateId === "STAIRCASE_OPC" && renderInspectorControl(
                   "Corner Pad (nm)",
-                  params.serif_nm ?? 18,
+                  inspectorParams.serif_nm ?? 18,
                   (next) => setParam("serif_nm", next),
                   5,
                   120,

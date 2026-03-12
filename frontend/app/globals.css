@@ -5650,6 +5650,12 @@ input[type="range"] {
   color: rgba(126, 42, 82, 0.84);
 }
 
+.workspace-inspector-chip-target {
+  border-color: rgba(64, 188, 190, 0.18);
+  background: linear-gradient(180deg, rgba(242, 255, 252, 0.98), rgba(228, 249, 244, 0.94));
+  color: rgba(29, 106, 104, 0.88);
+}
+
 .workspace-inspector-chip-subtract {
   border-color: rgba(112, 146, 208, 0.18);
   background: linear-gradient(180deg, rgba(246, 250, 255, 0.98), rgba(232, 240, 252, 0.94));

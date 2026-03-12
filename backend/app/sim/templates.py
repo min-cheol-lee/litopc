@@ -238,12 +238,12 @@ def template_to_shapes(template_id: TemplateID, p: Dict[str, float]) -> Tuple[Li
         _append_l_shape_opc(shapes, p, cx, cy, "EUV")
 
     elif template_id == "CONTACT" or template_id == "CONTACT_RAW":
-        w = float(p.get("w_nm", p.get("cd_nm", 80.0)))
+        w = float(p.get("w_nm", p.get("cd_nm", 200.0)))
         shapes.append(RectShape(x_nm=cx - w / 2, y_nm=cy - w / 2, w_nm=w, h_nm=w))
 
     elif template_id == "CONTACT_OPC_SERIF":
-        w = float(p.get("w_nm", p.get("cd_nm", 80.0)))
-        serif = float(p.get("serif_nm", max(0.35 * w, 20.0)))
+        w = float(p.get("w_nm", p.get("cd_nm", 170.0)))
+        serif = float(p.get("serif_nm", 112.0))
         half = w / 2
         shapes.append(RectShape(x_nm=cx - half, y_nm=cy - half, w_nm=w, h_nm=w))
         # diagonal serif pads to counter contact rounding (educational)
@@ -259,7 +259,7 @@ def template_to_shapes(template_id: TemplateID, p: Dict[str, float]) -> Tuple[Li
         _append_stepped_interconnect_opc(shapes, p, cx, cy)
     else:
         # fallback: simple contact
-        w = float(p.get("w_nm", p.get("cd_nm", 80.0)))
+        w = float(p.get("w_nm", p.get("cd_nm", 200.0)))
         shapes.append(RectShape(x_nm=cx - w / 2, y_nm=cy - w / 2, w_nm=w, h_nm=w))
 
     # Phase 1: simple rule-based SRAF appended as extra rectangles

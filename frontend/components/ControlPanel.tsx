@@ -47,6 +47,7 @@ export function ControlPanel(props: {
   editorTool: EditorTool;
   onSetEditorTool: (v: EditorTool) => void;
   presetId: PresetID; setPresetId: (v: PresetID) => void;
+  presetOptions: Array<{ id: PresetID; label: string }>;
   templateId: TemplateID; setTemplateId: (v: TemplateID) => void;
   templateOptions: Array<{ id: TemplateID; label: string }>;
   targetGuide: TargetGuide | null;
@@ -173,6 +174,7 @@ export function ControlPanel(props: {
     onSetEditorTool,
     presetId,
     setPresetId,
+    presetOptions,
     templateId,
     setTemplateId,
     templateOptions,
@@ -631,10 +633,9 @@ export function ControlPanel(props: {
           <p className="group-title">Mask Setup</p>
           <label className="label">Imaging Tool</label>
           <select value={presetId} onChange={(e) => setPresetId(e.target.value as any)} style={{ width: "100%" }}>
-            <option value="DUV_193_DRY">DUV | 193 nm Dry</option>
-            <option value="EUV_LNA">EUV | 13.5 nm Low-NA</option>
-            {plan === "PRO" && <option value="DUV_193_IMM">DUV | 193 nm Immersion (Pro)</option>}
-            {plan === "PRO" && <option value="EUV_HNA">EUV | 13.5 nm High-NA (Pro)</option>}
+            {presetOptions.map((preset) => (
+              <option key={preset.id} value={preset.id}>{preset.label}</option>
+            ))}
           </select>
           <label className="label" style={{ marginTop: 10 }}>Pattern</label>
           <select value={templateId} onChange={(e) => setTemplateId(e.target.value as any)} style={{ width: "100%" }}>

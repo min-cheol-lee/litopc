@@ -100,7 +100,7 @@ function templateRawShapes(templateId: TemplateID, params: Record<string, number
   }
 
   if (normalizedTemplateId === "CONTACT_RAW" || normalizedTemplateId === "CONTACT_OPC_SERIF") {
-    const w = params.w_nm ?? params.cd_nm ?? 116;
+    const w = params.w_nm ?? params.cd_nm ?? 200;
     return [rect(cx - w / 2, cy - w / 2, w, w)];
   }
 
@@ -315,6 +315,11 @@ function presetTargetGuide(templateId: TemplateID, presetId: PresetID, params: R
   }
 
   if (normalizedTemplateId === "CONTACT_RAW" || normalizedTemplateId === "CONTACT_OPC_SERIF") {
+    const fov = params.fov_nm ?? 1100;
+    const cx = fov * 0.5;
+    const cy = fov * 0.5;
+    const side = params.w_nm ?? params.cd_nm ?? 200;
+    const targetShapes = [rect(cx - side / 2, cy - side / 2, side, side)];
     return {
       title: "Square Target",
       subtitle,
@@ -322,8 +327,8 @@ function presetTargetGuide(templateId: TemplateID, presetId: PresetID, params: R
       hint: "Use balanced corner treatment. Oversized serif pads often add complexity faster than they improve EPE.",
       hotspotThresholdNm: 18,
       baselineShapeCount: 0,
-      targetShapes: rawShapes,
-      targetContours: rectContours(rawShapes),
+      targetShapes,
+      targetContours: rectContours(targetShapes),
     };
   }
 

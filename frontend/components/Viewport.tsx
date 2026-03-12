@@ -2411,6 +2411,55 @@ export function Viewport(props: {
                   </g>
                 );
               })}
+              {editableShapes.map((shape, idx) => (
+                <path
+                  key={`custom-hit-top-${idx}`}
+                  d={editableShapePaths[idx] ?? ""}
+                  fill="rgba(255,255,255,0.001)"
+                  stroke={selectedCustomShapeIndexes.includes(idx) ? (activeEditLayer === "TARGET" ? "rgba(98,242,214,0.98)" : "rgba(255,132,196,0.94)") : "rgba(0,0,0,0)"}
+                  strokeWidth={selectedCustomShapeIndexes.includes(idx) ? 1.2 : 0.001}
+                  vectorEffect="non-scaling-stroke"
+                  style={{ cursor: "move" }}
+                  onMouseDown={(e) => {
+                    if (editorTool !== "SELECT") return;
+                    e.stopPropagation();
+                    const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+                    onSelectCustomShape?.(idx, additive);
+                    const ps = pointerToMaskNm(e.clientX, e.clientY);
+                    const activeIndexes = selectedCustomShapeIndexes.includes(idx)
+                      ? selectedCustomShapeIndexes
+                      : [idx];
+                    customShapeDragRef.current = {
+                      indexes: activeIndexes,
+                      x: ps.x_nm,
+                      y: ps.y_nm,
+                      startShapes: editableShapes.map(cloneViewportShape),
+                    };
+                    setDragging(true);
+                  }}
+                />
+              ))}
+              {req.mask.mode === "TEMPLATE" && activeEditLayer !== "TARGET" && presetAnchorShapes.map((_, idx) => {
+                const d = presetAnchorPaths[idx] ?? "";
+                const selected = selectedCustomShapeIndexes.length === 0 && idx === selectedPresetAnchorIndex;
+                return (
+                  <path
+                    key={`preset-anchor-top-${idx}`}
+                    d={d}
+                    fill="rgba(255,132,196,0.01)"
+                    stroke={selected ? "rgba(255,132,196,0.96)" : "rgba(255,182,220,0.34)"}
+                    strokeWidth={selected ? 1.4 : 0.95}
+                    strokeDasharray={selected ? "8 4" : "4 4"}
+                    vectorEffect="non-scaling-stroke"
+                    style={{ cursor: "pointer" }}
+                    onMouseDown={(e) => {
+                      if (editorTool !== "SELECT") return;
+                      e.stopPropagation();
+                      onSelectPresetAnchor?.(idx);
+                    }}
+                  />
+                );
+              })}
               {showSweepOverlay && sweepRuler && (
                 <g>
                   <line

@@ -68,9 +68,12 @@ import {
   templateEnabledForPreset,
   templateSupportsPresetFamily,
 } from "../../lib/template-variants";
+import {
+  enabledPresetOptionsForPlan,
+  getCompatibleEnabledPresetId,
+} from "../../lib/preset-availability";
 
 const API_BASE = getApiBase();
-const FREE_PRESETS: Array<SimRequest["preset_id"]> = ["DUV_193_DRY", "EUV_LNA"];
 const FREE_TEMPLATES_BASE: Array<NonNullable<SimRequest["mask"]["template_id"]>> = [
   "ISO_LINE",
   "DENSE_LS",
@@ -85,8 +88,6 @@ const PRO_TEMPLATES_BASE: Array<NonNullable<SimRequest["mask"]["template_id"]>> 
   "DENSE_LS",
   "CONTACT_RAW",
   "CONTACT_OPC_SERIF",
-  "STAIRCASE",
-  "STAIRCASE_OPC",
   "L_CORNER_RAW_DUV",
   "L_CORNER_OPC_DUV",
   "L_CORNER_RAW_EUV",
@@ -244,6 +245,7 @@ export default function Page() {
   const [presetEditShapes, setPresetEditShapes] = useState<Array<MaskShape>>([]);
   const [presetFeatureOverrides, setPresetFeatureOverrides] = useState<Array<PresetFeatureOverride>>([]);
   const [presetTargetOverrides, setPresetTargetOverrides] = useState<Array<PresetFeatureOverride>>([]);
+  const [targetPresetParams, setTargetPresetParams] = useState<Record<string, number>>(() => ({ ...DEFAULT_PARAMS, sraf_on: 0 }));
   const [customShapes, setCustomShapes] = useState<Array<MaskShape>>([]);
   const [targetShapes, setTargetShapes] = useState<Array<MaskShape>>(() => (
     cloneMaskShapes(getPresetTargetGuide("ISO_LINE", "DUV_193_DRY", { ...DEFAULT_PARAMS, sraf_on: 0 }).targetShapes)
@@ -320,14 +322,22 @@ export default function Page() {
   const storedDevEmail = storedDevIdentity.email;
   const storedDevAccessToken = storedDevIdentity.accessToken;
   const normalizedTemplateId = normalizeTemplateId(templateId) ?? "ISO_LINE";
+  const presetOptions = useMemo(
+    () => enabledPresetOptionsForPlan(plan),
+    [plan],
+  );
   const compatibleTemplateIds = useMemo(
     () => compatibleTemplateOptionsForContext(plan, presetId),
     [plan, presetId],
   );
   const effectiveParams = { ...params, sraf_on: 0 };
+  const normalizedTargetTemplateId = normalizeTemplateId(customTargetTemplateId ?? null);
+  const effectiveTargetParams = { ...targetPresetParams, sraf_on: 0 };
   const basePresetGuide = useMemo(
-    () => getPresetTargetGuide(normalizedTemplateId, presetId, effectiveParams),
-    [normalizedTemplateId, presetId, effectiveParams],
+    () => normalizedTargetTemplateId
+      ? getPresetTargetGuide(normalizedTargetTemplateId, presetId, effectiveTargetParams)
+      : null,
+    [normalizedTargetTemplateId, presetId, effectiveTargetParams],
   );
   const presetMaskAnchorShapes = useMemo(
     () => !normalizedTemplateId
@@ -368,11 +378,11 @@ export default function Page() {
     : (maskMode === "CUSTOM" ? customShapes : presetEditShapes);
   const targetGuide = useMemo<TargetGuide | null>(() => {
     if (!targetShapes.length) return null;
-    if (maskShapeListEquals(targetShapes, basePresetGuide.targetShapes)) return basePresetGuide;
+    if (basePresetGuide && maskShapeListEquals(targetShapes, basePresetGuide.targetShapes)) return basePresetGuide;
     const customGuide = getCustomTargetGuide(targetShapes, presetId);
     if (!customGuide) return null;
-    if (customTargetTemplateId) {
-      const seededGuide = getPresetTargetGuide(customTargetTemplateId, presetId, effectiveParams);
+    if (normalizedTargetTemplateId) {
+      const seededGuide = getPresetTargetGuide(normalizedTargetTemplateId, presetId, effectiveTargetParams);
       return {
         ...seededGuide,
         baselineShapeCount: customGuide.baselineShapeCount,
@@ -381,7 +391,12 @@ export default function Page() {
       };
     }
     return customGuide;
-  }, [targetShapes, presetId, effectiveParams, customTargetTemplateId, basePresetGuide]);
+  }, [targetShapes, presetId, effectiveTargetParams, normalizedTargetTemplateId, basePresetGuide]);
+  const targetCanUseGlobalInspector = Boolean(
+    normalizedTargetTemplateId
+    && basePresetGuide
+    && maskShapeListEquals(targetShapes, basePresetGuide.targetShapes),
+  );
   const targetMetrics = useMemo(
     () => evaluateTargetScore({ guide: targetGuide, sim, maskShapes: resolvedMaskShapes }),
     [targetGuide, sim, resolvedMaskShapes],
@@ -510,8 +525,14 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
+    const nextPresetId = getCompatibleEnabledPresetId(presetId, plan);
+    if (nextPresetId !== presetId) {
+      setPresetId(nextPresetId);
+    }
+  }, [plan, presetId]);
+
+  useEffect(() => {
     if (plan !== "FREE") return;
-    if (!FREE_PRESETS.includes(presetId)) setPresetId("DUV_193_DRY");
     const freeCompatibleTemplates = compatibleTemplateOptionsForContext("FREE", presetId);
     const normalizedCurrentTemplate = normalizeTemplateId(templateId);
     if (!normalizedCurrentTemplate || !freeCompatibleTemplates.includes(normalizedCurrentTemplate)) {
@@ -552,10 +573,12 @@ export default function Page() {
 
     if (maskMode === "TEMPLATE") {
       const nextParams = { ...params, ...templateParamDefaults(nextTemplateId) };
-      const seededTargetShapes = cloneMaskShapes(getPresetTargetGuide(nextTemplateId, presetId, nextParams).targetShapes);
+      const nextTargetParams = templateTargetParamDefaults(nextTemplateId, nextParams);
+      const seededTargetShapes = cloneMaskShapes(getPresetTargetGuide(nextTemplateId, presetId, nextTargetParams).targetShapes);
       setTemplateId(nextTemplateId);
       setMaskSeedTemplateId(nextTemplateId);
       setParams(nextParams);
+      setTargetPresetParams(nextTargetParams);
       setPresetEditShapes(templateDefaultManualEdits(nextTemplateId, nextParams));
       setPresetFeatureOverrides([]);
       setPresetTargetOverrides([]);
@@ -694,6 +717,24 @@ export default function Page() {
       setSelectedCustomShapeIndex(editableShapes.length ? editableShapes.length - 1 : -1);
     }
   }, [editableShapes.length, selectedCustomShapeIndex, selectedCustomShapeIndexes, editableShapes]);
+
+  useEffect(() => {
+    if (activeEditLayer !== "TARGET") return;
+    if (targetShapes.length === 0) {
+      if (selectedCustomShapeIndex !== -1 || selectedCustomShapeIndexes.length > 0) {
+        setSelectedCustomShapeIndex(-1);
+        setSelectedCustomShapeIndexes([]);
+      }
+      return;
+    }
+    const hasValidTargetSelection =
+      selectedCustomShapeIndexes.some((i) => i >= 0 && i < targetShapes.length)
+      || (selectedCustomShapeIndex >= 0 && selectedCustomShapeIndex < targetShapes.length);
+    if (!hasValidTargetSelection) {
+      setSelectedCustomShapeIndex(0);
+      setSelectedCustomShapeIndexes([0]);
+    }
+  }, [activeEditLayer, targetShapes, selectedCustomShapeIndex, selectedCustomShapeIndexes]);
 
   useEffect(() => {
     if (!presetAnchorShapes.length) {
@@ -1004,7 +1045,8 @@ export default function Page() {
     const nextMode = r.mask.mode ?? "TEMPLATE";
     const nextParams = { ...DEFAULT_PARAMS, ...(r.mask.params_nm ?? {}) };
     const nextTemplateId = normalizeTemplateId(r.mask.template_id ?? "ISO_LINE") ?? "ISO_LINE";
-    const nextTargetGuide = getPresetTargetGuide(nextTemplateId, r.preset_id, nextParams);
+    const nextTargetParams = templateTargetParamDefaults(nextTemplateId, nextParams);
+    const nextTargetGuide = getPresetTargetGuide(nextTemplateId, r.preset_id, nextTargetParams);
     const requestedShapes = cloneMaskShapes((r.mask.shapes ?? []) as Array<MaskShape>);
     const nextShapes = nextMode === "TEMPLATE" && requestedShapes.length === 0
       ? templateDefaultManualEdits(nextTemplateId, nextParams)
@@ -1036,6 +1078,7 @@ export default function Page() {
     }
     setPresetFeatureOverrides((r.mask.preset_feature_overrides ?? []).map((entry) => ({ anchorIndex: entry.anchorIndex, rect: { ...entry.rect } })));
     setPresetTargetOverrides([]);
+    setTargetPresetParams(nextTargetParams);
     setTargetShapes(nextTargetShapes);
     setCustomTargetTemplateId(nextMode === "TEMPLATE" && nextTargetShapes.length > 0 ? nextTemplateId : null);
     setActiveEditLayer("MASK");
@@ -1046,11 +1089,13 @@ export default function Page() {
   function handleTemplateSelection(nextTemplateId: NonNullable<SimRequest["mask"]["template_id"]>) {
     const normalizedNextTemplateId = normalizeTemplateId(nextTemplateId) ?? "ISO_LINE";
     const nextParams = { ...params, ...templateParamDefaults(normalizedNextTemplateId) };
-    const seededTargetShapes = cloneMaskShapes(getPresetTargetGuide(normalizedNextTemplateId, presetId, nextParams).targetShapes);
+    const nextTargetParams = templateTargetParamDefaults(normalizedNextTemplateId, nextParams);
+    const seededTargetShapes = cloneMaskShapes(getPresetTargetGuide(normalizedNextTemplateId, presetId, nextTargetParams).targetShapes);
     setMaskMode("TEMPLATE");
     setTemplateId(normalizedNextTemplateId);
     setMaskSeedTemplateId(normalizedNextTemplateId);
     setParams(nextParams);
+    setTargetPresetParams(nextTargetParams);
     setPresetEditShapes(templateDefaultManualEdits(normalizedNextTemplateId, nextParams));
     setPresetFeatureOverrides([]);
     setPresetTargetOverrides([]);
@@ -1067,14 +1112,16 @@ export default function Page() {
   function reinitializeFromTemplate() {
     const nextTemplateId = normalizeTemplateId(templateId) ?? null;
     if (!nextTemplateId) return;
+    const nextTargetParams = templateTargetParamDefaults(nextTemplateId, params);
     setMaskMode("TEMPLATE");
     setTemplateId(nextTemplateId);
     setMaskSeedTemplateId(nextTemplateId);
     setPresetEditShapes(templateDefaultManualEdits(nextTemplateId, params));
+    setTargetPresetParams(nextTargetParams);
     setPresetFeatureOverrides([]);
     setPresetTargetOverrides([]);
     setCustomShapes([]);
-    setTargetShapes(cloneMaskShapes(getPresetTargetGuide(nextTemplateId, presetId, params).targetShapes));
+    setTargetShapes(cloneMaskShapes(getPresetTargetGuide(nextTemplateId, presetId, nextTargetParams).targetShapes));
     setCustomTargetTemplateId(nextTemplateId);
     setActiveEditLayer("MASK");
     clearSelection();
@@ -1092,6 +1139,7 @@ export default function Page() {
     setPresetEditShapes([]);
     setPresetFeatureOverrides([]);
     setPresetTargetOverrides([]);
+    setTargetPresetParams({ ...DEFAULT_PARAMS, sraf_on: 0 });
     setTargetShapes([]);
     setCustomTargetTemplateId(null);
     setActiveEditLayer("MASK");
@@ -1108,10 +1156,6 @@ export default function Page() {
     if (!Number.isFinite(safe) || editableShapes.length === 0) return;
     setSelectedPresetAnchorIndex(-1);
     if (!additive) {
-      if (selectedCustomShapeIndexes.length === 1 && selectedCustomShapeIndexes[0] === safe) {
-        clearSelection();
-        return;
-      }
       setSelectedCustomShapeIndex(safe);
       setSelectedCustomShapeIndexes([safe]);
       return;
@@ -1175,7 +1219,12 @@ export default function Page() {
 
   function setTargetLayer(nextLayer: EditorLayer) {
     setActiveEditLayer(nextLayer);
-    clearSelection();
+    if (nextLayer === "TARGET" && targetShapes.length > 0) {
+      setSelectedCustomShapeIndex(0);
+      setSelectedCustomShapeIndexes([0]);
+    } else {
+      clearSelection();
+    }
     setEditorTool("SELECT");
   }
 
@@ -1247,9 +1296,27 @@ export default function Page() {
     setTargetShapes(cloneMaskShapes(additiveMaskShapes).map((shape) => (
       shape.type === "rect" ? { ...shape, op: "add" as const } : { ...shape, op: "add" as const }
     )));
+    setTargetPresetParams(params);
     setCustomTargetTemplateId(maskSeedTemplateId ?? (maskMode === "TEMPLATE" ? templateId : null));
     setActiveEditLayer("TARGET");
     clearSelection();
+  }
+
+  function setTargetGlobalParams(nextParams: Record<string, number>) {
+    if (!normalizedTargetTemplateId) return;
+    const sanitized = { ...nextParams, sraf_on: 0 };
+    setTargetPresetParams(sanitized);
+    setTargetShapes(cloneMaskShapes(getPresetTargetGuide(normalizedTargetTemplateId, presetId, sanitized).targetShapes));
+    setSelectedPresetAnchorIndex(0);
+    if (activeEditLayer === "TARGET") {
+      const nextGuide = getPresetTargetGuide(normalizedTargetTemplateId, presetId, sanitized);
+      if (nextGuide.targetShapes.length > 0) {
+        setSelectedCustomShapeIndex(0);
+        setSelectedCustomShapeIndexes([0]);
+      } else {
+        clearSelection();
+      }
+    }
   }
 
   function resolveToolAnchorRect(): Extract<MaskShape, { type: "rect" }> | null {
@@ -2068,6 +2135,7 @@ export default function Page() {
               onSetEditorTool={setEditorTool}
               presetId={presetId}
               setPresetId={setPresetId}
+              presetOptions={presetOptions}
               templateId={templateId}
               setTemplateId={handleTemplateSelection}
               templateOptions={templateOptions}
@@ -2215,6 +2283,10 @@ export default function Page() {
                   templateId={templateId}
                   params={params}
                   setParams={setParams}
+                  targetTemplateId={normalizedTargetTemplateId}
+                  targetParams={targetPresetParams}
+                  onSetTargetParams={setTargetGlobalParams}
+                  targetCanUseGlobalInspector={targetCanUseGlobalInspector}
                   targetGuide={targetGuide}
                   editableShapes={editableShapes}
                   maskShapes={resolvedMaskShapes}
@@ -2339,9 +2411,9 @@ function templateLabel(id: NonNullable<SimRequest["mask"]["template_id"]>): stri
     case "DENSE_LS":
       return "Dense L/S";
     case "CONTACT_RAW":
-      return "Square";
+      return "Square (DUV)";
     case "CONTACT_OPC_SERIF":
-      return "Square OPC";
+      return "Square OPC (DUV)";
     case "STAIRCASE":
       return "Stepped Interconnect";
     case "STAIRCASE_OPC":
@@ -2447,15 +2519,15 @@ function templateParamDefaults(id: NonNullable<SimRequest["mask"]["template_id"]
   switch (normalizedId) {
     case "CONTACT_RAW":
       return {
-        cd_nm: 116,
-        w_nm: 116,
+        cd_nm: 200,
+        w_nm: 200,
         serif_nm: 28,
       };
     case "CONTACT_OPC_SERIF":
       return {
-        cd_nm: 116,
-        w_nm: 116,
-        serif_nm: 28,
+        cd_nm: 170,
+        w_nm: 170,
+        serif_nm: 112,
       };
     case "L_CORNER_RAW_DUV":
       return {
@@ -2545,6 +2617,19 @@ function templateParamDefaults(id: NonNullable<SimRequest["mask"]["template_id"]
   }
 }
 
+function templateTargetParamDefaults(
+  id: NonNullable<SimRequest["mask"]["template_id"]>,
+  baseParams: Record<string, number>,
+): Record<string, number> {
+  const normalizedId = normalizeTemplateId(id) ?? id;
+  const next = { ...baseParams };
+  if (normalizedId === "CONTACT_RAW" || normalizedId === "CONTACT_OPC_SERIF") {
+    next.cd_nm = 200;
+    next.w_nm = 200;
+  }
+  return next;
+}
+
 function defaultMaskPresetName(
   templateId?: SimRequest["mask"]["template_id"] | null,
 ): string {
@@ -2569,7 +2654,7 @@ function normalizeCustomMaskPreset(p: Partial<CustomMaskPreset>): CustomMaskPres
     shape.type === "rect" ? { ...shape, op: "add" as const } : { ...shape, op: "add" as const }
   )));
   const normalizedTargetShapes = shouldRehydrateLegacyTemplate && target_shapes.length === 0
-    ? cloneMaskShapes(getPresetTargetGuide(legacyTemplateId, "DUV_193_DRY", params_nm).targetShapes)
+    ? cloneMaskShapes(getPresetTargetGuide(legacyTemplateId, "DUV_193_DRY", templateTargetParamDefaults(legacyTemplateId, params_nm)).targetShapes)
     : target_shapes;
   return {
     id: p.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,

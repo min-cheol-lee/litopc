@@ -5,8 +5,6 @@ export type TemplatePresetFamily = "DUV" | "EUV";
 const SHARED_TEMPLATE_IDS: ReadonlyArray<TemplateID> = [
   "ISO_LINE",
   "DENSE_LS",
-  "CONTACT_RAW",
-  "CONTACT_OPC_SERIF",
   "LINE_END_RAW",
   "LINE_END_OPC_HAMMER",
   "STAIRCASE",
@@ -14,6 +12,8 @@ const SHARED_TEMPLATE_IDS: ReadonlyArray<TemplateID> = [
 ];
 
 const DUV_ONLY_TEMPLATE_IDS: ReadonlyArray<TemplateID> = [
+  "CONTACT_RAW",
+  "CONTACT_OPC_SERIF",
   "L_CORNER_RAW_DUV",
   "L_CORNER_OPC_DUV",
 ];
@@ -31,17 +31,15 @@ const ENABLED_TEMPLATE_IDS_BY_FAMILY: Record<TemplatePresetFamily, ReadonlyArray
     "CONTACT_OPC_SERIF",
     "LINE_END_RAW",
     "LINE_END_OPC_HAMMER",
-    "STAIRCASE",
-    "STAIRCASE_OPC",
+    // Keep DUV staircase presets disabled for now.
+    // Re-enable later by adding their canonical IDs here.
     "L_CORNER_RAW_DUV",
     "L_CORNER_OPC_DUV",
   ],
   EUV: [
     "ISO_LINE",
     "DENSE_LS",
-    "CONTACT_RAW",
-    "CONTACT_OPC_SERIF",
-    // Keep EUV-specific L-shape and stepped presets disabled for now.
+    // Keep EUV-specific square, L-shape, and stepped presets disabled for now.
     // Re-enable later by adding their canonical IDs here.
   ],
 };
