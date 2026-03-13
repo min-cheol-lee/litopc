@@ -599,6 +599,64 @@ export function Viewport(props: {
     trackProductEvent("export_completed", { kind: "runs_csv", plan: req.plan });
   }
 
+  async function onExport3dPng(sizePx: number = 3200) {
+    const intensity = sim?.intensity;
+    if (!intensity) return;
+    if (!(await guardExportQuota("figure_png"))) return;
+
+    const offscreen = document.createElement("canvas");
+    offscreen.width = sizePx;
+    offscreen.height = sizePx;
+    const ctx = offscreen.getContext("2d");
+    if (!ctx) return;
+
+    // Scale line widths proportionally to output resolution.
+    // Reference display size is ~420px; at 3200px that's ~7.6x.
+    const displayW = surfaceCanvasRef.current?.getBoundingClientRect().width ?? 420;
+    const lineScale = sizePx / Math.max(1, displayW);
+
+    drawSurface3D(ctx, sizePx, sizePx, intensity.w, intensity.h, intensity.data, {
+      azimuthDeg: surfAzimuth,
+      elevationDeg: surfElevation,
+      rollDeg: surfRoll,
+      offsetX: surfOffsetX,
+      offsetY: surfOffsetY,
+      offsetZ: surfOffsetZ,
+      depthScale: surfDepth,
+      zoomScale: scale,
+      qualityMode: "FULL",
+      fovNm,
+      maskAddRects,
+      maskSubtractRects,
+      overlayAddRects,
+      finalMaskContours,
+      contours: sim?.contours_nm ?? [],
+      targetContours,
+      showTargetOverlay,
+      compareActive,
+      compareAContours: compareAContours ?? [],
+      compareBContours: compareBContours ?? [],
+      sweepContourSets: sweepContourSets3d,
+      showMainContour: effectiveShowMainContour,
+      showAerial,
+      maskOpacityPreset,
+      nmPerPixel: sim?.nm_per_pixel ?? (fovNm / Math.max(1, intensity.w)),
+      lineScale,
+    });
+
+    offscreen.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `litopc-3d-surface-${sizePx}px.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }, "image/png");
+
+    trackProductEvent("export_completed", { kind: "figure_png", plan: req.plan, variant: "3d_surface" });
+  }
+
   function setSurfaceFastMode() {
     if (surfaceQualityTimerRef.current !== null) {
       window.clearTimeout(surfaceQualityTimerRef.current);
@@ -1724,6 +1782,31 @@ export function Viewport(props: {
             >
               Figure SVG
             </button>
+            {req.plan === "PRO" ? (
+              <button
+                type="button"
+                className="view-chip view-chip-wide"
+                disabled={!sim || !showSurface3d}
+                title={showSurface3d ? "Export 3D surface as high-resolution PNG (3200 px)" : "Enable 3D view first"}
+                onClick={(e) => {
+                  e.preventDefault();
+                  void onExport3dPng(3200);
+                  const d = e.currentTarget.closest("details") as HTMLDetailsElement | null;
+                  if (d) d.open = false;
+                }}
+              >
+                3D Surface PNG
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="view-chip view-chip-wide"
+                disabled
+                title="Upgrade to Pro for 3D surface export."
+              >
+                3D Surface PNG (Pro)
+              </button>
+            )}
             <button
               type="button"
               className="view-chip view-chip-wide"
@@ -2979,9 +3062,11 @@ function drawSurface3D(
     showAerial: boolean;
     maskOpacityPreset: "BALANCED" | "REVEAL";
     nmPerPixel: number;
+    lineScale?: number;
   }
 ) {
   ctx.clearRect(0, 0, wPx, hPx);
+  const ls = Math.max(0.5, opts.lineScale ?? 1.0);
 
   if (!w || !h || data.length !== w * h) return;
   let vmin = Number.POSITIVE_INFINITY;
@@ -2994,11 +3079,11 @@ function drawSurface3D(
   const span = Math.max(1e-9, vmax - vmin);
   const surfaceFeatureBoost = calcSurfaceFeatureBoost(opts.maskAddRects, opts.fovNm);
   // Keep 3D contour thickness/glow independent from feature size (CD).
-  const contourUnder3d = 3.35;
-  const contourMain3d = 1.95;
-  const compareUnder3d = 2.2;
-  const compareMain3d = 1.7;
-  const compareDash3d: [number, number] = [8, 5];
+  const contourUnder3d = 5.0 * ls;
+  const contourMain3d = 2.8 * ls;
+  const compareUnder3d = 3.2 * ls;
+  const compareMain3d = 2.0 * ls;
+  const compareDash3d: [number, number] = [8 * ls, 5 * ls];
   const project = createSurfaceProjector({
     azimuthDeg: opts.azimuthDeg,
     elevationDeg: opts.elevationDeg,
@@ -3175,13 +3260,24 @@ function drawSurface3D(
         if (i === 0) ctx.moveTo(q.sx, q.sy);
         else ctx.lineTo(q.sx, q.sy);
       }
-      ctx.strokeStyle = `rgba(76,34,64,${isRevealMask ? 0.38 : 0.56})`;
-      ctx.lineWidth = 1.08;
+      // Glow pass
+      ctx.shadowColor = `rgba(255,200,230,${isRevealMask ? 0.3 : 0.5})`;
+      ctx.shadowBlur = 6 * ls;
+      ctx.strokeStyle = `rgba(255,220,240,${isRevealMask ? 0.45 : 0.7})`;
+      ctx.lineWidth = 4.0 * ls;
       ctx.lineJoin = "round";
       ctx.lineCap = "round";
       ctx.stroke();
-      ctx.strokeStyle = `rgba(255,232,242,${isRevealMask ? 0.62 : 0.84})`;
-      ctx.lineWidth = 0.72;
+      ctx.shadowBlur = 0;
+      // Shadow under-stroke
+      ctx.strokeStyle = `rgba(30,12,32,${isRevealMask ? 0.55 : 0.78})`;
+      ctx.lineWidth = 2.4 * ls;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.stroke();
+      // Bright main stroke
+      ctx.strokeStyle = `rgba(255,242,248,${isRevealMask ? 0.82 : 0.97})`;
+      ctx.lineWidth = 1.4 * ls;
       ctx.lineJoin = "round";
       ctx.lineCap = "round";
       ctx.stroke();
@@ -3362,12 +3458,12 @@ function drawSurface3D(
       baseZ: siliconZ,
       featureBoost: surfaceFeatureBoost,
     }, {
-      underStroke: "rgba(36,50,76,0.72)",
+      underStroke: "rgba(24,36,62,0.82)",
       underWidth: contourUnder3d,
-      mainStroke: "rgba(236,243,255,0.96)",
+      mainStroke: "rgba(245,250,255,0.99)",
       mainWidth: contourMain3d,
-      glowColor: "rgba(236,243,255,0.2)",
-      glowBlur: 3.2,
+      glowColor: "rgba(200,220,255,0.45)",
+      glowBlur: 6.0 * ls,
       nmPerPixel: opts.nmPerPixel,
     });
   }

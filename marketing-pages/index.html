@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>litopc | mask-to-silicon OPC simulator</title>
+    <title>litopc | OPC & lithography simulator</title>
     <meta
       name="description"
-      content="Interactive photolithography and OPC simulator for seeing how masks print nanometer-scale patterns on silicon."
+      content="Web-based OPC and lithography simulator for DUV and EUV. See mask-to-silicon in seconds. Publication-ready figures. No installation, no license fee."
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -21,7 +21,8 @@
       </a>
       <nav class="top-actions" aria-label="Primary">
         <a class="nav-link" href="#why-opc">Why OPC</a>
-        <a class="nav-link" href="#why-litopc">Why litopc</a>
+        <a class="nav-link" href="#why-litopc">Features</a>
+        <a class="nav-link" href="#pricing">Pricing</a>
       </nav>
       <a class="nav-link open-link" data-launch href="#" target="_blank" rel="noopener noreferrer">
         <span>Open</span>
@@ -30,17 +31,28 @@
     </header>
 
     <main class="page">
+
+      <!-- ── HERO ── -->
       <section class="hero" data-reveal>
         <div class="hero-copy">
-          <h1>We need OPC to print nanometer-scale patterns correctly on silicon.</h1>
-          <p class="hero-lead">
-            <span class="logo-word">litopc</span> = lithography + OPC.
+          <div class="eyebrow hero-eyebrow">Lithography &amp; OPC Simulator</div>
+          <h1>See the physics.<br>Share the beauty.</h1>
+          <p class="hero-sub">
+            From mask to silicon in seconds —
+            web-based, no installation, no license fee.
           </p>
           <p class="hero-body">
-            Lithography is to shine light through a mask to print patterns on silicon. OPC means optical proximity
-            correction: intentionally changing the mask so the printed semiconductor pattern comes out closer to the
-            target.
+            <span class="logo-word">litopc</span> simulates how light prints nanometer-scale
+            semiconductor patterns through DUV and EUV optics.
+            Understand OPC correction visually, and export publication-ready figures
+            for papers, posters, and slides.
           </p>
+          <div class="hero-actions">
+            <a class="btn-primary" data-launch href="#" target="_blank" rel="noopener noreferrer">
+              Try Free →
+            </a>
+            <a class="btn-ghost" href="#pricing">See Pricing</a>
+          </div>
         </div>
 
         <figure class="hero-visual">
@@ -54,6 +66,28 @@
         </figure>
       </section>
 
+      <!-- ── VALUE PROPS ── -->
+      <section class="section props-section" data-reveal>
+        <div class="props-grid">
+          <article class="prop-card">
+            <div class="prop-icon">⚡</div>
+            <h3>Instant Results</h3>
+            <p>Run aerial image simulations in your browser. No CAD tools, no setup, no waiting.</p>
+          </article>
+          <article class="prop-card">
+            <div class="prop-icon">🎨</div>
+            <h3>Publication-Ready Figures</h3>
+            <p>Export high-resolution PNG and SVG — beautiful enough for papers, conference posters, and slide decks.</p>
+          </article>
+          <article class="prop-card">
+            <div class="prop-icon">🔬</div>
+            <h3>Real Physics</h3>
+            <p>Coherent imaging model with DUV 193 nm and EUV 13.5 nm. Rayleigh criterion, OPC correction, EPE metrics.</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- ── WHY OPC ── -->
       <section class="section" id="why-opc" data-reveal>
         <div class="section-head">
           <div class="eyebrow">Why OPC</div>
@@ -87,13 +121,14 @@
         </div>
       </section>
 
+      <!-- ── WHY LITOPC / FEATURES ── -->
       <section class="section" id="why-litopc" data-reveal>
         <div class="section-head">
-          <div class="eyebrow">Why litopc</div>
+          <div class="eyebrow">Features</div>
           <h2>Why <span class="logo-word">litopc</span></h2>
           <p>
-            <span class="logo-word">litopc</span> is built for educational use. It keeps OPC easy to approach, easy to
-            visualize, and easy to test before you move on to heavier tools.
+            Built for education and fast insight — not to replace Calibre, but to make
+            lithography physics approachable before you reach for the heavy tools.
           </p>
         </div>
 
@@ -102,21 +137,21 @@
             <div class="feature-index">01</div>
             <div>
               <h3>Easy to approach</h3>
-              <p>Start from representative masks instead of a full process stack or research codebase.</p>
+              <p>Start from representative OPC masks instead of a full process stack. DUV 193 nm and EUV 13.5 nm presets included.</p>
             </div>
           </article>
           <article class="feature-line">
             <div class="feature-index">02</div>
             <div>
               <h3>Easy to visualize</h3>
-              <p>Read mask, aerial image, contour, and silicon-side behavior in one workspace.</p>
+              <p>Mask, aerial image, contour, and 3D silicon view — all in one workspace. Compare A/B runs side by side.</p>
             </div>
           </article>
           <article class="feature-line">
             <div class="feature-index">03</div>
             <div>
-              <h3>Easy to test</h3>
-              <p>Edit the mask, compare runs, and see what the correction actually changes.</p>
+              <h3>Easy to export</h3>
+              <p>High-resolution PNG and SVG with auto-generated figure captions. Designed to go straight into papers and presentations.</p>
             </div>
           </article>
         </div>
@@ -126,25 +161,130 @@
           <div class="builtins-item"><span class="builtins-bullet" aria-hidden="true">&bull;</span><span>Manual mask edit</span></div>
           <div class="builtins-item"><span class="builtins-bullet" aria-hidden="true">&bull;</span><span>2D mask / aerial / contour view</span></div>
           <div class="builtins-item"><span class="builtins-bullet" aria-hidden="true">&bull;</span><span>3D silicon-style view</span></div>
-          <div class="builtins-item"><span class="builtins-bullet" aria-hidden="true">&bull;</span><span>A/B compare and sweep</span></div>
-          <div class="builtins-item"><span class="builtins-bullet" aria-hidden="true">&bull;</span><span>Preset optics and source settings</span></div>
+          <div class="builtins-item"><span class="builtins-bullet" aria-hidden="true">&bull;</span><span>A/B compare and parameter sweep</span></div>
+          <div class="builtins-item"><span class="builtins-bullet" aria-hidden="true">&bull;</span><span>DUV 193 nm &amp; EUV 13.5 nm presets</span></div>
         </div>
       </section>
 
+      <!-- ── WHO IT'S FOR ── -->
+      <section class="section" id="who" data-reveal>
+        <div class="section-head">
+          <div class="eyebrow">Who it's for</div>
+          <h2>Built for anyone who works with light and silicon.</h2>
+        </div>
+
+        <div class="who-grid">
+          <article class="who-card">
+            <div class="who-icon">🎓</div>
+            <h3>Students &amp; Researchers</h3>
+            <p>Understand OPC intuitively — no EDA license required. Visualize how k₁ factor limits resolution at different NA values. Generate thesis figures in minutes.</p>
+          </article>
+          <article class="who-card">
+            <div class="who-icon">⚙️</div>
+            <h3>Process &amp; Design Engineers</h3>
+            <p>Quick sanity checks before running full Calibre or Synopsys flows. Generate clear lithography figures for design reviews, tapeout presentations, and internal reports.</p>
+          </article>
+          <article class="who-card">
+            <div class="who-icon">📐</div>
+            <h3>Educators</h3>
+            <p>Show students real aerial images, not textbook diagrams. Use <span class="logo-word">litopc</span> in lecture slides to make lithography physics tangible and interactive.</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- ── PRICING ── -->
+      <section class="section pricing-section" id="pricing" data-reveal>
+        <div class="section-head">
+          <div class="eyebrow">Pricing</div>
+          <h2>Start free. Upgrade when you need more.</h2>
+          <p>Every plan includes the full physics engine. Pro unlocks advanced optics, higher resolution, and batch analysis.</p>
+        </div>
+
+        <div class="pricing-grid">
+          <!-- FREE -->
+          <article class="pricing-card">
+            <div class="pricing-header">
+              <div class="pricing-plan-name">Free</div>
+              <div class="pricing-price"><span class="pricing-amount">$0</span><span class="pricing-period">/mo</span></div>
+              <p class="pricing-desc">Everything you need to explore OPC and lithography basics.</p>
+            </div>
+            <ul class="pricing-features">
+              <li><span class="pf-check">✓</span> DUV 193 nm dry (NA 0.93)</li>
+              <li><span class="pf-check">✓</span> EUV 13.5 nm (NA 0.33)</li>
+              <li><span class="pf-check">✓</span> All OPC templates</li>
+              <li><span class="pf-check">✓</span> Manual mask editor (up to 5 shapes)</li>
+              <li><span class="pf-check">✓</span> 2D aerial &amp; contour view</li>
+              <li><span class="pf-check">✓</span> HD export (up to 1800 px)</li>
+              <li><span class="pf-check">✓</span> 8 saved scenarios</li>
+              <li><span class="pf-check">✓</span> 20 simulation runs / day</li>
+            </ul>
+            <a class="btn-pricing-free" data-launch href="#" target="_blank" rel="noopener noreferrer">
+              Start Free →
+            </a>
+          </article>
+
+          <!-- PRO -->
+          <article class="pricing-card pricing-card-pro">
+            <div class="pricing-pro-badge">Pro</div>
+            <div class="pricing-header">
+              <div class="pricing-plan-name">Pro</div>
+              <!-- TODO: 실제 가격으로 교체하세요 -->
+              <div class="pricing-price"><span class="pricing-amount">$19</span><span class="pricing-period">/mo</span></div>
+              <p class="pricing-desc">Advanced optics, higher resolution, and batch sweep for serious work.</p>
+            </div>
+            <ul class="pricing-features">
+              <li><span class="pf-check pf-check-pro">✓</span> Everything in Free</li>
+              <li><span class="pf-check pf-check-pro">✓</span> <strong>DUV 193 nm immersion (NA 1.35)</strong></li>
+              <li><span class="pf-check pf-check-pro">✓</span> <strong>EUV High-NA (NA 0.55)</strong></li>
+              <li><span class="pf-check pf-check-pro">✓</span> Manual mask editor (up to 48 shapes)</li>
+              <li><span class="pf-check pf-check-pro">✓</span> 3D silicon surface view</li>
+              <li><span class="pf-check pf-check-pro">✓</span> <strong>Batch parameter sweep</strong></li>
+              <li><span class="pf-check pf-check-pro">✓</span> <strong>High-res export (up to 4200 px)</strong></li>
+              <li><span class="pf-check pf-check-pro">✓</span> Unlimited saved scenarios</li>
+              <li><span class="pf-check pf-check-pro">✓</span> 2,000 simulation runs / day</li>
+              <li><span class="pf-check pf-check-pro">✓</span> No ads</li>
+            </ul>
+            <a class="btn-pricing-pro" data-launch href="#" target="_blank" rel="noopener noreferrer">
+              Upgrade to Pro →
+            </a>
+          </article>
+        </div>
+
+        <p class="pricing-note">
+          Educational simulator. Not a sign-off tool.
+          For team or institutional access, <a href="mailto:contact@litopc.com">contact us</a>.
+        </p>
+      </section>
+
+      <!-- ── BOTTOM CTA ── -->
       <section class="cta-strip" data-reveal>
         <div>
           <div class="eyebrow">Start here</div>
-          <h2>Open litopc and test an OPC example in seconds.</h2>
+          <h2>The most beautiful lithography simulator on the web.</h2>
+          <p class="cta-sub">Open <span class="logo-word">litopc</span> and see your first aerial image in under a minute.</p>
         </div>
-        <a class="nav-link open-link" data-launch href="#" target="_blank" rel="noopener noreferrer">
-          <span>Open</span>
-          <span class="logo-word">litopc</span>
-        </a>
+        <div class="cta-actions">
+          <a class="btn-primary" data-launch href="#" target="_blank" rel="noopener noreferrer">
+            Try Free →
+          </a>
+          <a class="btn-ghost-cta" href="#pricing">See Pricing</a>
+        </div>
       </section>
     </main>
 
     <footer class="footer">
-      <small>Educational simulator. Not a sign-off tool.</small>
+      <div class="footer-inner">
+        <span class="brand brand-sm">
+          <span class="brand-lit">lit</span><span class="brand-opc">opc</span>
+        </span>
+        <nav class="footer-links">
+          <a href="/about">About</a>
+          <a href="/contact">Contact</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+        </nav>
+        <small>Educational simulator. Not a sign-off tool.</small>
+      </div>
     </footer>
 
     <script src="./site-config.js"></script>

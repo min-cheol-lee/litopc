@@ -1449,6 +1449,15 @@ select:focus {
   margin: 12px auto 0;
 }
 
+.landing-hero-3d-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 16px;
+  position: relative;
+  z-index: 1;
+}
+
 .landing-hero-shot-wrap::before {
   content: "";
   position: absolute;
@@ -1627,12 +1636,14 @@ select:focus {
   margin-top: 22px;
 }
 
+/* ── Shared section base ── */
+.lp-props-section,
 .landing-opc-section,
-.landing-why-section {
-  width: min(82%, 1088px);
-  margin-left: auto;
-  margin-right: auto;
-  margin-top: 40px;
+.landing-why-section,
+.lp-who-section,
+.lp-pricing-section {
+  width: min(92%, 1088px);
+  margin: 0 auto;
 }
 
 .landing-section-head {
@@ -2119,18 +2130,7 @@ select:focus {
   line-height: 1.48;
 }
 
-.landing-cta-strip {
-  width: min(82%, 1088px);
-  margin-left: auto;
-  margin-right: auto;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 18px;
-  margin-top: 42px;
-  padding-top: 26px;
-  border-top: 1px solid rgba(188, 215, 242, 0.14);
-}
+/* landing-cta-strip — styles now in redesign block */
 
 .landing-cta-strip .landing-open-link {
   justify-self: end;
@@ -6548,6 +6548,798 @@ input[type="range"] {
 
 .sweep-panel-dock-3d .sweep-panel-value {
   color: rgba(22, 38, 62, 0.9);
+}
+
+/* ═══════════════════════════════════════════
+   LANDING PAGE v2 — new sections
+   ═══════════════════════════════════════════ */
+
+/* Hero updates */
+/* ── Hero split layout ── */
+.lp-hero-split {
+  width: min(92%, 1200px);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0 56px;
+  align-items: center;
+  padding: clamp(20px, 4vw, 52px) 0 clamp(12px, 2.5vw, 32px);
+}
+
+.lp-hero-split-copy {
+  padding: 0 0 0 clamp(0px, 1.5vw, 16px);
+}
+
+.lp-hero-split-visual {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.lp-hero-img-wrap {
+  position: relative;
+  width: min(100%, 480px);
+}
+
+/* Ambient glow behind the 3D image */
+.lp-hero-img-wrap::before {
+  content: "";
+  position: absolute;
+  inset: 10% 5%;
+  background:
+    radial-gradient(ellipse 68% 54% at 50% 58%, rgba(72, 110, 210, 0.32) 0%, transparent 68%),
+    radial-gradient(ellipse 44% 38% at 60% 70%, rgba(210, 90, 70, 0.2) 0%, transparent 60%);
+  filter: blur(52px);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.lp-hero-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 14px;
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 28px 56px rgba(4, 12, 28, 0.68)) drop-shadow(0 6px 16px rgba(50, 90, 190, 0.16));
+}
+
+.lp-hero-img-note {
+  justify-content: center;
+  margin-top: 10px;
+}
+
+.lp-hero-eyebrow {
+  margin-bottom: 14px;
+}
+
+.lp-hero-title {
+  font-size: clamp(44px, 5.8vw, 80px) !important;
+  line-height: 0.96 !important;
+  letter-spacing: -0.055em !important;
+  margin: 0 0 20px !important;
+}
+
+.lp-hero-sub {
+  color: rgba(212, 226, 244, 0.82);
+  font-size: clamp(15px, 1.8vw, 18px);
+  font-weight: 500;
+  line-height: 1.6;
+  margin: 0 0 8px;
+}
+
+.lp-hero-sub2 {
+  color: rgba(160, 196, 236, 0.62);
+  font-size: clamp(13px, 1.4vw, 15px);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 0;
+}
+
+.lp-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .lp-hero-split {
+    grid-template-columns: 1fr;
+    gap: 32px 0;
+    padding-bottom: 24px;
+  }
+
+  .lp-hero-split-copy {
+    padding: 0;
+    text-align: center;
+  }
+
+  .lp-hero-actions {
+    justify-content: center;
+  }
+
+  .lp-hero-img-note {
+    justify-content: center;
+  }
+
+  .lp-hero-title {
+    font-size: clamp(38px, 8vw, 56px) !important;
+  }
+}
+
+/* Buttons */
+.lp-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50px;
+  padding: 0 28px;
+  border-radius: 999px;
+  border: none;
+  text-decoration: none;
+  font-size: 15px;
+  font-weight: 740;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: linear-gradient(135deg, rgba(100, 160, 255, 0.95), rgba(180, 80, 240, 0.95));
+  box-shadow: 0 8px 28px rgba(100, 120, 255, 0.32), inset 0 1px 0 rgba(255,255,255,0.18);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+  white-space: nowrap;
+}
+
+.lp-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 36px rgba(100, 120, 255, 0.42), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+.lp-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50px;
+  padding: 0 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(188, 214, 244, 0.22);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 680;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(212, 226, 244, 0.78);
+  background: rgba(255,255,255,0.03);
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+  white-space: nowrap;
+}
+
+.lp-btn-ghost:hover {
+  transform: translateY(-1px);
+  border-color: rgba(150, 205, 255, 0.35);
+  background: rgba(255,255,255,0.06);
+}
+
+/* Value Props — styles now in redesign block below */
+
+/* Who It's For / Pricing — styles now in redesign block below */
+
+.lp-pricing-pro-badge {
+  position: absolute;
+  top: -12px;
+  left: 26px;
+  padding: 3px 14px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(100, 160, 255, 0.9), rgba(180, 80, 240, 0.9));
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(100, 120, 255, 0.3);
+}
+
+.lp-pricing-plan-name {
+  font-size: 11px;
+  font-weight: 730;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(179, 205, 236, 0.72);
+  margin-bottom: 8px;
+}
+
+.lp-pricing-price {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.lp-pricing-amount {
+  font-size: clamp(34px, 3.6vw, 48px);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: rgba(245, 248, 255, 0.96);
+}
+
+.lp-pricing-period {
+  font-size: 14px;
+  color: rgba(179, 205, 236, 0.72);
+  font-weight: 500;
+}
+
+.lp-pricing-desc {
+  margin: 0 0 20px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(212, 226, 244, 0.78);
+}
+
+.lp-pricing-features {
+  list-style: none;
+  margin: 0 0 24px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.lp-pricing-features li {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-size: 13px;
+  color: rgba(215, 230, 248, 0.85);
+  line-height: 1.5;
+}
+
+.lp-pf-check {
+  flex-shrink: 0;
+  color: rgba(100, 200, 140, 0.85);
+  font-size: 12px;
+  font-weight: 700;
+  width: 14px;
+}
+
+.lp-pf-check-pro {
+  color: rgba(140, 180, 255, 0.9);
+}
+
+.lp-btn-pricing-free,
+.lp-btn-pricing-pro {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 46px;
+  border-radius: 12px;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 720;
+  letter-spacing: 0.04em;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.lp-btn-pricing-free {
+  color: rgba(212, 226, 244, 0.78);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(188, 214, 244, 0.22);
+}
+
+.lp-btn-pricing-free:hover {
+  transform: translateY(-1px);
+  border-color: rgba(150, 205, 255, 0.3);
+  background: rgba(255,255,255,0.07);
+}
+
+.lp-btn-pricing-pro {
+  color: #fff;
+  background: linear-gradient(135deg, rgba(100, 160, 255, 0.9), rgba(180, 80, 240, 0.9));
+  border: none;
+  box-shadow: 0 6px 22px rgba(100, 120, 255, 0.28);
+}
+
+.lp-btn-pricing-pro:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(100, 120, 255, 0.38);
+}
+
+.lp-pricing-note {
+  margin-top: 20px;
+  font-size: 12.5px;
+  color: rgba(179, 205, 236, 0.72);
+}
+
+.lp-pricing-note a {
+  color: rgba(139, 190, 247, 0.94);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* CTA strip updates */
+.lp-cta-sub {
+  margin: 8px 0 0;
+  color: rgba(212, 226, 244, 0.78);
+  font-size: clamp(14px, 1.6vw, 16px);
+}
+
+.lp-cta-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+.lp-btn-ghost-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(188, 214, 244, 0.14);
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 680;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(179, 205, 236, 0.72);
+  background: transparent;
+  transition: border-color 180ms ease, color 180ms ease;
+  white-space: nowrap;
+}
+
+.lp-btn-ghost-cta:hover {
+  border-color: rgba(150, 205, 255, 0.3);
+  color: rgba(212, 226, 244, 0.88);
+}
+
+/* Responsive */
+@media (max-width: 1120px) {
+  .lp-props-section,
+  .lp-who-section,
+  .lp-pricing-section {
+    width: 100%;
+  }
+
+  .lp-props-grid,
+  .lp-who-grid,
+  .lp-pricing-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .lp-pricing-grid {
+    max-width: 480px;
+  }
+
+  .lp-cta-actions {
+    align-items: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 780px) {
+  .lp-hero-title {
+    font-size: clamp(34px, 9vw, 52px) !important;
+  }
+
+  .lp-hero-actions {
+    justify-content: center;
+  }
+
+  .lp-cta-actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   REDESIGN 2026-03 — Editorial landing design system
+   All sections share a consistent visual language:
+   • No nested boxes / box-in-box
+   • Thin divider between sections instead of heavy panels
+   • SVG icon badges (no emoji)
+   • Unified typescale and spacing rhythm
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Section rhythm wrapper ── */
+.lp-section-row {
+  width: min(92%, 1088px);
+  margin: 0 auto;
+}
+
+/* Thin horizontal rule between sections */
+.lp-section-divider {
+  width: min(92%, 1088px);
+  margin: 64px auto 0;
+  border: none;
+  border-top: 1px solid rgba(188, 214, 244, 0.09);
+}
+
+/* ── Section padding ── */
+.lp-props-section    { padding-top: 64px; }
+.landing-opc-section { padding-top: 64px; }
+.landing-why-section { padding-top: 64px; }
+.lp-who-section      { padding-top: 64px; }
+.lp-pricing-section  { padding-top: 64px; }
+
+/* ── Section head overrides (consistent across all sections) ── */
+.landing-section-head h2 {
+  font-size: clamp(28px, 3.2vw, 40px);
+  font-weight: 760;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+  color: rgba(245, 248, 255, 0.97);
+  margin: 8px 0 0;
+}
+.landing-section-head p {
+  font-size: clamp(14px, 1.5vw, 16px);
+  line-height: 1.65;
+  color: rgba(188, 214, 244, 0.72);
+  margin: 12px 0 0;
+  max-width: 580px;
+}
+
+/* ── VALUE PROPS — 3-column, no cards, vertical dividers ── */
+.lp-props-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin-top: 40px;
+}
+
+.lp-prop-card {
+  padding: 0 40px 0 0;
+  border-right: 1px solid rgba(188, 214, 244, 0.09);
+  background: none;
+  border-radius: 0;
+  border-top: none;
+  border-bottom: none;
+  border-left: none;
+}
+
+.lp-prop-card:not(:first-child) {
+  padding-left: 40px;
+}
+
+.lp-prop-card:last-child {
+  border-right: none;
+  padding-right: 0;
+}
+
+/* Icon badge — replaces emoji */
+.lp-card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(100, 160, 255, 0.10);
+  border: 1px solid rgba(100, 160, 255, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.lp-card-icon svg {
+  display: block;
+}
+
+.lp-prop-card h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 740;
+  letter-spacing: -0.02em;
+  color: rgba(245, 248, 255, 0.97);
+}
+
+.lp-prop-card p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: rgba(188, 214, 244, 0.70);
+}
+
+/* ── WHY OPC — comparison visuals, subtle panel ── */
+.landing-opc-section {
+  /* width from shared base */
+}
+
+/* ── FEATURES — 2-column feature list ── */
+.landing-feature-rail {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  margin-top: 36px;
+  border: 1px solid rgba(188, 214, 244, 0.09);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.landing-feature-line {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  padding: 24px 28px;
+  border-bottom: 1px solid rgba(188, 214, 244, 0.09);
+  border-right: 1px solid rgba(188, 214, 244, 0.09);
+  background: rgba(8, 18, 40, 0.4);
+}
+
+.landing-feature-line:nth-child(even) {
+  border-right: none;
+}
+
+.landing-feature-line:nth-last-child(-n+2) {
+  border-bottom: none;
+}
+
+.landing-feature-index {
+  color: rgba(120, 170, 240, 0.55);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.landing-feature-line h3 {
+  margin: 0;
+  color: rgba(240, 246, 255, 0.95);
+  font-size: 16px;
+  font-weight: 720;
+  letter-spacing: -0.025em;
+}
+
+.landing-feature-line p {
+  margin: 2px 0 0;
+  color: rgba(188, 214, 244, 0.68);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+/* Built-ins pill list */
+.landing-builtins {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(188, 214, 244, 0.09);
+}
+
+.landing-builtins-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(188, 214, 244, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.landing-builtins-index {
+  color: rgba(255, 151, 199, 0.70);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.landing-builtins-copy {
+  color: rgba(210, 228, 248, 0.78);
+  font-size: 12px;
+  font-weight: 580;
+  line-height: 1;
+}
+
+/* ── WHO IT'S FOR — 3 minimal cards, top accent line only ── */
+.lp-who-section {
+  /* width from shared base */
+  border: none;
+  background: none;
+  box-shadow: none;
+  padding: 0;
+  padding-top: 64px;
+}
+
+.lp-who-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 32px;
+}
+
+.lp-who-card {
+  padding: 24px 22px;
+  border-radius: 14px;
+  border: 1px solid rgba(188, 214, 244, 0.09);
+  border-top: 2px solid rgba(100, 160, 255, 0.25);
+  background: rgba(8, 18, 40, 0.35);
+}
+
+.lp-who-card h3 {
+  margin: 12px 0 8px;
+  font-size: 15px;
+  font-weight: 720;
+  letter-spacing: -0.02em;
+  color: rgba(240, 246, 255, 0.96);
+}
+
+.lp-who-card p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+  color: rgba(188, 214, 244, 0.68);
+}
+
+/* ── PRICING — clean 2-card layout ── */
+.lp-pricing-section {
+  border: none;
+  background: none;
+  box-shadow: none;
+  padding: 0;
+  padding-top: 64px;
+}
+
+.lp-pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 32px;
+  max-width: 720px;
+}
+
+.lp-pricing-card {
+  position: relative;
+  padding: 28px 24px;
+  border-radius: 16px;
+  border: 1px solid rgba(188, 214, 244, 0.11);
+  background: rgba(8, 18, 40, 0.5);
+}
+
+.lp-pricing-card-pro {
+  border-color: rgba(110, 160, 255, 0.22);
+  border-top: 2px solid rgba(120, 170, 255, 0.45);
+  background: rgba(10, 22, 52, 0.6);
+}
+
+/* ── CTA strip — editorial invite style ── */
+.landing-cta-strip {
+  width: min(92%, 1088px);
+  margin: 64px auto 0;
+  padding: 52px 48px;
+  border-radius: 20px;
+  border: 1px solid rgba(188, 214, 244, 0.10);
+  background:
+    radial-gradient(ellipse 80% 60% at 30% 50%, rgba(60, 100, 210, 0.14) 0%, transparent 70%),
+    rgba(7, 15, 34, 0.7);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 32px;
+}
+
+.landing-cta-strip h2 {
+  font-size: clamp(22px, 2.6vw, 34px);
+  font-weight: 740;
+  letter-spacing: -0.04em;
+  color: rgba(245, 248, 255, 0.97);
+  margin: 8px 0 0;
+}
+
+/* ── Responsive overrides ── */
+@media (max-width: 1080px) {
+  .lp-props-grid { grid-template-columns: 1fr; gap: 32px; }
+  .lp-prop-card { padding: 0; border-right: none; border-bottom: 1px solid rgba(188,214,244,0.09); padding-bottom: 32px; }
+  .lp-prop-card:last-child { border-bottom: none; padding-bottom: 0; }
+  .lp-who-grid { grid-template-columns: 1fr; }
+  .lp-pricing-grid { grid-template-columns: 1fr; max-width: 440px; }
+  .landing-feature-rail { grid-template-columns: 1fr; }
+  .landing-feature-line { border-right: none; }
+  .landing-feature-line:nth-last-child(-n+2) { border-bottom: 1px solid rgba(188,214,244,0.09); }
+  .landing-feature-line:last-child { border-bottom: none; }
+  .landing-cta-strip { grid-template-columns: 1fr; }
+  .lp-cta-actions { flex-direction: row; flex-wrap: wrap; }
+}
+
+/* ── LithoScheme: Apple-style 3D litho hero — mask → beam → silicon ── */
+.lps-outer {
+  width: 100%;
+  max-width: 590px;
+  margin: 0 auto;
+  padding: 40px 0 30px;
+  position: relative;
+}
+
+/* Scene ambient bloom behind the 3D stack */
+.lps-ambient {
+  position: absolute;
+  inset: -10px;
+  background: radial-gradient(
+    ellipse 72% 52% at 50% 52%,
+    rgba(108, 62, 215, 0.17) 0%,
+    rgba(34, 52, 128, 0.07) 55%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.lps-persp {
+  perspective: 2400px;
+  perspective-origin: 50% 38%;
+  position: relative;
+  z-index: 1;
+}
+
+.lps-scene {
+  position: relative;
+  transform-style: preserve-3d;
+  transform: rotateX(36deg) rotateY(-20deg);
+  width: 326px;
+  height: 380px;
+  margin: 0 auto;
+}
+
+.lps-pw {
+  position: absolute;
+  width: 326px;
+}
+
+.lps-pw svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Mask plate: furthest from viewer — projects upper-left */
+.lps-pw-mask {
+  top: 0;
+  left: 0;
+  transform: translateZ(-104px);
+  filter: drop-shadow(0 6px 22px rgba(96, 52, 210, 0.40));
+}
+
+/* Light beam: floats between mask and silicon */
+.lps-pw-beam {
+  top: 0;
+  left: 0;
+  transform: translateZ(-40px);
+  opacity: 0.74;
+  pointer-events: none;
+}
+
+/* Silicon plate: closest to viewer — projects lower-right */
+.lps-pw-aerial {
+  top: 38px;
+  left: 22px;
+  transform: translateZ(26px);
+  filter: drop-shadow(0 10px 28px rgba(16, 40, 20, 0.50));
+}
+
+@media (max-width: 960px) {
+  .lps-scene {
+    transform: rotateX(30deg) rotateY(-16deg);
+    width: 288px;
+    height: 330px;
+  }
+  .lps-pw         { width: 288px; }
+  .lps-pw-beam    { width: 288px; transform: translateZ(-30px); }
+  .lps-pw-mask    { transform: translateZ(-80px); }
+  .lps-pw-aerial  { transform: translateZ(20px); }
+}
+
+@media (max-width: 600px) {
+  .lps-persp  { perspective: none; }
+  .lps-scene  { transform: none; height: auto; }
+  .lps-pw, .lps-pw-beam {
+    position: relative;
+    top: auto;
+    left: auto;
+    margin: 10px 0;
+    width: 100%;
+  }
+  .lps-pw-mask, .lps-pw-aerial { transform: none; filter: none; }
+  .lps-pw-beam { display: none; }
 }
 
 
