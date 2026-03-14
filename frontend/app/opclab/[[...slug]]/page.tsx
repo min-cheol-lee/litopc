@@ -1,7 +1,8 @@
 import OpcLabRedirect from "./redirect";
 
 export function generateStaticParams() {
-  return [];
+  // Return base path only; client-side redirect handles /opclab/* → /litopc/*
+  return [{}];
 }
 
 export default function Page() {
