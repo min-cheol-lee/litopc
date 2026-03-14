@@ -38,9 +38,6 @@ jobs:
         env:
           GITHUB_PAGES: "true"
 
-      - name: Copy CNAME
-        run: cp marketing-pages/CNAME frontend/out/CNAME
-
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
