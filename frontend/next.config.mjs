@@ -11,13 +11,23 @@ const nextConfig = {
     output: "export",
     trailingSlash: true,
     images: { unoptimized: true },
-    webpack: (config) => {
-      // Replace next/headers with a no-op stub so server-only APIs are never
-      // bundled during static export, preventing "Server Actions" build errors.
+    webpack: (config, { webpack }) => {
+      // Replace next/headers with a no-op stub — importing it marks modules as
+      // server-only which breaks output:export.
       config.resolve.alias["next/headers"] = resolve(
         __dirname,
         "./lib/next-headers-stub.ts"
       );
+
+      // Replace Clerk's server-actions module — it contains "use server" and is
+      // imported by ClerkProvider, triggering "Server Actions not supported" error.
+      config.plugins.push(
+        new webpack.NormalModuleReplacementPlugin(
+          /app-router[\\/]server-actions/,
+          resolve(__dirname, "./lib/clerk-server-actions-stub.js")
+        )
+      );
+
       return config;
     },
   } : {}),
