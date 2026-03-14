@@ -8,6 +8,16 @@ function normalizeRequestHost(value: string | null): string {
 }
 
 export function getSiteHostInfo() {
+  // Static export (GitHub Pages): host is always litopc.com
+  if (process.env.GITHUB_PAGES === "true") {
+    return {
+      requestHost: "litopc.com",
+      isAppHost: false,
+      isMarketingHost: true,
+      simulatorHref: "https://app.litopc.com",
+    };
+  }
+
   const requestHost = normalizeRequestHost(headers().get("x-forwarded-host") ?? headers().get("host"));
   const isAppHost = requestHost === "app.litopc.com" || requestHost.startsWith("app.litopc.com:");
   const isMarketingHost =
