@@ -133,9 +133,13 @@ export function buildTemplateBaseShapes(templateId: TemplateID, params: Record<s
   const cy = fov * 0.5;
   const rects: RectNm[] = [];
 
-  if (normalizedTemplateId === "ISO_LINE") {
+  if (normalizedTemplateId === "ISO_LINE_DUV") {
     const cd = params.cd_nm ?? 100;
     const h = params.length_nm ?? 900;
+    pushRect(rects, cx - cd / 2, cy - h / 2, cd, h);
+  } else if (normalizedTemplateId === "ISO_LINE_EUV") {
+    const cd = params.cd_nm ?? 24;
+    const h = params.length_nm ?? 500;
     pushRect(rects, cx - cd / 2, cy - h / 2, cd, h);
   } else if (normalizedTemplateId === "DENSE_LS") {
     const cd = params.cd_nm ?? 60;
@@ -147,6 +151,14 @@ export function buildTemplateBaseShapes(templateId: TemplateID, params: Record<s
     for (let i = 0; i < n; i++) {
       pushRect(rects, start + i * pitch - cd / 2, cy - h / 2, cd, h);
     }
+  } else if (normalizedTemplateId === "LINE_END_RAW_DUV") {
+    const cd = params.cd_nm ?? 100;
+    const h = params.length_nm ?? 600;
+    pushRect(rects, cx - cd / 2, cy - h / 2, cd, h);
+  } else if (normalizedTemplateId === "LINE_END_RAW_EUV") {
+    const cd = params.cd_nm ?? 24;
+    const h = params.length_nm ?? 160;
+    pushRect(rects, cx - cd / 2, cy - h / 2, cd, h);
   } else if (normalizedTemplateId === "LINE_END_RAW") {
     const cd = params.cd_nm ?? 100;
     const h = params.length_nm ?? 900;

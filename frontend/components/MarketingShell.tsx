@@ -37,7 +37,7 @@ export function MarketingShell({
             <span className="landing-brand-lit">lit</span>
             <span className="landing-brand-opc">opc</span>
           </Link>
-          <div className="landing-brand-tagline">OPC &amp; lithography simulator</div>
+          <div className="landing-brand-tagline">Lithography &amp; OPC simulator</div>
         </div>
         {navItems.length > 0 && (
           <nav className="landing-nav" aria-label="Primary">

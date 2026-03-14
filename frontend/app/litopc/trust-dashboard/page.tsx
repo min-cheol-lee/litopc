@@ -89,7 +89,7 @@ export default function TrustDashboardPage() {
           <a className="model-guide-link" href="/litopc">Back to Lab</a>
           <a className="model-guide-link" href="/litopc/benchmark-gallery">Benchmark Gallery</a>
           <a className="model-guide-link" href="/litopc/model-change-log">Model Change Log</a>
-          <a className="model-guide-link" href="/litopc/revenue-dashboard">Revenue Dashboard</a>
+          <a className="model-guide-link" href="/litopc/opc-guide">OPC Guide</a>
         </div>
       </header>
 

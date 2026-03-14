@@ -439,7 +439,6 @@ export function EditStudioDock(props: {
         <div className="workspace-edit-dock-main">
           <div className="workspace-studio-block workspace-layer-block">
             <div className="workspace-layer-inline">
-              <div className="workspace-layer-eyebrow">Edit Layer</div>
               <div className="workspace-layer-toggle workspace-layer-toggle-inline">
                 <button
                   className={activeEditLayer === "MASK" ? "is-active" : ""}
@@ -709,43 +708,37 @@ export function EditStudioDock(props: {
 
         <div className="workspace-edit-dock-side">
           <div className="workspace-studio-block workspace-edit-inspector">
-            <div className="workspace-edit-inspector-head">
-              <div className="workspace-edit-inspector-headline">
-                <div className="workspace-layer-eyebrow">Inspector</div>
+            <div className="workspace-mini-head">
+              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                <span>Inspector</span>
                 <div className={`workspace-inspector-chip workspace-inspector-chip-${inspectorChip.kind}`} title={inspectorChip.title}>
                   {inspectorChip.label}
                 </div>
               </div>
-              <div className="workspace-edit-inspector-actions">
+              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
                 {canUseGlobalInspector && (
                   <div className="workspace-inspector-scope">
                     <button
                       className={inspectorScope === "LOCAL" ? "is-active" : ""}
                       onClick={() => setInspectorScope("LOCAL")}
                       disabled={inspectorScope === "LOCAL"}
-                      title="Adjust the selected geometry"
-                    >
-                      Local
-                    </button>
+                    >Local</button>
                     <button
                       className={inspectorScope === "GLOBAL" ? "is-active" : ""}
                       onClick={() => setInspectorScope("GLOBAL")}
                       disabled={inspectorScope === "GLOBAL"}
-                      title="Adjust pattern-wide parameters"
-                    >
-                      Global
-                    </button>
+                    >Global</button>
                   </div>
                 )}
-                <div className="workspace-layer-meta">
+                <span>
                   {globalInspector
-                    ? (targetEditing ? "Target parameters" : "Pattern parameters")
+                    ? (targetEditing ? "Target" : "Pattern")
                     : hasMultiManualSelection
                       ? "Move only"
                       : selectedRect
-                        ? `${Math.round(selectedRect.w_nm)} x ${Math.round(selectedRect.h_nm)} nm`
-                        : "Selected geometry"}
-                </div>
+                        ? `${Math.round(selectedRect.w_nm)} × ${Math.round(selectedRect.h_nm)} nm`
+                        : "—"}
+                </span>
               </div>
             </div>
 

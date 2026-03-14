@@ -9,11 +9,10 @@ export default function BenchmarkGalleryPage() {
           Public benchmark set for reproducible behavior checks. This is an educational validation board, not sign-off qualification.
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <a className="model-guide-link" href="/litopc/advanced-analytics">Advanced Analytics</a>
+          <a className="model-guide-link" href="/litopc/opc-guide">OPC Guide</a>
           <a className="model-guide-link" href="/litopc/model-summary">Model Guide</a>
           <a className="model-guide-link" href="/litopc/model-change-log">Model Change Log</a>
           <a className="model-guide-link" href="/litopc/trust-dashboard">Trust Dashboard</a>
-          <a className="model-guide-link" href="/litopc/revenue-dashboard">Revenue Dashboard</a>
           <a className="model-guide-link" href="/litopc">Back to Lab</a>
         </div>
       </header>

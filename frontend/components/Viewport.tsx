@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { BatchSimResponse, MaskShape, RunRecord, SimRequest, SimResponse, SweepParam } from "../lib/types";
 import type { EditorLayer, EditorTool, TargetGuide, TargetScoreMetrics } from "../lib/opc-workspace";
 import { getShapeOp } from "../lib/opc-workspace";
-import { exportPngWithMeta, exportRunsCsv, exportSvgWithMeta, type ExportSweepPayload } from "../lib/export";
+import { buildFigureCaption, exportPngWithMeta, exportRunsCsv, exportSvgWithMeta, type ExportSweepPayload } from "../lib/export";
 import { consumeUsage } from "../lib/usage";
 import { trackProductEvent } from "../lib/telemetry";
 import { isLShapeOpcTemplate, isLShapeRawTemplate } from "../lib/template-variants";
@@ -68,6 +68,7 @@ export function Viewport(props: {
   canvasModeHud?: React.ReactNode;
   canvasLeftInset?: number;
   onUsageConsumed?: () => void;
+  initialEpeOverlayMode?: "NONE" | "COLOR" | "ARROWS" | "BOTH";
 }) {
   const {
     sim,
@@ -110,6 +111,7 @@ export function Viewport(props: {
     canvasModeHud = null,
     canvasLeftInset = 0,
     onUsageConsumed,
+    initialEpeOverlayMode = "NONE",
   } = props;
   type RulerKey = "mask" | "contour";
   type RulerAxis = "H" | "V";
@@ -130,6 +132,12 @@ export function Viewport(props: {
   const [showMainContour, setShowMainContour] = useState(true);
   const [showTargetOverlay, setShowTargetOverlay] = useState(true);
   const [showAerial, setShowAerial] = useState(true);
+  const [aerialOpacity, setAerialOpacity] = useState(0.58);
+  const [colormapType, setColormapType] = useState<"apple" | "plasma" | "viridis" | "hot" | "grayscale" | "ice">("apple");
+  const [bgTheme, setBgTheme] = useState<"DARK" | "LIGHT">("DARK");
+  const [contourStyle, setContourStyle] = useState<"CLASSIC" | "NEON" | "GOLD" | "MINIMAL">("CLASSIC");
+  const [epeOverlayMode, setEpeOverlayMode] = useState<"NONE" | "COLOR" | "ARROWS" | "BOTH">(initialEpeOverlayMode);
+  const [exportResolution, setExportResolution] = useState<"WEB" | "HIGH_RES">(() => req.plan === "PRO" ? "HIGH_RES" : "WEB");
   const [showSurface3d, setShowSurface3d] = useState(true);
   const [showSurfaceControls, setShowSurfaceControls] = useState(false);
   const [surfaceSwapMain, setSurfaceSwapMain] = useState(false);
@@ -295,9 +303,58 @@ export function Viewport(props: {
   }, [editableShapesSignature, editableShapes, selectedCustomShapeIndex]);
   const maskCdNm = useMemo(() => estimateMaskCdNm(req, resolvedMaskShapes), [templateId, paramsSignature, req.mask.mode, maskShapesSignature, resolvedMaskShapes]);
   const contourCdNm = sim?.metrics?.cd_nm ?? null;
+  // ── EPE overlay helpers ──────────────────────────────────────────────────
+  function nearestOnSegment(p: {x:number;y:number}, a: {x:number;y:number}, b: {x:number;y:number}) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq < 1e-12) return { x: a.x, y: a.y };
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq));
+    return { x: a.x + t * dx, y: a.y + t * dy };
+  }
+  function nearestOnPolyline(p: {x:number;y:number}, poly: Array<{x:number;y:number}>) {
+    let bestDist = Infinity, bestPt = poly[0];
+    for (let i = 0; i < poly.length - 1; i++) {
+      const c = nearestOnSegment(p, poly[i], poly[i + 1]);
+      const d = Math.hypot(c.x - p.x, c.y - p.y);
+      if (d < bestDist) { bestDist = d; bestPt = c; }
+    }
+    return { point: bestPt, dist: bestDist };
+  }
+  function epeColor(distNm: number) {
+    const t = Math.min(1, distNm / 10);
+    const r = Math.round(t < 0.5 ? t * 2 * 255 : 255);
+    const g = Math.round(t < 0.5 ? 210 : (1 - (t - 0.5) * 2) * 210);
+    return `rgba(${r},${g},40,0.92)`;
+  }
+
+  const epeSegments = useMemo(() => {
+    if (epeOverlayMode === "NONE") return null;
+    const contours = sim?.contours_nm;
+    if (!contours?.length || !targetContours?.length) return null;
+    const flatTarget = targetContours.flatMap(c => c.points_nm);
+    if (flatTarget.length < 2) return null;
+    return contours.map(c => {
+      const pts = c.points_nm;
+      return pts.map(p => {
+        const { point: nearest, dist } = nearestOnPolyline(p, flatTarget);
+        return { p, nearest, dist };
+      });
+    });
+  }, [epeOverlayMode, sim?.contours_nm, targetContours]);
+  // ────────────────────────────────────────────────────────────────────────
+
   // Keep contour styling visually stable across CD/template size.
   const contourUnderWidth = 3.35;
   const contourMainWidth = 1.95;
+  const contourColors = useMemo(() => {
+    const light = bgTheme === "LIGHT";
+    switch (contourStyle) {
+      case "NEON":    return { shadow: "rgba(0,200,160,0.2)",  main: "rgba(30,255,200,0.95)", sw: 4.5, mw: 1.8 };
+      case "GOLD":    return { shadow: "rgba(50,20,0,0.6)",    main: "rgba(255,195,50,0.96)", sw: 3.8, mw: 1.9 };
+      case "MINIMAL": return { shadow: null, main: light ? "rgba(30,60,120,0.5)" : "rgba(220,235,255,0.55)", sw: 0, mw: 1.1 };
+      default:        return { shadow: light ? "rgba(160,185,220,0.85)" : "rgba(36,50,76,0.72)", main: light ? "rgba(20,40,90,0.9)" : "rgba(236,243,255,0.96)", sw: 3.35, mw: 1.95 };
+    }
+  }, [contourStyle, bgTheme]);
   const compareContourWidth = 2.1;
   const compareDash2d = `8 5`;
   const exportRuns = useMemo<RunRecord[]>(() => {
@@ -575,7 +632,7 @@ export function Viewport(props: {
       rulers: showRulers,
       compare: compareActive,
       scalePct: scale * 100,
-    }, exportSweep);
+    }, exportSweep, bgTheme, exportResolution);
     trackProductEvent("export_completed", { kind: "figure_png", plan: req.plan });
   }
 
@@ -589,7 +646,7 @@ export function Viewport(props: {
       rulers: showRulers,
       compare: compareActive,
       scalePct: scale * 100,
-    }, exportSweep);
+    }, exportSweep, bgTheme);
     trackProductEvent("export_completed", { kind: "figure_svg", plan: req.plan });
   }
 
@@ -642,6 +699,9 @@ export function Viewport(props: {
       maskOpacityPreset,
       nmPerPixel: sim?.nm_per_pixel ?? (fovNm / Math.max(1, intensity.w)),
       lineScale,
+      colormapType,
+      epeContours: epeOverlayMode !== "NONE" ? epeSegments : null,
+      epeMode: epeOverlayMode !== "NONE" ? epeOverlayMode : undefined,
     });
 
     offscreen.toBlob((blob) => {
@@ -709,7 +769,7 @@ export function Viewport(props: {
     for (let i = 0; i < data.length; i++) {
       const tRaw = (data[i] - vmin) / span;
       const t = Math.max(0, Math.min(1, tRaw));
-      const { r, g, b } = appleColorMap(t);
+      const { r, g, b } = getColorMap(colormapType, t);
       const j = i * 4;
       img.data[j] = r;
       img.data[j + 1] = g;
@@ -721,7 +781,7 @@ export function Viewport(props: {
 
     ctx.putImageData(img, 0, 0);
     setHeatmapUrl(canvas.toDataURL("image/png"));
-  }, [sim?.intensity]);
+  }, [sim?.intensity, colormapType]);
 
   useEffect(() => {
     const canvas = surfaceCanvasRef.current;
@@ -763,8 +823,12 @@ export function Viewport(props: {
       showAerial,
       maskOpacityPreset,
       nmPerPixel: sim?.nm_per_pixel ?? (fovNm / Math.max(1, intensity.w)),
+      colormapType,
+      contourStyle,
+      epeContours: epeOverlayMode !== "NONE" ? epeSegments : null,
+      epeMode: epeOverlayMode !== "NONE" ? epeOverlayMode : undefined,
     });
-  }, [sim?.intensity, sim?.contours_nm, surfAzimuth, surfElevation, surfRoll, surfOffsetX, surfOffsetY, surfOffsetZ, surfDepth, scale, surfaceQuality, req.plan, showSurface3d, fovNm, compareActive, compareAContours, compareBContours, sweepContourSets3d, effectiveShowMainContour, showAerial, maskOpacityPreset, maskAddRects, maskSubtractRects, overlayAddRects, finalMaskContours, targetContours, showTargetOverlay]);
+  }, [sim?.intensity, sim?.contours_nm, surfAzimuth, surfElevation, surfRoll, surfOffsetX, surfOffsetY, surfOffsetZ, surfDepth, scale, surfaceQuality, req.plan, showSurface3d, fovNm, compareActive, compareAContours, compareBContours, sweepContourSets3d, effectiveShowMainContour, showAerial, maskOpacityPreset, maskAddRects, maskSubtractRects, overlayAddRects, finalMaskContours, targetContours, showTargetOverlay, colormapType, contourStyle, epeOverlayMode, epeSegments]);
 
   useEffect(() => {
     const contours = sim?.contours_nm;
@@ -1702,40 +1766,178 @@ export function Viewport(props: {
             <ToolbarIcon kind="view" /> View
           </summary>
           <div className="view-menu-panel view-menu-panel-minimal">
-            <div className="view-chip-grid">
-              <button type="button" className={`view-chip ${showLegend ? "on" : ""}`} onClick={() => setShowLegend((v) => !v)}>
-                Legend
-              </button>
-              <button
-                type="button"
-                className={`view-chip ${(contourLockedByCompare ? false : showMainContour) ? "on" : ""}`}
-                onClick={() => setShowMainContour((v) => !v)}
-                disabled={contourLockedByCompare}
-              >
-                Contour
-              </button>
-              <button
-                type="button"
-                className={`view-chip ${targetGuide && showTargetOverlay ? "on" : ""}`}
-                onClick={() => setShowTargetOverlay((v) => !v)}
-                disabled={!targetGuide}
-              >
-                Target
-              </button>
-              <button type="button" className={`view-chip ${showAerial ? "on" : ""}`} onClick={() => setShowAerial((v) => !v)}>
-                Aerial
-              </button>
-              <button type="button" className={`view-chip ${showRulers ? "on" : ""}`} onClick={toggleRulerVisibilityFromView}>
-                Ruler
-              </button>
-              {allowSurfacePanel && (
-                <button type="button" className={`view-chip ${showSurface3d ? "on" : ""}`} onClick={() => setShowSurface3d((v) => !v)}>
-                  3D
+            {/* Section: Layers */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "rgba(30,50,80,0.38)", paddingLeft: 1 }}>Layers</span>
+              <div className="view-chip-grid">
+                <button type="button" className={`view-chip ${showLegend ? "on" : ""}`} onClick={() => setShowLegend((v) => !v)}>
+                  Legend
                 </button>
-              )}
+                <button
+                  type="button"
+                  className={`view-chip ${(contourLockedByCompare ? false : showMainContour) ? "on" : ""}`}
+                  onClick={() => setShowMainContour((v) => !v)}
+                  disabled={contourLockedByCompare}
+                >
+                  Contour
+                </button>
+                <button
+                  type="button"
+                  className={`view-chip ${targetGuide && showTargetOverlay ? "on" : ""}`}
+                  onClick={() => setShowTargetOverlay((v) => !v)}
+                  disabled={!targetGuide}
+                >
+                  Target
+                </button>
+                <button type="button" className={`view-chip ${showAerial ? "on" : ""}`} onClick={() => setShowAerial((v) => !v)}>
+                  Aerial
+                </button>
+                <button type="button" className={`view-chip ${showRulers ? "on" : ""}`} onClick={toggleRulerVisibilityFromView}>
+                  Ruler
+                </button>
+                {allowSurfacePanel && (
+                  <button type="button" className={`view-chip ${showSurface3d ? "on" : ""}`} onClick={() => setShowSurface3d((v) => !v)}>
+                    3D
+                  </button>
+                )}
+              </div>
             </div>
+
+            {/* Divider */}
+            <div style={{ height: 1, background: "rgba(30,50,80,0.07)", margin: "0 -2px" }} />
+
+            {/* Section: Background */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "rgba(30,50,80,0.38)", paddingLeft: 1 }}>Background</span>
+              <div style={{ display: "flex", gap: 5, background: "rgba(30,50,80,0.06)", borderRadius: 10, padding: 3 }}>
+                {(["DARK", "LIGHT"] as const).map((theme) => (
+                  <button
+                    key={theme}
+                    type="button"
+                    onClick={() => setBgTheme(theme)}
+                    style={{
+                      flex: 1,
+                      padding: "5px 0",
+                      fontSize: 12,
+                      fontWeight: bgTheme === theme ? 600 : 400,
+                      border: "none",
+                      borderRadius: 7,
+                      cursor: "pointer",
+                      background: bgTheme === theme ? "white" : "transparent",
+                      color: bgTheme === theme ? "rgba(10,84,166,1)" : "rgba(30,50,80,0.55)",
+                      boxShadow: bgTheme === theme ? "0 1px 4px rgba(14,26,50,0.13)" : "none",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {theme === "DARK" ? "Dark" : "Light"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Section: Aerial (conditional) */}
+            {showAerial && (
+              <>
+                <div style={{ height: 1, background: "rgba(30,50,80,0.07)", margin: "0 -2px" }} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "rgba(30,50,80,0.38)", paddingLeft: 1 }}>Aerial</span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: 12, fontWeight: 500, color: "rgba(20,40,70,0.7)", whiteSpace: "nowrap", width: 56 }}>Opacity</span>
+                      <input
+                        type="range"
+                        min={0.1}
+                        max={1}
+                        step={0.05}
+                        value={aerialOpacity}
+                        onChange={(e) => setAerialOpacity(Number(e.target.value))}
+                        style={{ flex: 1, minWidth: 60 }}
+                      />
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(20,40,70,0.85)", width: 30, textAlign: "right" }}>{Math.round(aerialOpacity * 100)}%</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: 12, fontWeight: 500, color: "rgba(20,40,70,0.7)", whiteSpace: "nowrap", width: 56 }}>Colormap</span>
+                      <select
+                        value={colormapType}
+                        onChange={(e) => setColormapType(e.target.value as typeof colormapType)}
+                        style={{ flex: 1, fontSize: 12, fontWeight: 500, background: "rgba(255,255,255,0.7)", color: "rgba(20,40,70,0.9)", border: "1px solid rgba(30,50,80,0.15)", borderRadius: 7, padding: "4px 6px", cursor: "pointer" }}
+                      >
+                        <option value="apple">Apple (default)</option>
+                        <option value="plasma">Plasma</option>
+                        <option value="viridis">Viridis</option>
+                        <option value="hot">Hot</option>
+                        <option value="grayscale">Grayscale</option>
+                        <option value="ice">Ice</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+            {/* Section: Contour style (conditional) */}
+            {effectiveShowMainContour && !contourLockedByCompare && (
+              <>
+                <div style={{ height: 1, background: "rgba(30,50,80,0.07)", margin: "0 -2px" }} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "rgba(30,50,80,0.38)", paddingLeft: 1 }}>Contour</span>
+                  <div style={{ display: "flex", gap: 4, background: "rgba(30,50,80,0.06)", borderRadius: 10, padding: 3 }}>
+                    {(["CLASSIC", "NEON", "GOLD", "MINIMAL"] as const).map((style) => (
+                      <button
+                        key={style}
+                        type="button"
+                        onClick={() => setContourStyle(style)}
+                        style={{
+                          flex: 1,
+                          padding: "5px 0",
+                          fontSize: 11,
+                          fontWeight: contourStyle === style ? 600 : 400,
+                          border: "none",
+                          borderRadius: 7,
+                          cursor: "pointer",
+                          background: contourStyle === style ? "white" : "transparent",
+                          color: contourStyle === style ? "rgba(10,84,166,1)" : "rgba(30,50,80,0.55)",
+                          boxShadow: contourStyle === style ? "0 1px 4px rgba(14,26,50,0.13)" : "none",
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        {style.charAt(0) + style.slice(1).toLowerCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
             {contourLockedByCompare && (
               <div className="view-inline-note">Contour is locked by compare clean mode.</div>
+            )}
+            {/* Section: EPE overlay (only when target exists) */}
+            {effectiveShowMainContour && targetContours.length > 0 && (
+              <>
+                <div style={{ height: 1, background: "rgba(30,50,80,0.07)", margin: "0 -2px" }} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "rgba(30,50,80,0.38)", paddingLeft: 1 }}>EPE Overlay</span>
+                  <div style={{ display: "flex", gap: 4, background: "rgba(30,50,80,0.06)", borderRadius: 10, padding: 3 }}>
+                    {(["NONE", "COLOR", "ARROWS", "BOTH"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setEpeOverlayMode(mode)}
+                        style={{
+                          flex: 1, padding: "5px 0", fontSize: 10,
+                          fontWeight: epeOverlayMode === mode ? 600 : 400,
+                          border: "none", borderRadius: 7, cursor: "pointer",
+                          background: epeOverlayMode === mode ? "white" : "transparent",
+                          color: epeOverlayMode === mode ? "rgba(10,84,166,1)" : "rgba(30,50,80,0.55)",
+                          boxShadow: epeOverlayMode === mode ? "0 1px 4px rgba(14,26,50,0.13)" : "none",
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        {mode === "NONE" ? "Off" : mode.charAt(0) + mode.slice(1).toLowerCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
             )}
             {compareActive && (
               <div className="view-compare-mode">
@@ -1756,6 +1958,37 @@ export function Viewport(props: {
             <ToolbarIcon kind="export" /> Export
           </summary>
           <div className="view-menu-panel view-menu-panel-minimal export-menu-panel">
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "rgba(30,50,80,0.45)" }}>Resolution</span>
+              <div style={{ display: "flex", gap: 3, background: "rgba(30,50,80,0.06)", borderRadius: 10, padding: 3 }}>
+                {([
+                  { res: "WEB",      label: "Web",      title: "Standard (up to 1800px)", pro: false },
+                  { res: "HIGH_RES", label: "High-Res", title: "High-res (up to 4200px)",  pro: true  },
+                ] as const).map(({ res, label, title, pro }) => {
+                  const disabled = pro && req.plan !== "PRO";
+                  return (
+                    <button
+                      key={res}
+                      type="button"
+                      disabled={disabled}
+                      title={disabled ? "Upgrade to Pro" : title}
+                      onClick={() => setExportResolution(res)}
+                      style={{
+                        flex: 1, padding: "5px 0", fontSize: 10,
+                        fontWeight: exportResolution === res ? 600 : 400,
+                        border: "none", borderRadius: 7, cursor: disabled ? "default" : "pointer",
+                        background: exportResolution === res ? "white" : "transparent",
+                        color: disabled ? "rgba(30,50,80,0.25)" : exportResolution === res ? "rgba(10,84,166,1)" : "rgba(30,50,80,0.55)",
+                        boxShadow: exportResolution === res ? "0 1px 4px rgba(14,26,50,0.13)" : "none",
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      {label}{disabled ? " ★" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <button
               type="button"
               className="view-chip"
@@ -1787,10 +2020,10 @@ export function Viewport(props: {
                 type="button"
                 className="view-chip view-chip-wide"
                 disabled={!sim || !showSurface3d}
-                title={showSurface3d ? "Export 3D surface as high-resolution PNG (3200 px)" : "Enable 3D view first"}
+                title={showSurface3d ? `Export 3D surface PNG (${exportResolution === "HIGH_RES" ? "4200" : "1800"}px)` : "Enable 3D view first"}
                 onClick={(e) => {
                   e.preventDefault();
-                  void onExport3dPng(3200);
+                  void onExport3dPng(exportResolution === "HIGH_RES" ? 4200 : 1800);
                   const d = e.currentTarget.closest("details") as HTMLDetailsElement | null;
                   if (d) d.open = false;
                 }}
@@ -1820,20 +2053,27 @@ export function Viewport(props: {
             >
               Runs CSV
             </button>
+            <button
+              type="button"
+              className="view-chip view-chip-wide"
+              disabled={!sim}
+              title="Copy figure caption to clipboard (for papers, presentations)"
+              onClick={(e) => {
+                e.preventDefault();
+                const caption = buildFigureCaption(req, sim);
+                void navigator.clipboard.writeText(caption);
+                const btn = e.currentTarget;
+                const orig = btn.textContent;
+                btn.textContent = "Copied!";
+                window.setTimeout(() => { btn.textContent = orig; }, 1400);
+              }}
+            >
+              Copy Caption
+            </button>
             {req.plan === "FREE" && (
-              <>
-                <button
-                  type="button"
-                  className="view-chip view-chip-wide"
-                  disabled
-                  title="Upgrade to Pro for high-resolution export."
-                >
-                  High-Res Export (Pro)
-                </button>
-                <div className="view-inline-note">
-                  Free exports include watermark and standard resolution.
-                </div>
-              </>
+              <div className="view-inline-note">
+                ★ Pro unlocks high-resolution export (up to 4200px).
+              </div>
             )}
           </div>
         </details>
@@ -1911,7 +2151,9 @@ export function Viewport(props: {
                 ? "1px solid rgba(96,108,132,0.4)"
                 : (isCanvasLayout ? "none" : "1px solid rgba(162,186,224,0.34)"),
               borderRadius: surfaceAsBackground ? 16 : (isCanvasLayout ? 0 : 16),
-              background: "radial-gradient(160% 150% at 18% 4%, #23344d 0%, #16263c 45%, #0b1626 100%)",
+              background: bgTheme === "LIGHT"
+                ? "radial-gradient(160% 150% at 18% 4%, #f0f4fa 0%, #e8edf5 45%, #dce4f0 100%)"
+                : "radial-gradient(160% 150% at 18% 4%, #23344d 0%, #16263c 45%, #0b1626 100%)",
               boxShadow: surfaceAsBackground
                 ? "inset 0 1px 0 rgba(238,246,255,0.28), inset 0 -30px 66px rgba(2,10,22,0.46), 0 10px 20px rgba(20,30,46,0.22)"
                 : (isCanvasLayout
@@ -2000,9 +2242,19 @@ export function Viewport(props: {
           >
               <defs>
                 <linearGradient id="panel-base" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#1f3452" />
-                  <stop offset="48%" stopColor="#13253d" />
-                  <stop offset="100%" stopColor="#081325" />
+                  {bgTheme === "LIGHT" ? (
+                    <>
+                      <stop offset="0%" stopColor="#f5f8fc" />
+                      <stop offset="48%" stopColor="#edf2f8" />
+                      <stop offset="100%" stopColor="#e2eaf4" />
+                    </>
+                  ) : (
+                    <>
+                      <stop offset="0%" stopColor="#1f3452" />
+                      <stop offset="48%" stopColor="#13253d" />
+                      <stop offset="100%" stopColor="#081325" />
+                    </>
+                  )}
                 </linearGradient>
                 <linearGradient id="panel-accent" x1="0" y1="0" x2="1" y2="1">
                   <stop offset="0%" stopColor="rgba(166, 206, 255, 0.14)" />
@@ -2051,7 +2303,7 @@ export function Viewport(props: {
                   <path d="M -26 84 Q 10 70, 46 84 T 118 84 T 190 84" fill="none" stroke="rgba(182,214,250,0.08)" strokeWidth="0.9" />
                 </pattern>
                 <pattern id="opc-grid" width={80} height={80} patternUnits="userSpaceOnUse">
-                  <path d="M 80 0 L 0 0 0 80" fill="none" stroke="rgba(166,198,236,0.065)" strokeWidth="1" />
+                  <path d="M 80 0 L 0 0 0 80" fill="none" stroke={bgTheme === "LIGHT" ? "rgba(80,110,160,0.12)" : "rgba(166,198,236,0.065)"} strokeWidth="1" />
                 </pattern>
                 <pattern id="target-hatch" width={14} height={14} patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
                   <path d="M 0 0 L 0 14" fill="none" stroke="rgba(98,242,214,0.24)" strokeWidth="2" />
@@ -2078,7 +2330,7 @@ export function Viewport(props: {
                   width={fovNm}
                   height={fovNm}
                   preserveAspectRatio="none"
-                  opacity={0.58}
+                  opacity={aerialOpacity}
                   transform={`translate(0 ${fovNm}) scale(1 -1)`}
                 />
               )}
@@ -2326,20 +2578,22 @@ export function Viewport(props: {
                 const d = polylineToPath(c.points_nm, fovNm);
                 return (
                   <g key={idx}>
+                    {contourColors.shadow && (
+                      <path
+                        d={d}
+                        fill="none"
+                        stroke={contourColors.shadow}
+                        strokeWidth={contourColors.sw}
+                        strokeLinejoin="round"
+                        strokeLinecap="round"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    )}
                     <path
                       d={d}
                       fill="none"
-                      stroke="rgba(36,50,76,0.72)"
-                      strokeWidth={contourUnderWidth}
-                      strokeLinejoin="round"
-                      strokeLinecap="round"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                    <path
-                      d={d}
-                      fill="none"
-                      stroke="rgba(236,243,255,0.96)"
-                      strokeWidth={contourMainWidth}
+                      stroke={contourColors.main}
+                      strokeWidth={contourColors.mw}
                       strokeLinejoin="round"
                       strokeLinecap="round"
                       vectorEffect="non-scaling-stroke"
@@ -2347,6 +2601,57 @@ export function Viewport(props: {
                   </g>
                 );
               })}
+              {/* ── EPE overlay ── */}
+              {epeSegments && epeSegments.map((segs, ci) => (
+                <g key={`epe-${ci}`}>
+                  {/* Color mode: colored contour segments */}
+                  {(epeOverlayMode === "COLOR" || epeOverlayMode === "BOTH") && segs.map((seg, si) => {
+                    if (si === segs.length - 1) return null;
+                    const next = segs[si + 1];
+                    const x1 = (seg.p.x / fovNm) * 100;
+                    const y1 = ((fovNm - seg.p.y) / fovNm) * 100;
+                    const x2 = (next.p.x / fovNm) * 100;
+                    const y2 = ((fovNm - next.p.y) / fovNm) * 100;
+                    return (
+                      <line key={`epe-col-${si}`}
+                        x1={`${x1}%`} y1={`${y1}%`} x2={`${x2}%`} y2={`${y2}%`}
+                        stroke={epeColor((seg.dist + next.dist) / 2)}
+                        strokeWidth={2.2}
+                        strokeLinecap="round"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    );
+                  })}
+                  {/* Arrows mode: EPE vectors sampled every ~N points */}
+                  {(epeOverlayMode === "ARROWS" || epeOverlayMode === "BOTH") && segs
+                    .filter((_, si) => si % Math.max(1, Math.floor(segs.length / 24)) === 0)
+                    .map((seg, si) => {
+                      if (seg.dist < 0.5) return null;
+                      const x1 = (seg.p.x / fovNm) * 100;
+                      const y1 = ((fovNm - seg.p.y) / fovNm) * 100;
+                      const x2 = (seg.nearest.x / fovNm) * 100;
+                      const y2 = ((fovNm - seg.nearest.y) / fovNm) * 100;
+                      const col = epeColor(seg.dist);
+                      return (
+                        <g key={`epe-arr-${si}`}>
+                          <line
+                            x1={`${x1}%`} y1={`${y1}%`} x2={`${x2}%`} y2={`${y2}%`}
+                            stroke={col} strokeWidth={1.4}
+                            strokeLinecap="round"
+                            markerEnd={`url(#epe-arrow-${ci}-${si})`}
+                            vectorEffect="non-scaling-stroke"
+                          />
+                          <defs>
+                            <marker id={`epe-arrow-${ci}-${si}`} markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
+                              <path d="M0,0 L5,2.5 L0,5 Z" fill={col} />
+                            </marker>
+                          </defs>
+                        </g>
+                      );
+                    })
+                  }
+                </g>
+              ))}
               {compareActive && compareAContours?.map((c, idx) => {
                 const d = polylineToPath(c.points_nm, fovNm);
                 return (
@@ -3063,6 +3368,10 @@ function drawSurface3D(
     maskOpacityPreset: "BALANCED" | "REVEAL";
     nmPerPixel: number;
     lineScale?: number;
+    colormapType?: string;
+    contourStyle?: "CLASSIC" | "NEON" | "GOLD" | "MINIMAL";
+    epeContours?: Array<Array<{ p: { x: number; y: number }; dist: number; nearest: { x: number; y: number } }>> | null;
+    epeMode?: "COLOR" | "ARROWS" | "BOTH" | "NONE";
   }
 ) {
   ctx.clearRect(0, 0, wPx, hPx);
@@ -3260,7 +3569,7 @@ function drawSurface3D(
         if (i === 0) ctx.moveTo(q.sx, q.sy);
         else ctx.lineTo(q.sx, q.sy);
       }
-      // Glow pass
+      // Glow pass (mask outline — fixed pink/white style)
       ctx.shadowColor = `rgba(255,200,230,${isRevealMask ? 0.3 : 0.5})`;
       ctx.shadowBlur = 6 * ls;
       ctx.strokeStyle = `rgba(255,220,240,${isRevealMask ? 0.45 : 0.7})`;
@@ -3368,14 +3677,17 @@ function drawSurface3D(
 
     for (const q of quads) {
       const t = Math.max(0, Math.min(1, q.t));
-      const c = appleColorMap(t);
+      const c = getColorMap(opts.colormapType ?? "apple", t);
+      const tCut = Math.max(0, (t - 0.08) / 0.92);
+      const baseAlpha = isRevealMask ? 0.9 : 0.84;
+      const alpha = Math.pow(tCut, 1.8) * baseAlpha;
       ctx.beginPath();
       ctx.moveTo(q.p00.sx, q.p00.sy);
       ctx.lineTo(q.p10.sx, q.p10.sy);
       ctx.lineTo(q.p11.sx, q.p11.sy);
       ctx.lineTo(q.p01.sx, q.p01.sy);
       ctx.closePath();
-      ctx.fillStyle = `rgba(${c.r}, ${c.g}, ${c.b}, ${isRevealMask ? 0.9 : 0.84})`;
+      ctx.fillStyle = `rgba(${c.r}, ${c.g}, ${c.b}, ${alpha.toFixed(3)})`;
       ctx.fill();
       ctx.strokeStyle = "rgba(224,238,255,0.1)";
       ctx.lineWidth = 0.36;
@@ -3444,27 +3756,31 @@ function drawSurface3D(
   }
 
   if (opts.showMainContour) {
-    drawContourOnSurface(ctx, opts.contours, opts.fovNm, w, h, data, vmin, span, {
-      azimuthDeg: opts.azimuthDeg,
-      elevationDeg: opts.elevationDeg,
-      rollDeg: opts.rollDeg,
-      offsetX: opts.offsetX,
-      offsetY: opts.offsetY,
-      offsetZ: opts.offsetZ,
-      zoomScale: opts.zoomScale,
-      depthScale: opts.depthScale,
-      wPx,
-      hPx,
-      baseZ: siliconZ,
-      featureBoost: surfaceFeatureBoost,
-    }, {
-      underStroke: "rgba(24,36,62,0.82)",
-      underWidth: contourUnder3d,
-      mainStroke: "rgba(245,250,255,0.99)",
-      mainWidth: contourMain3d,
-      glowColor: "rgba(200,220,255,0.45)",
-      glowBlur: 6.0 * ls,
-      nmPerPixel: opts.nmPerPixel,
+    const cs = opts.contourStyle ?? "CLASSIC";
+    const contourStyleMap = {
+      CLASSIC: { underStroke: "rgba(24,36,62,0.82)",    underWidth: contourUnder3d, mainStroke: "rgba(245,250,255,0.99)", mainWidth: contourMain3d, glowColor: "rgba(200,220,255,0.45)", glowBlur: 6.0 * ls },
+      NEON:    { underStroke: "rgba(0,60,40,0.6)",       underWidth: contourUnder3d * 1.2, mainStroke: "rgba(30,255,200,0.95)", mainWidth: contourMain3d * 1.1, glowColor: "rgba(0,255,180,0.4)", glowBlur: 8.0 * ls },
+      GOLD:    { underStroke: "rgba(50,20,0,0.65)",      underWidth: contourUnder3d * 1.1, mainStroke: "rgba(255,195,50,0.96)", mainWidth: contourMain3d * 1.05, glowColor: "rgba(255,180,0,0.35)", glowBlur: 7.0 * ls },
+      MINIMAL: { underStroke: "rgba(0,0,0,0)",           underWidth: 0, mainStroke: "rgba(220,235,255,0.55)", mainWidth: contourMain3d * 0.8, glowColor: "rgba(0,0,0,0)", glowBlur: 0 },
+    }[cs];
+    opts.contours.forEach((contour, ci) => {
+      drawContourOnSurface(ctx, [contour], opts.fovNm, w, h, data, vmin, span, {
+        azimuthDeg: opts.azimuthDeg,
+        elevationDeg: opts.elevationDeg,
+        rollDeg: opts.rollDeg,
+        offsetX: opts.offsetX,
+        offsetY: opts.offsetY,
+        offsetZ: opts.offsetZ,
+        zoomScale: opts.zoomScale,
+        depthScale: opts.depthScale,
+        wPx,
+        hPx,
+        baseZ: siliconZ,
+        featureBoost: surfaceFeatureBoost,
+      }, {
+        ...contourStyleMap,
+        nmPerPixel: opts.nmPerPixel,
+      }, opts.epeContours?.[ci] ?? null, opts.epeMode);
     });
   }
 
@@ -3612,7 +3928,9 @@ function drawContourOnSurface(
     glowColor?: string;
     glowBlur?: number;
     nmPerPixel?: number;
-  }
+  },
+  epeData?: Array<{ p: { x: number; y: number }; dist: number; nearest: { x: number; y: number } }> | null,
+  epeMode?: "COLOR" | "ARROWS" | "BOTH" | "NONE"
 ) {
   if (!contours?.length) return;
   const project = createSurfaceProjector({
@@ -3635,6 +3953,13 @@ function drawContourOnSurface(
     return { sx: p.sx, sy: p.sy };
   }
 
+  function epeSegColor(distNm: number): string {
+    const t = Math.min(1, distNm / 10);
+    const r = Math.round(t < 0.5 ? t * 2 * 255 : 255);
+    const g = Math.round(t < 0.5 ? 210 : (1 - (t - 0.5) * 2) * 210);
+    return `rgba(${r},${g},40,0.96)`;
+  }
+
   ctx.save();
   const nmPerPixel = Math.max(1e-6, style?.nmPerPixel ?? (fovNm / Math.max(w, h)));
 
@@ -3643,25 +3968,22 @@ function drawContourOnSurface(
     const pts = normalizeContourLoop(rawPts, nmPerPixel, fovNm);
     if (pts.length < 2) continue;
 
-    const drawEdgesPath = (closePath: boolean) => {
-      ctx.beginPath();
-      const p0 = pts[0];
-      const p0r = projNm(p0.x, p0.y);
-      ctx.moveTo(p0r.sx, p0r.sy);
-      for (let i = 1; i < pts.length; i++) {
-        const p = pts[i];
-        const pr = projNm(p.x, p.y);
-        ctx.lineTo(pr.sx, pr.sy);
-      }
-      if (closePath) {
-        ctx.closePath();
-      }
-    };
-
     const isClosed =
       pts.length >= 3 &&
       Math.hypot(pts[0].x - pts[pts.length - 1].x, pts[0].y - pts[pts.length - 1].y) <= Math.max(3, nmPerPixel * 3);
 
+    const drawEdgesPath = (closePath: boolean) => {
+      ctx.beginPath();
+      const p0r = projNm(pts[0].x, pts[0].y);
+      ctx.moveTo(p0r.sx, p0r.sy);
+      for (let i = 1; i < pts.length; i++) {
+        const pr = projNm(pts[i].x, pts[i].y);
+        ctx.lineTo(pr.sx, pr.sy);
+      }
+      if (closePath) ctx.closePath();
+    };
+
+    // Always draw under-stroke (shadow/depth)
     drawEdgesPath(isClosed);
     ctx.strokeStyle = style?.underStroke ?? "rgba(36,50,76,0.72)";
     ctx.lineWidth = style?.underWidth ?? 3.35;
@@ -3670,17 +3992,104 @@ function drawContourOnSurface(
     ctx.setLineDash(style?.dash?.length ? style.dash : []);
     ctx.stroke();
 
-    drawEdgesPath(isClosed);
-    ctx.shadowColor = style?.glowColor ?? "rgba(0,0,0,0)";
-    ctx.shadowBlur = style?.glowBlur ?? 0;
-    ctx.strokeStyle = style?.mainStroke ?? "rgba(236,243,255,0.96)";
-    ctx.lineWidth = style?.mainWidth ?? 1.95;
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
-    ctx.setLineDash(style?.dash?.length ? style.dash : []);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.setLineDash([]);
+    if (epeData && epeData.length > 0) {
+      const mode = epeMode ?? "COLOR";
+      const mainWidth = style?.mainWidth ?? 1.95;
+      const n = epeData.length;
+
+      // COLOR or BOTH: color-coded contour segments
+      if (mode === "COLOR" || mode === "BOTH") {
+        ctx.lineWidth = mainWidth;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.setLineDash([]);
+        for (let i = 0; i < pts.length - 1; i++) {
+          const a = projNm(pts[i].x, pts[i].y);
+          const b = projNm(pts[i + 1].x, pts[i + 1].y);
+          const dA = epeData[Math.min(i, n - 1)].dist;
+          const dB = epeData[Math.min(i + 1, n - 1)].dist;
+          ctx.beginPath();
+          ctx.moveTo(a.sx, a.sy);
+          ctx.lineTo(b.sx, b.sy);
+          ctx.strokeStyle = epeSegColor((dA + dB) * 0.5);
+          ctx.stroke();
+        }
+      } else {
+        // ARROWS only: draw base contour in white
+        drawEdgesPath(isClosed);
+        ctx.strokeStyle = style?.mainStroke ?? "rgba(236,243,255,0.96)";
+        ctx.lineWidth = mainWidth;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.setLineDash([]);
+        ctx.stroke();
+      }
+
+      // ARROWS or BOTH: EPE vector arrows on silicon plane
+      if (mode === "ARROWS" || mode === "BOTH") {
+        const step = Math.max(1, Math.floor(n / 24));
+        ctx.setLineDash([]);
+        for (let i = 0; i < n; i += step) {
+          const seg = epeData[i];
+          if (seg.dist < 0.5) continue;
+          const a = projNm(seg.p.x, seg.p.y);
+          const b = projNm(seg.nearest.x, seg.nearest.y);
+          const dx = b.sx - a.sx;
+          const dy = b.sy - a.sy;
+          const len = Math.hypot(dx, dy);
+          if (len < 1.5) continue;
+          const color = epeSegColor(seg.dist);
+          const nx = dx / len;
+          const ny = dy / len;
+          const headLen = Math.min(len * 0.5, 14);
+          const headW = headLen * 0.6;
+          // Shaft shadow
+          ctx.beginPath();
+          ctx.moveTo(a.sx, a.sy);
+          ctx.lineTo(b.sx - nx * headLen * 0.5, b.sy - ny * headLen * 0.5);
+          ctx.strokeStyle = "rgba(0,0,0,0.45)";
+          ctx.lineWidth = 4.5;
+          ctx.lineCap = "round";
+          ctx.stroke();
+          // Shaft
+          ctx.beginPath();
+          ctx.moveTo(a.sx, a.sy);
+          ctx.lineTo(b.sx - nx * headLen * 0.5, b.sy - ny * headLen * 0.5);
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 2.4;
+          ctx.lineCap = "round";
+          ctx.stroke();
+          // Arrowhead shadow
+          ctx.beginPath();
+          ctx.moveTo(b.sx + nx * 1, b.sy + ny * 1);
+          ctx.lineTo(b.sx - nx * headLen - ny * headW + 1, b.sy - ny * headLen + nx * headW + 1);
+          ctx.lineTo(b.sx - nx * headLen + ny * headW + 1, b.sy - ny * headLen - nx * headW + 1);
+          ctx.closePath();
+          ctx.fillStyle = "rgba(0,0,0,0.35)";
+          ctx.fill();
+          // Arrowhead
+          ctx.beginPath();
+          ctx.moveTo(b.sx, b.sy);
+          ctx.lineTo(b.sx - nx * headLen - ny * headW, b.sy - ny * headLen + nx * headW);
+          ctx.lineTo(b.sx - nx * headLen + ny * headW, b.sy - ny * headLen - nx * headW);
+          ctx.closePath();
+          ctx.fillStyle = color;
+          ctx.fill();
+        }
+      }
+    } else {
+      drawEdgesPath(isClosed);
+      ctx.shadowColor = style?.glowColor ?? "rgba(0,0,0,0)";
+      ctx.shadowBlur = style?.glowBlur ?? 0;
+      ctx.strokeStyle = style?.mainStroke ?? "rgba(236,243,255,0.96)";
+      ctx.lineWidth = style?.mainWidth ?? 1.95;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.setLineDash(style?.dash?.length ? style.dash : []);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.setLineDash([]);
+    }
   }
   ctx.restore();
 }
@@ -4893,30 +5302,33 @@ function buildJumpHistogram(jumps: number[], bins: number): Array<{ range_nm: st
   return out;
 }
 
-function appleColorMap(tRaw: number): { r: number; g: number; b: number } {
+function getColorMap(type: string, tRaw: number): { r: number; g: number; b: number } {
   const t = Math.max(0, Math.min(1, tRaw));
-  const stops = [
-    { t: 0.0, c: [14, 20, 30] },     // deep slate
-    { t: 0.22, c: [39, 67, 108] },   // steel blue
-    { t: 0.45, c: [94, 92, 230] },   // indigo
-    { t: 0.68, c: [191, 90, 242] },  // purple
-    { t: 0.86, c: [255, 69, 58] },   // warm red
-    { t: 1.0, c: [255, 214, 10] },   // yellow
-  ];
-  for (let i = 0; i < stops.length - 1; i++) {
-    const a = stops[i];
-    const b = stops[i + 1];
-    if (t >= a.t && t <= b.t) {
-      const u = (t - a.t) / Math.max(1e-9, b.t - a.t);
-      return {
-        r: Math.round(a.c[0] + (b.c[0] - a.c[0]) * u),
-        g: Math.round(a.c[1] + (b.c[1] - a.c[1]) * u),
-        b: Math.round(a.c[2] + (b.c[2] - a.c[2]) * u),
-      };
+  function lerp(stops: Array<{ t: number; c: number[] }>, v: number) {
+    for (let i = 0; i < stops.length - 1; i++) {
+      const a = stops[i], b = stops[i + 1];
+      if (v >= a.t && v <= b.t) {
+        const u = (v - a.t) / Math.max(1e-9, b.t - a.t);
+        return { r: Math.round(a.c[0] + (b.c[0] - a.c[0]) * u), g: Math.round(a.c[1] + (b.c[1] - a.c[1]) * u), b: Math.round(a.c[2] + (b.c[2] - a.c[2]) * u) };
+      }
     }
+    const last = stops[stops.length - 1].c;
+    return { r: last[0], g: last[1], b: last[2] };
   }
-  const last = stops[stops.length - 1].c;
-  return { r: last[0], g: last[1], b: last[2] };
+  switch (type) {
+    case "plasma":
+      return lerp([{ t: 0.0, c: [13, 8, 135] }, { t: 0.25, c: [126, 3, 168] }, { t: 0.5, c: [203, 71, 120] }, { t: 0.75, c: [248, 149, 64] }, { t: 1.0, c: [240, 249, 33] }], t);
+    case "viridis":
+      return lerp([{ t: 0.0, c: [68, 1, 84] }, { t: 0.25, c: [59, 82, 139] }, { t: 0.5, c: [33, 145, 140] }, { t: 0.75, c: [94, 201, 98] }, { t: 1.0, c: [253, 231, 37] }], t);
+    case "hot":
+      return lerp([{ t: 0.0, c: [0, 0, 0] }, { t: 0.33, c: [255, 0, 0] }, { t: 0.67, c: [255, 255, 0] }, { t: 1.0, c: [255, 255, 255] }], t);
+    case "grayscale":
+      return lerp([{ t: 0.0, c: [0, 0, 0] }, { t: 1.0, c: [255, 255, 255] }], t);
+    case "ice":
+      return lerp([{ t: 0.0, c: [4, 35, 51] }, { t: 0.33, c: [23, 93, 122] }, { t: 0.67, c: [50, 184, 190] }, { t: 1.0, c: [232, 251, 255] }], t);
+    default: // apple
+      return lerp([{ t: 0.0, c: [14, 20, 30] }, { t: 0.22, c: [39, 67, 108] }, { t: 0.45, c: [94, 92, 230] }, { t: 0.68, c: [191, 90, 242] }, { t: 0.86, c: [255, 69, 58] }, { t: 1.0, c: [255, 214, 10] }], t);
+  }
 }
 
 

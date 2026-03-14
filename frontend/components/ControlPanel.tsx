@@ -160,6 +160,20 @@ export function ControlPanel(props: {
   onUpgradeIntent: (source: string) => void;
   onManageBillingIntent: (source: string) => void;
   onSignOutIntent: () => void;
+  // OPC auto-correction
+  opcRunning?: boolean;
+  opcProgress?: Array<{ iteration: number; epeMeanNm: number; epeMaxNm: number; maskShapes: import("../lib/types").MaskShape[] }>;
+  onRunOpcCorrection?: () => void;
+  onContinueOpcCorrection?: () => void;
+  canContinueOpc?: boolean;
+  onApplyOpcResult?: () => void;
+  onCancelOpcCorrection?: () => void;
+  onRollbackOpcResult?: () => void;
+  onResetOpc?: () => void;
+  opcIterations?: number;
+  opcHasCheckpoint?: boolean;
+  opcBatchStatus?: "improved" | "plateau" | "diverged" | null;
+  opcBestIterIndex?: number | null;
 }) {
   const PLAN_PANEL_COLLAPSED_KEY = "litopc_plan_panel_collapsed_v1";
   const LEGACY_PLAN_PANEL_COLLAPSED_KEY = "opclab_plan_panel_collapsed_v1";
@@ -282,10 +296,23 @@ export function ControlPanel(props: {
     onUpgradeIntent,
     onManageBillingIntent,
     onSignOutIntent,
+    opcRunning = false,
+    opcProgress = [],
+    onRunOpcCorrection,
+    onContinueOpcCorrection,
+    canContinueOpc = true,
+    onApplyOpcResult,
+    onCancelOpcCorrection,
+    onRollbackOpcResult,
+    onResetOpc,
+    opcIterations = 5,
+    opcHasCheckpoint = false,
+    opcBatchStatus = null,
+    opcBestIterIndex = null,
   } = props;
 
   const [maskPresetName, setMaskPresetName] = useState("");
-  const [analysisTab, setAnalysisTab] = useState<"COMPARE" | "SWEEP">("COMPARE");
+  const [sidebarTab, setSidebarTab] = useState<"SETUP" | "ANALYZE" | "HISTORY">("SETUP");
   const [sweepLogY, setSweepLogY] = useState(false);
   const [sweepSnapshotName, setSweepSnapshotName] = useState("");
   const [planPanelCollapsed, setPlanPanelCollapsed] = useState(false);
@@ -322,7 +349,7 @@ export function ControlPanel(props: {
   const steppedTemplate = templateId === "STAIRCASE" || templateId === "STAIRCASE_OPC";
   const squareTemplate = templateId === "CONTACT_RAW" || templateId === "CONTACT_OPC_SERIF";
   const customShapePromptVisible = plan === "FREE" && customLimitReached;
-  const sweepPromptVisible = analysisTab === "SWEEP" && sweepLocked;
+  const sweepPromptVisible = sidebarTab === "ANALYZE" && sweepLocked;
   const planLabel = plan === "PRO" ? "Pro" : "Free";
   const upgradeLocked = plan === "PRO";
   const manageBillingVisible = billingPortalAvailable;
@@ -503,131 +530,242 @@ export function ControlPanel(props: {
         </div>
       )}
       <div className="panel-body panel-body-compact">
-          <div className="workspace-edit-dock-head control-panel-head">
-            <div className="workspace-edit-dock-eyebrow">Set-up</div>
-          </div>
+        <div className="sidebar-tab-bar">
+          {(["SETUP", "ANALYZE", "HISTORY"] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              className={`sidebar-tab-btn${sidebarTab === tab ? " active" : ""}`}
+              onClick={() => setSidebarTab(tab)}
+            >
+              {tab === "SETUP" ? "Set-up" : tab === "ANALYZE" ? "Analyze" : "History"}
+            </button>
+          ))}
+        </div>
+        <a href="/litopc/learn" className="learn-header-btn">
+          <span className="learn-header-btn-icon">
+            <svg viewBox="0 0 14 14" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="7" cy="7" r="5.5" />
+              <path d="M7 4.5v3l1.5 1.5" />
+            </svg>
+          </span>
+          <span className="learn-header-btn-text">How OPC Works</span>
+          <span className="learn-header-btn-arrow">›</span>
+        </a>
+        {sidebarTab === "SETUP" && (<>
         <div className="group-card compact">
           <div className="plan-row">
-            <span className="group-title-inline">Plan</span>
-            <div className="plan-row-controls">
-              <span className={`plan-status-pill ${plan === "PRO" ? "is-pro" : "is-free"}`} aria-label={`Current plan ${planLabel}`}>
-                {planLabel}
-              </span>
-              {showInternalLoginLink && (
-                <a href="/litopc/internal-login" className="plan-utility-link" title="Internal tester identity">
-                  Tester
-                </a>
-              )}
-              {accountSignedIn && (
-                <button
-                  className="mini-btn slim plan-utility-link"
-                  onClick={onSignOutIntent}
-                  title="Sign out"
-                  type="button"
-                >
-                  Sign out
-                </button>
-              )}
-              <button
-                className="mini-btn slim plan-collapse-btn"
-                onClick={() => setPlanPanelCollapsed((prev) => !prev)}
-                aria-expanded={!planPanelCollapsed}
-                title={planPanelCollapsed ? "Show plan details" : "Hide plan details"}
-                aria-label={planPanelCollapsed ? "Show plan details" : "Hide plan details"}
-              >
-                {planPanelCollapsed ? "+" : "-"}
-              </button>
-            </div>
+            <span className={`plan-status-pill ${plan === "PRO" ? "is-pro" : "is-free"}`}>
+              {planLabel}
+            </span>
+            {usageStatus && (
+              <div className="plan-metrics-inline">
+                <span><b>Runs</b> {usageStatus.usage.runs}/{usageStatus.limits.runs}</span>
+                <span><b>Sweep</b> {usageStatus.usage.sweep_points}/{usageStatus.limits.sweep_points}</span>
+                <span><b>Export</b> {usageStatus.usage.exports}/{usageStatus.limits.exports}</span>
+              </div>
+            )}
           </div>
-          {planPanelCollapsed ? (
-            <div className="plan-collapsed-summary">
-              <div className="plan-collapsed-primary">
-                {usageLoading
-                  ? "Loading usage..."
-                  : usageStatus
-                    ? `Runs ${usageStatus.usage.runs}/${usageStatus.limits.runs} | Sweep ${usageStatus.usage.sweep_points}/${usageStatus.limits.sweep_points} | Export ${usageStatus.usage.exports}/${usageStatus.limits.exports}`
-                    : "Usage unavailable"}
-              </div>
-              <div className="plan-collapsed-secondary">
-                {accountMetaLabel ?? `${planLabel} account`}
-              </div>
-            </div>
-          ) : (
-            <div className="plan-cockpit">
-              {usageLoading && <div className="small-note tiny-note">Loading usage...</div>}
-              {usageStatus && (
-                <div className="plan-metrics-inline">
-                  <span><b>Runs</b> {usageStatus.usage.runs}/{usageStatus.limits.runs}</span>
-                  <span><b>Sweep</b> {usageStatus.usage.sweep_points}/{usageStatus.limits.sweep_points}</span>
-                  <span><b>Export</b> {usageStatus.usage.exports}/{usageStatus.limits.exports}</span>
-                </div>
-              )}
-
-              <div className="plan-summary-card">
-                <div className="plan-summary-line">
-                  <span className="plan-summary-k">Identity</span>
-                  <span className="plan-summary-v mono plan-summary-identity" title={planIdentityLabel}>{planIdentityLabel}</span>
-                </div>
-                {accountSignedIn && accountUserId && (
-                  <div className="plan-summary-line">
-                    <span className="plan-summary-k">ID</span>
-                    <div className="plan-summary-value-row">
-                      <span className="plan-summary-preview mono" title={accountUserId}>
-                        {accountIdPreview}
-                      </span>
-                      <button
-                        className="mini-btn slim plan-copy-id-btn"
-                        onClick={copyAccountId}
-                        type="button"
-                        title="Copy account ID"
-                      >
-                        {accountIdCopied ? "Copied" : "Copy ID"}
-                      </button>
-                    </div>
-                  </div>
-                )}
-                <div className="plan-summary-chip-row">
-                  <span className="plan-summary-chip">{planStatusLabel}</span>
-                  {accountMetaLabel && <span className="plan-summary-chip">{accountMetaLabel}</span>}
-                </div>
-              </div>
-
-              <div className="plan-actions-grid plan-actions-grid-single">
-                <button
-                  className="mini-btn slim plan-action-btn upgrade"
-                  onClick={() => (manageBillingVisible ? requestManageBilling("account_panel") : requestUpgrade("account_panel"))}
-                  disabled={upgradeLocked && !manageBillingVisible}
-                  title={planActionTitle}
-                >
-                  {planActionLabel}
-                </button>
-              </div>
-
-              {legacyTesterPro && showInternalLoginLink && (
-                <div className="plan-governance-note plan-tester-guidance">
-                  This tester already has legacy Pro access. Use a fresh tester identity from{" "}
-                  <a href="/litopc/internal-login" className="plan-inline-link">
-                    Tester
-                  </a>{" "}
-                  to run Stripe checkout.
-                </div>
-              )}
-
-              {(usageError || accountError) && (
-                <div className="plan-error-stack">
-                  {usageError && <div className="small-note tiny-note plan-inline-error">{usageError}</div>}
-                  {accountError && <div className="small-note tiny-note plan-inline-error">{accountError}</div>}
-                </div>
-              )}
-            </div>
-          )}
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            <button
+              className="mini-btn slim plan-action-btn upgrade"
+              onClick={() => (manageBillingVisible ? requestManageBilling("account_panel") : requestUpgrade("account_panel"))}
+              disabled={upgradeLocked && !manageBillingVisible}
+              title={planActionTitle}
+              style={{ flex: 1 }}
+            >
+              {planActionLabel}
+            </button>
+            {accountSignedIn && (
+              <button className="mini-btn slim plan-utility-link" onClick={onSignOutIntent} type="button">
+                Sign out
+              </button>
+            )}
+            {showInternalLoginLink && (
+              <a href="/litopc/internal-login" className="plan-utility-link" title="Internal tester identity">
+                Tester
+              </a>
+            )}
+          </div>
         </div>
 
         <div className="group-card compact run-card">
+          <div className="opc-card-head">
+            <span className="opc-card-title">Lithography Sim</span>
+            <span className="opc-card-tag">aerial image</span>
+          </div>
           <button className="run-main-btn" onClick={onRun} disabled={loading}>
-            {loading ? "Running..." : "Run Simulation"}
+            {loading ? "Simulating..." : (
+              <><span className="run-main-label">Simulate</span><span className="run-main-sub">Mask → Contour</span></>
+            )}
           </button>
         </div>
+
+        {/* ── OPC Auto-Correction ── */}
+        {onRunOpcCorrection && targetShapes.length > 0 && (
+          <div className="group-card compact run-card opc-card">
+
+            {/* Header row */}
+            <div className="opc-card-head">
+              <span className="opc-card-title">OPC Auto-Correct</span>
+              <span className="opc-card-tag">model-based</span>
+            </div>
+
+            {/* Idle: show run button + description */}
+            {opcProgress.length === 0 && !opcRunning && (
+              <>
+                <button
+                  className="opc-card-run-btn"
+                  onClick={onRunOpcCorrection}
+                  disabled={loading}
+                >
+                  <span className="run-main-label">Correct</span><span className="opc-card-run-sub">OPC · {opcIterations} iter</span>
+                </button>
+              </>
+            )}
+
+            {/* Active / done: convergence chart */}
+            {(opcRunning || opcProgress.length > 0) && (() => {
+              const maxEpe = Math.max(...opcProgress.map(r => r.epeMeanNm), 1);
+              const first = opcProgress[0]?.epeMeanNm ?? null;
+              const last  = opcProgress[opcProgress.length - 1]?.epeMeanNm ?? null;
+              const improved = first !== null && last !== null ? ((first - last) / first * 100) : null;
+              // Total iterations run (accumulates across continues)
+              const totalIter = opcProgress.length;
+              // Current batch: last opcIterations entries (or all if first run)
+              const batchDone = opcRunning ? opcProgress.length % opcIterations : (totalIter % opcIterations || opcIterations);
+              const W = 200, H = 44;
+              // Normalise x over total entries so chart always fills width
+              const nPts = Math.max(opcProgress.length, 1);
+              const pts = opcProgress.map((r, i) => {
+                const x = (i / Math.max(nPts - 1, 1)) * (W - 8) + 4;
+                const y = H - 6 - ((r.epeMeanNm / maxEpe) * (H - 12));
+                return `${x.toFixed(1)},${y.toFixed(1)}`;
+              });
+              // Best-iteration marker coordinates (green dot on sparkline).
+              const bestPt = (!opcRunning && opcBestIterIndex !== null && opcBestIterIndex >= 0 && opcBestIterIndex < opcProgress.length)
+                ? pts[opcBestIterIndex]
+                : null;
+              const bestEpeNm = bestPt !== null && opcBestIterIndex !== null
+                ? opcProgress[opcBestIterIndex].epeMeanNm
+                : null;
+              return (
+                <div className="opc-chart-wrap">
+                  {/* Sparkline */}
+                  <svg className="opc-sparkline" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+                    <line x1="0" y1={H/2} x2={W} y2={H/2} stroke="rgba(33,44,64,0.08)" strokeWidth="1"/>
+                    {pts.length >= 2 && (
+                      <polyline
+                        points={`4,${H} ${pts.join(" ")} ${pts[pts.length-1].split(",")[0]},${H}`}
+                        fill="rgba(10,132,255,0.07)" stroke="none"
+                      />
+                    )}
+                    {pts.length >= 2 && (
+                      <polyline points={pts.join(" ")} fill="none" stroke="rgba(10,100,220,0.7)" strokeWidth="1.5" strokeLinejoin="round"/>
+                    )}
+                    {pts.length > 0 && !opcRunning && (
+                      <circle cx={pts[pts.length-1].split(",")[0]} cy={pts[pts.length-1].split(",")[1]}
+                        r="2.5" fill="rgba(10,100,220,0.9)" />
+                    )}
+                    {opcRunning && pts.length > 0 && (
+                      <circle cx={pts[pts.length-1].split(",")[0]} cy={pts[pts.length-1].split(",")[1]}
+                        r="2.5" fill="rgba(10,100,220,0.8)" className="opc-dot-pulse" />
+                    )}
+                    {/* Green dot marks the best-EPE iteration when it differs from the last */}
+                    {bestPt && (
+                      <circle cx={bestPt.split(",")[0]} cy={bestPt.split(",")[1]}
+                        r="3.5" fill="rgba(30,160,80,0.9)" />
+                    )}
+                  </svg>
+
+                  {/* Stats row */}
+                  <div className="opc-stats-row">
+                    <div className="opc-stat">
+                      <span className="opc-stat-label">iter</span>
+                      <span className="opc-stat-val">
+                        {opcRunning
+                          ? `${batchDone}/${opcIterations}`
+                          : totalIter > opcIterations
+                            ? `${totalIter} total`
+                            : `${totalIter}/${opcIterations}`}
+                      </span>
+                    </div>
+                    <div className="opc-stat">
+                      <span className="opc-stat-label">EPE mean</span>
+                      <span className="opc-stat-val">
+                        {bestEpeNm !== null
+                          ? `${bestEpeNm.toFixed(1)} nm`
+                          : last !== null ? `${last.toFixed(1)} nm` : "—"}
+                      </span>
+                    </div>
+                    {bestPt && opcBestIterIndex !== null && (
+                      <div className="opc-stat">
+                        <span className="opc-stat-label">best</span>
+                        <span className="opc-stat-val opc-stat-good">iter {opcBestIterIndex + 1}</span>
+                      </div>
+                    )}
+                    {improved !== null && !opcRunning && !bestPt && (
+                      <div className="opc-stat">
+                        <span className="opc-stat-label">improve</span>
+                        <span className={`opc-stat-val ${improved > 0 ? "opc-stat-good" : "opc-stat-bad"}`}>
+                          {improved > 0 ? "↓" : "↑"}{Math.abs(improved).toFixed(0)}%
+                        </span>
+                      </div>
+                    )}
+                    {opcRunning && (
+                      <div className="opc-stat">
+                        <span className="opc-stat-label">running</span>
+                        <span className="opc-stat-val opc-running-dots">···</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Convergence / divergence notice */}
+                  {!opcRunning && opcBatchStatus && opcBatchStatus !== "improved" && (
+                    <div className={`opc-batch-notice opc-batch-${opcBatchStatus}`}>
+                      {opcBatchStatus === "diverged"
+                        ? "⚠ EPE worsened — consider rolling back."
+                        : "◎ EPE plateaued — further iterations unlikely to help."}
+                    </div>
+                  )}
+
+                  {/* Action buttons */}
+                  <div className="opc-btn-row">
+                    {opcRunning && (
+                      <button className="opc-btn opc-btn-stop" onClick={onCancelOpcCorrection}>Stop</button>
+                    )}
+                    {!opcRunning && (
+                      <>
+                        <button className="opc-btn opc-btn-apply" onClick={onApplyOpcResult}>
+                          Apply to Mask
+                        </button>
+                        <button
+                          className="opc-btn opc-btn-rerun"
+                          onClick={canContinueOpc ? onContinueOpcCorrection : onUpgradeIntent?.bind(null, "opc_continue")}
+                          disabled={loading}
+                          title={canContinueOpc
+                            ? `Run ${opcIterations} more iterations from the current corrected mask`
+                            : "Pro plan required to continue OPC iterations"}>
+                          {canContinueOpc ? `+${opcIterations} iter` : `🔒 +${opcIterations} iter`}
+                        </button>
+                        {opcHasCheckpoint && (
+                          <button className="opc-btn opc-btn-rollback" onClick={onRollbackOpcResult} disabled={loading}
+                            title="Undo the last batch and return to the previous mask">
+                            ↩ Undo
+                          </button>
+                        )}
+                        <button className="opc-btn opc-btn-reset" onClick={onResetOpc ?? onRunOpcCorrection} disabled={loading}
+                          title="Reset mask to original target (discard OPC corrections)">
+                          ↺
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
 
         <div className="group-card compact">
           <p className="group-title">Mask Setup</p>
@@ -643,24 +781,11 @@ export function ControlPanel(props: {
               <option key={t.id} value={t.id}>{t.label}</option>
             ))}
           </select>
-          <div className="mask-seed-block mask-seed-copy-block">
-            <div className="small-note tiny-note mask-seed-description">
-              Pick a pattern to seed the workspace, then keep editing with add, subtract, move, and resize tools.
-            </div>
-          </div>
           <div className="mask-seed-block">
             <div className="mask-action-stack">
               <div className="mask-action-row">
                 <button className="mini-btn mask-seed-btn" onClick={onReinitializeTemplate}>Reinitialize</button>
-                <div className="small-note tiny-note mask-action-description">
-                  Restore the selected pattern's default seed.
-                </div>
-              </div>
-              <div className="mask-action-row">
                 <button className="mini-btn mask-seed-btn secondary" onClick={onStartBlankWorkspace}>Start Blank</button>
-                <div className="small-note tiny-note mask-action-description">
-                  Clear the workspace and begin from an empty mask.
-                </div>
               </div>
             </div>
           </div>
@@ -669,46 +794,21 @@ export function ControlPanel(props: {
             <div className="mask-library-head">
               <div className="mask-library-title">Mask Library</div>
             </div>
-            <div className="mask-library-save-row">
-              <input
-                type="text"
-                placeholder="mask name"
-                value={maskPresetName}
-                onChange={(e) => setMaskPresetName(e.target.value)}
-                style={{ minWidth: 0 }}
-              />
-              <button
-                className="mini-btn mask-seed-btn"
-                disabled={plan !== "PRO" || !maskPresetName.trim() || maskShapes.length === 0}
-                onClick={() => {
-                  onSaveCustomMaskPreset(maskPresetName);
-                  setMaskPresetName("");
-                }}
-                title={plan !== "PRO" ? "Pro only: save reusable mask snapshots to the local library." : undefined}
-              >
-                Save
-              </button>
-            </div>
-            {plan !== "PRO" && (
-              <div className="small-note tiny-note mask-library-lock-note">
-                Saving to Mask Library is available in Pro mode. File import/export stays available.
-              </div>
-            )}
             <div className="mask-library-file-row">
               <button
                 className="mini-btn mask-seed-btn secondary"
                 disabled={maskShapes.length === 0}
                 onClick={() => onExportCustomMaskFile(maskPresetName)}
-                title="Download current mask as a litopc mask data file."
+                title="Export current mask as a file."
               >
-                Save File
+                Export
               </button>
               <button
                 className="mini-btn mask-seed-btn secondary"
                 onClick={() => maskFileInputRef.current?.click()}
-                title="Import a saved litopc mask data file and keep it in Mask Library."
+                title="Import a saved mask file."
               >
-                Load File
+                Import
               </button>
               <input
                 ref={maskFileInputRef}
@@ -723,15 +823,37 @@ export function ControlPanel(props: {
                 }}
               />
             </div>
-            <div className="shape-chip-list pro">
-              {customMaskPresets.length === 0 && <div className="small-note tiny-note mask-library-empty">No saved masks.</div>}
-              {customMaskPresets.map((m) => (
-                <div key={m.id} className="shape-chip">
-                  <button className="mini-btn slim" onClick={() => onLoadCustomMaskPreset(m.id)}>{m.name}</button>
-                  <button className="mini-btn slim danger" onClick={() => onDeleteCustomMaskPreset(m.id)} aria-label={`Delete ${m.name}`}>x</button>
-                </div>
-              ))}
-            </div>
+            {plan === "PRO" && (
+              <div className="mask-library-save-row" style={{ marginTop: 6 }}>
+                <input
+                  type="text"
+                  placeholder="snapshot name"
+                  value={maskPresetName}
+                  onChange={(e) => setMaskPresetName(e.target.value)}
+                  style={{ minWidth: 0 }}
+                />
+                <button
+                  className="mini-btn mask-seed-btn"
+                  disabled={!maskPresetName.trim() || maskShapes.length === 0}
+                  onClick={() => {
+                    onSaveCustomMaskPreset(maskPresetName);
+                    setMaskPresetName("");
+                  }}
+                >
+                  Save
+                </button>
+              </div>
+            )}
+            {customMaskPresets.length > 0 && (
+              <div className="shape-chip-list pro">
+                {customMaskPresets.map((m) => (
+                  <div key={m.id} className="shape-chip">
+                    <button className="mini-btn slim" onClick={() => onLoadCustomMaskPreset(m.id)}>{m.name}</button>
+                    <button className="mini-btn slim danger" onClick={() => onDeleteCustomMaskPreset(m.id)} aria-label={`Delete ${m.name}`}>x</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -758,88 +880,59 @@ export function ControlPanel(props: {
               style={{ width: 88 }}
             />
           </div>
-          <div className="dose-policy-row">
-            <span className="dose-policy-tag">{plan === "FREE" ? "Free policy" : "Pro policy"}</span>
-            <span className="dose-policy-info" title={dosePolicyText}>i</span>
+        </div>
+        </>)}
+
+        {sidebarTab === "ANALYZE" && (<>
+        <div className="group-card compact">
+          <div className="opc-card-head">
+            <span className="opc-card-title">A/B Compare</span>
+            <label style={{ display:"flex", alignItems:"center", gap:5, cursor:"pointer" }}>
+              <span className="opc-card-tag" style={{ cursor:"pointer" }}>Overlay</span>
+              <input type="checkbox" checked={compareEnabled} onChange={(e) => onSetCompareEnabled(e.target.checked)} />
+            </label>
+          </div>
+          <div className="analysis-panel">
+            <div className="row">
+              <span className="tiny-label">A</span>
+              <select
+                value={compareAId}
+                onChange={(e) => onSetCompareAId(e.target.value)}
+                style={{ flex: 1, minWidth: 0, width: "100%" }}
+                disabled={!runHistory.length}
+              >
+                {runHistory.length === 0 && <option value="">No run</option>}
+                {runHistory.map((h) => (
+                  <option key={`a-${h.id}`} value={h.id}>{h.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="row">
+              <span className="tiny-label">B</span>
+              <select
+                value={compareBId}
+                onChange={(e) => onSetCompareBId(e.target.value)}
+                style={{ flex: 1, minWidth: 0, width: "100%" }}
+                disabled={!runHistory.length}
+              >
+                {runHistory.length === 0 && <option value="">No run</option>}
+                {runHistory.map((h) => (
+                  <option key={`b-${h.id}`} value={h.id}>{h.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
         <div className="group-card compact">
-          <p className="group-title">Analysis</p>
+          <div className="opc-card-head">
+            <span className="opc-card-title">Sweep Studio</span>
+            {sweepLocked
+              ? <button className="opc-card-tag" style={{ cursor:"pointer", background:"rgba(255,180,0,0.12)", borderColor:"rgba(255,180,0,0.3)", color:"rgba(180,120,0,0.9)" }} onClick={() => requestUpgrade("sweep_batch")}>Pro only</button>
+              : <span className="opc-card-tag">batch</span>
+            }
+          </div>
           <div className="analysis-panel">
-            <div className="analysis-seg compact">
-              <button className={analysisTab === "COMPARE" ? "active" : ""} onClick={() => setAnalysisTab("COMPARE")}>A/B</button>
-              <button className={analysisTab === "SWEEP" ? "active" : ""} onClick={() => setAnalysisTab("SWEEP")}>Sweep</button>
-            </div>
-            {analysisTab === "COMPARE" && (
-              <div className="analysis-panel">
-                <div className="analysis-head analysis-copy-card">
-                  <div className="analysis-title">A/B Compare</div>
-                  <div className="analysis-sub">
-                    Pin two saved runs to inspect contour deltas, CD shifts, and recipe tradeoffs side by side.
-                  </div>
-                </div>
-                <label className="analysis-switch-row analysis-switch-card">
-                  <span className="analysis-switch-copy">
-                    <strong>Overlay compare</strong>
-                    <small>Blend both selected runs in the viewport for a quick visual delta check.</small>
-                  </span>
-                  <input type="checkbox" checked={compareEnabled} onChange={(e) => onSetCompareEnabled(e.target.checked)} />
-                </label>
-                <div className="row">
-                  <span className="tiny-label">A</span>
-                  <select
-                    value={compareAId}
-                    onChange={(e) => onSetCompareAId(e.target.value)}
-                    style={{ flex: 1, minWidth: 0, width: "100%" }}
-                    disabled={!runHistory.length}
-                  >
-                    {runHistory.length === 0 && <option value="">No run</option>}
-                    {runHistory.map((h) => (
-                      <option key={`a-${h.id}`} value={h.id}>{h.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="row">
-                  <span className="tiny-label">B</span>
-                  <select
-                    value={compareBId}
-                    onChange={(e) => onSetCompareBId(e.target.value)}
-                    style={{ flex: 1, minWidth: 0, width: "100%" }}
-                    disabled={!runHistory.length}
-                  >
-                    {runHistory.length === 0 && <option value="">No run</option>}
-                    {runHistory.map((h) => (
-                      <option key={`b-${h.id}`} value={h.id}>{h.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
-            {analysisTab === "SWEEP" && (
-              <div className="analysis-panel">
-                <div className="analysis-head analysis-copy-card">
-                  <div className="analysis-title">Sweep Studio</div>
-                  <div className="analysis-sub">
-                    {geometrySweepScopeVisible
-                      ? sweepGeometryScope === "LOCAL"
-                        ? (localTemplateSweepAvailable
-                            ? "Local sweep changes only the selected mask feature from Edit Studio."
-                            : "Select a mask feature in Edit Studio to enable local sweep.")
-                        : "Global sweep changes pattern-wide parameters. Dense L/S keeps repetition linked to width and pitch."
-                      : "Width, height, and dose are baseline options. Pitch is for Dense L/S, and Serif is for Square OPC or L-Shape OPC."}
-                  </div>
-                </div>
-                {sweepLocked && (
-                  <div className="upgrade-inline-wrap">
-                    <div className="small-note tiny-note">
-                      Batch sweep is a Pro feature. Upgrade to unlock this workflow.
-                    </div>
-                    <button className="mini-btn slim upgrade-inline-cta" onClick={() => requestUpgrade("sweep_batch")}>
-                      Upgrade
-                    </button>
-                  </div>
-                )}
                 <div className="row sweep-scale-row">
                   <div className="small-note tiny-note">Y scale</div>
                   <button
@@ -1020,25 +1113,18 @@ export function ControlPanel(props: {
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
           </div>
         </div>
+        </>)}
 
+        {sidebarTab === "HISTORY" && (<>
         <div className="group-card compact history-panel-card">
-          <div className="history-panel-head">
-            <p className="group-title">History</p>
-            <span className="history-panel-count">{runHistory.length} run{runHistory.length === 1 ? "" : "s"}</span>
-          </div>
-          <div className="analysis-head history-panel-copy history-copy-card">
-            <div className="analysis-title">Recent simulation states</div>
-            <div className="analysis-sub">Reopen prior runs or send them directly into A/B compare.</div>
-          </div>
-          <div className="history-panel-toolbar">
-            <div className="small-note tiny-note history-toolbar-note">
-              {currentRun ? `Current run: ${currentRun.label}` : "Runs are stored automatically after each simulation."}
+          <div className="opc-card-head">
+            <span className="opc-card-title">History</span>
+            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+              <span className="opc-card-tag">{runHistory.length} run{runHistory.length === 1 ? "" : "s"}</span>
+              <button className="mini-btn slim" onClick={onClearHistory} disabled={!runHistory.length}>Clear</button>
             </div>
-            <button className="mini-btn slim" onClick={onClearHistory} disabled={!runHistory.length}>Clear</button>
           </div>
           <div className="analysis-list history-panel-list">
             {runHistory.length === 0 && <div className="small-note tiny-note analysis-empty-card">No runs yet.</div>}
@@ -1063,9 +1149,8 @@ export function ControlPanel(props: {
         </div>
 
         <div className="group-card compact resource-panel-card" style={{ marginBottom: 0 }}>
-          <div className="resource-panel-head">
-            <p className="group-title">Resources</p>
-            <span className="resource-panel-chip">Guide & profile</span>
+          <div className="opc-card-head">
+            <span className="opc-card-title">Resources</span>
           </div>
           <div className="resource-link-grid">
             <a href="/litopc/model-summary" className="resource-link-card">
@@ -1080,32 +1165,18 @@ export function ControlPanel(props: {
                 <small>Optics presets, model boundaries, and interpretation notes.</small>
               </span>
             </a>
-            <a href="/litopc/revenue-dashboard" className="resource-link-card resource-link-card-accent">
+            <a href="/litopc/opc-guide" className="resource-link-card resource-link-card-accent">
               <span className="resource-link-icon" aria-hidden="true">
                 <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M2.4 13.2h11.2" />
-                  <path d="M4.3 10.2V7.8" />
-                  <path d="M8 10.2V4.8" />
-                  <path d="M11.7 10.2V6.1" />
+                  <path d="M8 2.5v11M2.5 8h11" />
+                  <rect x="3.5" y="3.5" width="9" height="9" rx="1.8" />
                 </svg>
               </span>
               <span className="resource-link-copy">
-                <strong>Revenue Dashboard</strong>
-                <small>Commercial signals, conversion checkpoints, and pricing telemetry.</small>
+                <strong>OPC Correction Guide</strong>
+                <small>Algorithm, sub-segmentation, convergence detection, and limitations.</small>
               </span>
             </a>
-          </div>
-          <div className="resource-docs-block">
-            <div className="resource-docs-head">
-              <span className="resource-docs-title">Model details</span>
-              <a href="/litopc/model-summary" className="resource-docs-anchor">Open</a>
-            </div>
-            <div className="resource-docs-links">
-              <a href="/litopc/benchmark-gallery">Benchmark Gallery</a>
-              <a href="/litopc/model-change-log">Model Change Log</a>
-              <a href="/litopc/trust-dashboard">Trust Dashboard</a>
-              <a href="/litopc/advanced-analytics">Advanced Analytics</a>
-            </div>
           </div>
           <div className="creator-profile-card">
             <div className="creator-profile-line">
@@ -1139,6 +1210,7 @@ export function ControlPanel(props: {
             Educational approximation. Not calibrated for sign-off.
           </p>
         </div>
+        </>)}
 
         {plan === "FREE" && !usageLoading && <FreeSimulatorAd />}
       </div>

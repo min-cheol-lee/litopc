@@ -8,26 +8,23 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <MarketingShell
-      navItems={[
-        { label: "Home", href: "/" },
-        { label: "Terms", href: "/terms" },
-        { label: "Contact", href: "/contact" },
-      ]}
-    >
+    <MarketingShell navItems={[{ label: "Home", href: "/" }]}>
       <article className="marketing-doc-page landing-anchor">
         <div className="marketing-doc-hero">
           <div className="landing-eyebrow">Privacy</div>
-          <h1>litopc keeps the data footprint focused on authentication, billing, and product operation.</h1>
-          <p>This page summarizes the main categories of data used to run the site and simulator.</p>
+          <h1>litopc collects only what it needs to run the product.</h1>
+          <p>
+            This page describes what data is processed to operate the site, simulator, and subscriptions.
+          </p>
         </div>
 
         <section className="marketing-doc-section">
-          <h2>Information we use</h2>
+          <h2>Data we process</h2>
           <div className="marketing-doc-copy">
             <p>
-              litopc may process account identity from Clerk authentication, billing information from Stripe, usage counters,
-              saved simulation state, and normal service logs needed to operate and debug the product.
+              litopc processes account identity via Clerk authentication, billing and payment information via Stripe,
+              simulation usage counters, saved scenario state, and service logs used to operate and debug the product.
+              No simulation input data is sold or shared with third parties.
             </p>
           </div>
         </section>
@@ -36,8 +33,8 @@ export default function PrivacyPage() {
           <h2>How it is used</h2>
           <div className="marketing-doc-copy">
             <p>
-              This information is used to sign users in, manage subscriptions, enforce plan limits, restore access to paid
-              features, monitor reliability, and respond to support requests.
+              This data is used to authenticate users, manage subscriptions, enforce plan limits, restore access to
+              paid features, monitor reliability, and respond to support requests.
             </p>
           </div>
         </section>
@@ -46,18 +43,20 @@ export default function PrivacyPage() {
           <h2>Third-party services</h2>
           <div className="marketing-doc-copy">
             <p>
-              Clerk is used for authentication and Stripe is used for billing. Their handling of data is governed by their own
-              policies and agreements.
+              Authentication is handled by <a href="https://clerk.com" target="_blank" rel="noreferrer">Clerk</a>.
+              Billing is handled by <a href="https://stripe.com" target="_blank" rel="noreferrer">Stripe</a>.
+              Their handling of data is governed by their respective privacy policies and agreements.
             </p>
           </div>
         </section>
 
         <section className="marketing-doc-section">
-          <h2>Advertising note</h2>
+          <h2>Advertising</h2>
           <div className="marketing-doc-copy">
             <p>
-              litopc may include advertising or sponsorship placements in the future. If Google AdSense or similar services are
-              enabled, this policy will be updated to describe cookie usage and ad-related disclosures clearly.
+              litopc may include advertising on free-tier pages. If advertising services such as Google AdSense are
+              active, cookie usage and ad-related disclosures will be noted on the relevant pages. Pro and Research
+              plans are ad-free.
             </p>
           </div>
         </section>
@@ -65,7 +64,10 @@ export default function PrivacyPage() {
         <section className="marketing-doc-section">
           <h2>Contact</h2>
           <div className="marketing-doc-copy">
-            <p>Privacy questions can be sent to <a href="mailto:mincheol.chris.lee@gmail.com">mincheol.chris.lee@gmail.com</a>.</p>
+            <p>
+              Privacy questions can be sent to{" "}
+              <a href="mailto:mincheol.chris.lee@gmail.com">mincheol.chris.lee@gmail.com</a>.
+            </p>
           </div>
         </section>
       </article>

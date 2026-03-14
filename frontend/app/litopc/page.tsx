@@ -40,6 +40,7 @@ import {
   type UsageStatus,
 } from "../../lib/usage";
 import { flushProductEvents, trackProductEvent } from "../../lib/telemetry";
+import { runOpcCorrection, segmentizeShapes, resolveRectOverlaps, type OpcIterResult } from "../../lib/opc-correction";
 import {
   cloneMaskShapes,
   createHammerheadShape,
@@ -75,30 +76,25 @@ import {
 
 const API_BASE = getApiBase();
 const FREE_TEMPLATES_BASE: Array<NonNullable<SimRequest["mask"]["template_id"]>> = [
-  "ISO_LINE",
+  "ISO_LINE_DUV",
+  "ISO_LINE_EUV",
   "DENSE_LS",
   "CONTACT_RAW",
-  "CONTACT_OPC_SERIF",
+  "LINE_END_RAW_DUV",
+  "LINE_END_RAW_EUV",
   "L_CORNER_RAW_DUV",
-  "L_CORNER_OPC_DUV",
   "L_CORNER_RAW_EUV",
-  "L_CORNER_OPC_EUV",
 ];
 const PRO_TEMPLATES_BASE: Array<NonNullable<SimRequest["mask"]["template_id"]>> = [
-  "ISO_LINE",
+  "ISO_LINE_DUV",
+  "ISO_LINE_EUV",
   "DENSE_LS",
   "CONTACT_RAW",
-  "CONTACT_OPC_SERIF",
+  "LINE_END_RAW_DUV",
+  "LINE_END_RAW_EUV",
   "L_CORNER_RAW_DUV",
-  "L_CORNER_OPC_DUV",
   "L_CORNER_RAW_EUV",
-  "L_CORNER_OPC_EUV",
 ];
-const ADVANCED_CORNER_TEMPLATES: Array<NonNullable<SimRequest["mask"]["template_id"]>> = [
-  "LINE_END_RAW",
-  "LINE_END_OPC_HAMMER",
-];
-const ENABLE_ADVANCED_CORNER_TEMPLATES = false;
 const FREE_DOSE_MIN = 0.3;
 const FREE_DOSE_MAX = 0.8;
 const FREE_CUSTOM_RECT_LIMIT = 5;
@@ -140,10 +136,7 @@ function uniqueTemplateIds(ids: Array<NonNullable<SimRequest["mask"]["template_i
 }
 
 function templatePoolForPlan(plan: "FREE" | "PRO"): Array<NonNullable<SimRequest["mask"]["template_id"]>> {
-  return uniqueTemplateIds([
-    ...(plan === "FREE" ? FREE_TEMPLATES_BASE : PRO_TEMPLATES_BASE),
-    ...(ENABLE_ADVANCED_CORNER_TEMPLATES ? ADVANCED_CORNER_TEMPLATES : []),
-  ]);
+  return uniqueTemplateIds(plan === "FREE" ? FREE_TEMPLATES_BASE : PRO_TEMPLATES_BASE);
 }
 
 function compatibleTemplateOptionsForContext(
@@ -241,17 +234,17 @@ export default function Page() {
   const [plan, setPlan] = useState<"FREE" | "PRO">("FREE");
   const [maskMode, setMaskMode] = useState<"TEMPLATE" | "CUSTOM">("TEMPLATE");
   const [presetId, setPresetId] = useState<SimRequest["preset_id"]>("DUV_193_DRY");
-  const [templateId, setTemplateId] = useState<SimRequest["mask"]["template_id"]>("ISO_LINE");
-  const [maskSeedTemplateId, setMaskSeedTemplateId] = useState<SimRequest["mask"]["template_id"] | null>("ISO_LINE");
+  const [templateId, setTemplateId] = useState<SimRequest["mask"]["template_id"]>("ISO_LINE_DUV");
+  const [maskSeedTemplateId, setMaskSeedTemplateId] = useState<SimRequest["mask"]["template_id"] | null>("ISO_LINE_DUV");
   const [presetEditShapes, setPresetEditShapes] = useState<Array<MaskShape>>([]);
   const [presetFeatureOverrides, setPresetFeatureOverrides] = useState<Array<PresetFeatureOverride>>([]);
   const [presetTargetOverrides, setPresetTargetOverrides] = useState<Array<PresetFeatureOverride>>([]);
   const [targetPresetParams, setTargetPresetParams] = useState<Record<string, number>>(() => ({ ...DEFAULT_PARAMS, sraf_on: 0 }));
   const [customShapes, setCustomShapes] = useState<Array<MaskShape>>([]);
   const [targetShapes, setTargetShapes] = useState<Array<MaskShape>>(() => (
-    cloneMaskShapes(getPresetTargetGuide("ISO_LINE", "DUV_193_DRY", { ...DEFAULT_PARAMS, sraf_on: 0 }).targetShapes)
+    cloneMaskShapes(getPresetTargetGuide("ISO_LINE_DUV", "DUV_193_DRY", { ...DEFAULT_PARAMS, sraf_on: 0 }).targetShapes)
   ));
-  const [customTargetTemplateId, setCustomTargetTemplateId] = useState<SimRequest["mask"]["template_id"] | null>("ISO_LINE");
+  const [customTargetTemplateId, setCustomTargetTemplateId] = useState<SimRequest["mask"]["template_id"] | null>("ISO_LINE_DUV");
   const [selectedCustomShapeIndex, setSelectedCustomShapeIndex] = useState<number>(-1);
   const [selectedCustomShapeIndexes, setSelectedCustomShapeIndexes] = useState<number[]>([]);
   const [selectedPresetAnchorIndex, setSelectedPresetAnchorIndex] = useState<number>(0);
@@ -295,6 +288,25 @@ export default function Page() {
   const [currentEntitlement, setCurrentEntitlement] = useState<CurrentEntitlementResponse | null>(null);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
   const [accountError, setAccountError] = useState<string | null>(null);
+
+  // OPC auto-correction state
+  const [opcRunning, setOpcRunning] = useState(false);
+  const [opcProgress, setOpcProgress] = useState<OpcIterResult[]>([]);
+  const opcAbortRef = useRef<AbortController | null>(null);
+  // Segmented target shapes stored after first run so continuation passes the
+  // same index-aligned target without re-segmenting the biased mask shapes.
+  const [opcSegmentedTarget, setOpcSegmentedTarget] = useState<MaskShape[]>([]);
+  // Checkpoint saved before each "+5 iter" batch so the user can roll back.
+  const [opcCheckpoint, setOpcCheckpoint] = useState<{
+    maskShapes: MaskShape[];
+    progress: OpcIterResult[];
+    segmentedTarget: MaskShape[];
+  } | null>(null);
+  // "improved" | "plateau" | "diverged" | null — set after each batch
+  const [opcBatchStatus, setOpcBatchStatus] = useState<"improved" | "plateau" | "diverged" | null>(null);
+  // Global index (into opcProgress) of the iteration with the lowest EPE in the last batch.
+  // null means the last iteration was already the best.
+  const [opcBestIterIndex, setOpcBestIterIndex] = useState<number | null>(null);
   const [authState, setAuthState] = useState(() => getRuntimeAuthState());
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("STUDIO");
@@ -316,13 +328,18 @@ export default function Page() {
   const authIntentHandledRef = useRef<string | null>(null);
   const accountRefreshPromiseRef = useRef<Promise<void> | null>(null);
 
-  const grid = plan === "PRO" ? 768 : 512;
+  // EUV features (cd ≈ 24 nm) need higher grid to avoid visible quantization mismatch
+  // between the mask rect and the target overlay (at 384 → 2.86 nm/px, 24 nm = 8 pixels).
+  // DUV: 512 (FREE) / 768 (PRO) — adequate for 100 nm features.
+  // EUV: 640 (FREE) / 1024 (PRO) — 24 nm = 14 / 22 pixels, sub-nm accuracy.
+  const isEuvPreset = presetId === "EUV_LNA" || presetId === "EUV_HNA";
+  const grid = plan === "PRO" ? (isEuvPreset ? 1024 : 768) : (isEuvPreset ? 640 : 512);
   const returnIntensity = true;
   const internalLoginEnabled = isInternalLoginEnabled();
   const storedDevUserId = storedDevIdentity.userId;
   const storedDevEmail = storedDevIdentity.email;
   const storedDevAccessToken = storedDevIdentity.accessToken;
-  const normalizedTemplateId = normalizeTemplateId(templateId) ?? "ISO_LINE";
+  const normalizedTemplateId = normalizeTemplateId(templateId) ?? "ISO_LINE_DUV";
   const presetOptions = useMemo(
     () => enabledPresetOptionsForPlan(plan),
     [plan],
@@ -532,12 +549,27 @@ export default function Page() {
     }
   }, [plan, presetId]);
 
+  // When the preset changes, any OPC run is no longer valid:
+  // different wavelength/NA means different physics → previous corrections are meaningless.
+  useEffect(() => {
+    if (opcAbortRef.current) opcAbortRef.current.abort();
+    setOpcRunning(false);
+    setOpcProgress([]);
+    setOpcSegmentedTarget([]);
+    setOpcCheckpoint(null);
+    setOpcBatchStatus(null);
+    setOpcBestIterIndex(null);
+    // OPC forces maskMode="CUSTOM"; corrections tuned for the old preset/template are
+    // meaningless after either changes, so return to template view.
+    setMaskMode("TEMPLATE");
+  }, [presetId, templateId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (plan !== "FREE") return;
     const freeCompatibleTemplates = compatibleTemplateOptionsForContext("FREE", presetId);
     const normalizedCurrentTemplate = normalizeTemplateId(templateId);
     if (!normalizedCurrentTemplate || !freeCompatibleTemplates.includes(normalizedCurrentTemplate)) {
-      setTemplateId(freeCompatibleTemplates[0] ?? "ISO_LINE");
+      setTemplateId(freeCompatibleTemplates[0] ?? "ISO_LINE_DUV");
     }
     if (dose < FREE_DOSE_MIN) setDose(FREE_DOSE_MIN);
     if (dose > FREE_DOSE_MAX) setDose(FREE_DOSE_MAX);
@@ -567,7 +599,7 @@ export default function Page() {
     const preferredTemplateId = getCompatibleTemplateIdForPreset(templateId, presetId);
     const nextTemplateId = preferredTemplateId && compatibleTemplateIds.includes(preferredTemplateId)
       ? preferredTemplateId
-      : (compatibleTemplateIds[0] ?? "ISO_LINE");
+      : (compatibleTemplateIds[0] ?? "ISO_LINE_DUV");
     const currentCompatible = Boolean(normalizedTemplateId && compatibleTemplateIds.includes(normalizedTemplateId));
     const shouldCanonicalize = Boolean(templateId && templateId !== normalizedTemplateId);
     if (currentCompatible && !shouldCanonicalize) return;
@@ -1045,7 +1077,7 @@ export default function Page() {
   function applyRequestToControls(r: SimRequest) {
     const nextMode = r.mask.mode ?? "TEMPLATE";
     const nextParams = { ...DEFAULT_PARAMS, ...(r.mask.params_nm ?? {}) };
-    const nextTemplateId = normalizeTemplateId(r.mask.template_id ?? "ISO_LINE") ?? "ISO_LINE";
+    const nextTemplateId = normalizeTemplateId(r.mask.template_id ?? "ISO_LINE_DUV") ?? "ISO_LINE_DUV";
     const nextTargetParams = templateTargetParamDefaults(nextTemplateId, nextParams);
     const nextTargetGuide = getPresetTargetGuide(nextTemplateId, r.preset_id, nextTargetParams);
     const requestedShapes = cloneMaskShapes((r.mask.shapes ?? []) as Array<MaskShape>);
@@ -1088,7 +1120,7 @@ export default function Page() {
   }
 
   function handleTemplateSelection(nextTemplateId: NonNullable<SimRequest["mask"]["template_id"]>) {
-    const normalizedNextTemplateId = normalizeTemplateId(nextTemplateId) ?? "ISO_LINE";
+    const normalizedNextTemplateId = normalizeTemplateId(nextTemplateId) ?? "ISO_LINE_DUV";
     const nextParams = { ...params, ...templateParamDefaults(normalizedNextTemplateId) };
     const nextTargetParams = templateTargetParamDefaults(normalizedNextTemplateId, nextParams);
     const seededTargetShapes = cloneMaskShapes(getPresetTargetGuide(normalizedNextTemplateId, presetId, nextTargetParams).targetShapes);
@@ -1452,7 +1484,7 @@ export default function Page() {
     if (baseReq.mask.mode !== "TEMPLATE") return baseReq;
     if (!options?.forceTemplateCustom) return baseReq;
     const overrides = baseReq.mask.preset_feature_overrides ?? [];
-    const nextTemplateId = baseReq.mask.template_id ?? "ISO_LINE";
+    const nextTemplateId = baseReq.mask.template_id ?? "ISO_LINE_DUV";
     const nextParams = baseReq.mask.params_nm ?? {};
     const baseShapes = buildTemplateBaseShapes(nextTemplateId, nextParams);
     const anchorShapes = baseShapes.filter((shape): shape is Extract<MaskShape, { type: "rect" }> => shape.type === "rect");
@@ -1540,6 +1572,189 @@ export default function Page() {
       setLoading(false);
       void refreshUsageStatus(plan);
     }
+  }
+
+  // Free: 3 iter per batch (enough to show OPC working, not enough to converge).
+  // Continue (+N iter) is Pro-only — the paywall moment for the full workflow.
+  const OPC_ITERATIONS = plan === "FREE" ? 3 : 5;
+  const canContinueOpc = plan !== "FREE";
+
+  async function runOpcCorrectionFlow(continueFromLast = false) {
+    if (opcRunning || targetShapes.length === 0) return;
+    trackProductEvent("opc_correction_clicked", { plan, presetId });
+
+    const abort = new AbortController();
+    opcAbortRef.current = abort;
+    setOpcRunning(true);
+
+    // Segment size must exceed the Rayleigh floor for the preset.
+    // DUV 193 dry: floor ≈ 58 nm → 80 nm | DUV 193 imm: ≈ 37 nm → 50 nm
+    // EUV LNA 0.33: ≈ 12 nm → 20 nm      | EUV HNA 0.55: ≈ 6 nm  → 15 nm
+    //
+    // Exception — ISO_LINE: an isolated line needs only a single uniform global
+    // CD bias, not per-strip corrections.  Using segNm >> line length forces
+    // buildEdges to produce exactly 1 segment so the entire line moves as one
+    // unit.  This prevents per-strip numerical noise from amplifying into an
+    // asymmetric jagged mask over 5 iterations.
+    const resolvedReq = resolveSimulationRequest(req);
+    const isIsoLine = normalizedTemplateId === "ISO_LINE_DUV" || normalizedTemplateId === "ISO_LINE_EUV";
+    // Dense L/S: each line needs a uniform CD bias (same as ISO_LINE) — not per-strip corrections.
+    // segNm >> line_length forces exactly 1 segment per line so the entire line moves as one unit.
+    const isDenseLs = normalizedTemplateId === "DENSE_LS";
+    const isLineEnd = normalizedTemplateId === "LINE_END_RAW_DUV" || normalizedTemplateId === "LINE_END_RAW_EUV"
+      || normalizedTemplateId === "LINE_END_RAW" || normalizedTemplateId === "LINE_END_OPC_HAMMER";
+    const segNmByPreset: Record<string, number> = (isIsoLine || isDenseLs)
+      ? { DUV_193_DRY: 1100, DUV_193_IMM: 1100, EUV_LNA: 1100, EUV_HNA: 1100 }
+      : { DUV_193_DRY: 80, DUV_193_IMM: 50, EUV_LNA: 20, EUV_HNA: 15 };
+    const segmentNm = segNmByPreset[resolvedReq.preset_id] ?? 80;
+    // For 1D-symmetric features (LINE_END), enforce X symmetry after each OPC
+    // iteration to prevent sub-pixel rasterization asymmetry from accumulating.
+    const fovNm = resolvedReq.mask.params_nm?.fov_nm ?? 1100;
+    const centerXNm = isLineEnd ? fovNm / 2 : undefined;
+
+    let initialMask: MaskShape[];
+    let effectiveTarget: MaskShape[];
+    let effectiveSegNm: number;
+
+    if (continueFromLast && opcSegmentedTarget.length > 0) {
+      // Save rollback checkpoint before the continue batch.
+      setOpcCheckpoint({
+        maskShapes: cloneMaskShapes(customShapes),
+        progress: [...opcProgress],
+        segmentedTarget: opcSegmentedTarget,
+      });
+      initialMask = cloneMaskShapes(customShapes);
+      effectiveTarget = opcSegmentedTarget;
+      effectiveSegNm = 0;
+    } else {
+      // Fresh run: reset checkpoint and compute segmented target.
+      setOpcCheckpoint(null);
+      setOpcBatchStatus(null);
+      setOpcBestIterIndex(null);
+      // Remove geometric overlaps (e.g. L-corner's two overlapping arms) before
+      // segmentation.  Without this, each arm generates independent sub-segments
+      // in the shared region; they accumulate different biases and pull apart.
+      const cleanBase = segmentNm > 0
+        ? resolveRectOverlaps(cloneMaskShapes(targetShapes))
+        : cloneMaskShapes(targetShapes);
+      const segTarget = segmentNm > 0
+        ? segmentizeShapes(cleanBase, segmentNm)
+        : cleanBase;
+      setOpcSegmentedTarget(segTarget);
+      setOpcProgress([]);
+      setMaskMode("CUSTOM");
+      setCustomShapes(cloneMaskShapes(cleanBase));
+      initialMask = cloneMaskShapes(cleanBase);
+      effectiveTarget = cleanBase;
+      effectiveSegNm = segmentNm;
+    }
+
+    // Track batch EPE for convergence detection and best-iter restoration.
+    const batchEpes: number[] = [];
+    let bestEpeInBatch = Infinity;
+    // Track the best result within this batch (for possible restoration after loop).
+    let bestBatchResult: OpcIterResult | null = null;
+    let bestBatchGlobalIdx = -1;
+    // globalIdx counts from 0 for fresh runs, from previous progress length for continues.
+    let globalIdx = continueFromLast ? opcProgress.length : 0;
+
+    try {
+      await runOpcCorrection(
+        initialMask,
+        effectiveTarget,
+        resolvedReq,
+        { iterations: OPC_ITERATIONS, gain: 0.5, nSamples: 7, segmentNm: effectiveSegNm, centerXNm },
+        (result) => {
+          setOpcProgress((prev) => [...prev, result]);
+          setCustomShapes(cloneMaskShapes(result.maskShapes));
+          setSim(result.simResult);
+
+          batchEpes.push(result.epeMeanNm);
+          bestEpeInBatch = Math.min(bestEpeInBatch, result.epeMeanNm);
+
+          if (result.epeMeanNm < (bestBatchResult?.epeMeanNm ?? Infinity)) {
+            bestBatchResult = result;
+            bestBatchGlobalIdx = globalIdx;
+          }
+          globalIdx++;
+
+          // Auto-stop: abort if EPE has risen > 20% above this batch's best
+          // for 2 consecutive iterations (diverging, not just oscillating).
+          if (batchEpes.length >= 2) {
+            const last = batchEpes[batchEpes.length - 1];
+            const prev = batchEpes[batchEpes.length - 2];
+            if (last > bestEpeInBatch * 1.20 && prev > bestEpeInBatch * 1.20) {
+              abort.abort();
+            }
+          }
+        },
+        abort.signal,
+      );
+
+      // If the best iteration wasn't the last one, restore it.
+      if (bestBatchResult !== null && batchEpes.length > 0) {
+        const lastEpe = batchEpes[batchEpes.length - 1];
+        if (bestBatchResult.epeMeanNm < lastEpe) {
+          setCustomShapes(cloneMaskShapes(bestBatchResult.maskShapes));
+          setSim(bestBatchResult.simResult);
+          setOpcBestIterIndex(bestBatchGlobalIdx);
+        } else {
+          setOpcBestIterIndex(null);
+        }
+      }
+
+      // Evaluate batch outcome for UI feedback.
+      if (batchEpes.length > 0) {
+        const batchStart = batchEpes[0];
+        const batchEnd   = batchEpes[batchEpes.length - 1];
+        const relChange  = (batchStart - batchEnd) / Math.max(batchStart, 0.1);
+        if (batchEnd > batchStart) {
+          setOpcBatchStatus("diverged");
+        } else if (relChange < 0.05) {
+          setOpcBatchStatus("plateau");
+        } else {
+          setOpcBatchStatus("improved");
+        }
+      }
+    } catch (err) {
+      console.error("[OPC correction]", err);
+    } finally {
+      setOpcRunning(false);
+      opcAbortRef.current = null;
+    }
+  }
+
+  function applyOpcResult() {
+    setOpcProgress([]);
+    setOpcSegmentedTarget([]);
+    setOpcCheckpoint(null);
+    setOpcBatchStatus(null);
+    setOpcBestIterIndex(null);
+  }
+
+  function rollbackOpcResult() {
+    if (!opcCheckpoint) return;
+    setCustomShapes(cloneMaskShapes(opcCheckpoint.maskShapes));
+    setOpcProgress(opcCheckpoint.progress);
+    setOpcSegmentedTarget(opcCheckpoint.segmentedTarget);
+    setOpcCheckpoint(null);
+    setOpcBatchStatus(null);
+    setOpcBestIterIndex(null);
+  }
+
+  /** Discard all OPC results and restore the mask to the original template. */
+  function resetOpcToTarget() {
+    opcAbortRef.current?.abort();
+    setOpcProgress([]);
+    setOpcSegmentedTarget([]);
+    setOpcCheckpoint(null);
+    setOpcBatchStatus(null);
+    setOpcBestIterIndex(null);
+    setMaskMode("TEMPLATE");
+  }
+
+  function cancelOpcCorrection() {
+    opcAbortRef.current?.abort();
   }
 
   async function runSweep() {
@@ -2145,7 +2360,7 @@ export default function Page() {
               onCopyTargetToMask={copyTargetToMask}
               onCopyMaskToTarget={copyMaskToTarget}
               onClearTargetLayer={clearTargetLayer}
-              advancedTemplatesDisabled={!ENABLE_ADVANCED_CORNER_TEMPLATES}
+              advancedTemplatesDisabled={false}
               dose={dose}
               setDose={setDose}
               params={params}
@@ -2189,6 +2404,19 @@ export default function Page() {
               customMaskFileStatus={customMaskFileStatus}
               loading={loading}
               onRun={runSim}
+              opcRunning={opcRunning}
+              opcProgress={opcProgress}
+              onRunOpcCorrection={() => { void runOpcCorrectionFlow(false); }}
+              onContinueOpcCorrection={() => { void runOpcCorrectionFlow(true); }}
+              canContinueOpc={canContinueOpc}
+              onApplyOpcResult={applyOpcResult}
+              onCancelOpcCorrection={cancelOpcCorrection}
+              onRollbackOpcResult={rollbackOpcResult}
+              onResetOpc={resetOpcToTarget}
+              opcIterations={OPC_ITERATIONS}
+              opcHasCheckpoint={!!opcCheckpoint}
+              opcBatchStatus={opcBatchStatus}
+              opcBestIterIndex={opcBestIterIndex}
               scenarios={scenarios}
               scenarioLimit={scenarioLimit}
               scenarioLimitReached={scenarioLimitReached}
@@ -2407,8 +2635,10 @@ function findEntitlementMismatch(res: EntitlementsResponse): string | null {
 function templateLabel(id: NonNullable<SimRequest["mask"]["template_id"]>): string {
   const normalizedId = normalizeTemplateId(id) ?? id;
   switch (normalizedId) {
-    case "ISO_LINE":
-      return "Isolated Line";
+    case "ISO_LINE_DUV":
+      return "Iso Line (DUV)";
+    case "ISO_LINE_EUV":
+      return "Iso Line (EUV)";
     case "DENSE_LS":
       return "Dense L/S";
     case "CONTACT_RAW":
@@ -2419,10 +2649,14 @@ function templateLabel(id: NonNullable<SimRequest["mask"]["template_id"]>): stri
       return "Stepped Interconnect";
     case "STAIRCASE_OPC":
       return "Stepped Interconnect OPC";
+    case "LINE_END_RAW_DUV":
+      return "Line-End (DUV)";
+    case "LINE_END_RAW_EUV":
+      return "Line-End (EUV)";
     case "LINE_END_RAW":
-      return "Legacy Pattern A";
+      return "Line-End";
     case "LINE_END_OPC_HAMMER":
-      return "Legacy Pattern B";
+      return "Line-End OPC";
     case "L_CORNER_RAW_DUV":
       return "L-Shape (DUV)";
     case "L_CORNER_OPC_DUV":
@@ -2518,6 +2752,22 @@ function templateDefaultManualEdits(
 function templateParamDefaults(id: NonNullable<SimRequest["mask"]["template_id"]>): Record<string, number> {
   const normalizedId = normalizeTemplateId(id) ?? id;
   switch (normalizedId) {
+    // Always include cd_nm / length_nm explicitly so that switching templates
+    // always resets these to scale-appropriate values.  Without this, a
+    // preceding LINE_END_RAW_EUV selection (cd_nm=24) would bleed into
+    // ISO_LINE_DUV, DENSE_LS, etc. via the `{ ...params, ...defaults }` merge.
+    case "ISO_LINE_DUV":
+      return { cd_nm: 100, length_nm: 900 };
+    case "ISO_LINE_EUV":
+      // EUV 13.5 nm LNA: cd=24 nm ≈ 2× Rayleigh floor (~12 nm).
+      // Shows real EUV proximity effects; 500 nm length fits well in the 1100 nm FOV.
+      return { cd_nm: 24, length_nm: 500 };
+    case "DENSE_LS":
+      return { cd_nm: 60, length_nm: 900, pitch_nm: 140 };
+    case "LINE_END_RAW_DUV":
+      return { cd_nm: 100, length_nm: 600 };
+    case "LINE_END_RAW_EUV":
+      return { cd_nm: 24, length_nm: 160 };
     case "CONTACT_RAW":
       return {
         cd_nm: 200,
@@ -2642,7 +2892,7 @@ function normalizeCustomMaskPreset(p: Partial<CustomMaskPreset>): CustomMaskPres
   const params_nm = Object.fromEntries(
     Object.entries({ ...DEFAULT_PARAMS, ...(p.params_nm ?? {}) }).filter(([, value]) => typeof value === "number" && Number.isFinite(value))
   );
-  const legacyTemplateId = normalizeTemplateId(p.seed_template_id ?? p.template_id ?? "ISO_LINE") ?? "ISO_LINE";
+  const legacyTemplateId = normalizeTemplateId(p.seed_template_id ?? p.template_id ?? "ISO_LINE_DUV") ?? "ISO_LINE_DUV";
   const shouldRehydrateLegacyTemplate = p.mode === "TEMPLATE" && Boolean(p.template_id);
   const inputShapes = cloneMaskShapes((p.shapes ?? []).filter((s): s is MaskShape => !!s));
   const shapes = shouldRehydrateLegacyTemplate

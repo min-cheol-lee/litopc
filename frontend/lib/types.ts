@@ -2,11 +2,15 @@
 export type PresetID = "DUV_193_DRY" | "DUV_193_IMM" | "EUV_LNA" | "EUV_HNA";
 export type TemplateID =
   | "ISO_LINE"
+  | "ISO_LINE_DUV"
+  | "ISO_LINE_EUV"
   | "DENSE_LS"
   | "CONTACT_RAW"
   | "CONTACT_OPC_SERIF"
   | "LINE_END_RAW"
   | "LINE_END_OPC_HAMMER"
+  | "LINE_END_RAW_DUV"
+  | "LINE_END_RAW_EUV"
   | "L_CORNER_RAW_DUV"
   | "L_CORNER_OPC_DUV"
   | "L_CORNER_RAW_EUV"

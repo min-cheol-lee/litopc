@@ -44,3 +44,12 @@ notes*.txt
 dev-*.ps1
 opc-lab_marketing_idea.pptx
 ~$opc-lab_marketing_idea.pptx
+
+# Marketing pages (served via GitHub Pages from Next.js build; keep locally only)
+marketing-pages/
+
+# Local source images (processed copies go to frontend/public/marketing/)
+/marketing/
+
+# Feedback / review screenshots
+feedback_*.png

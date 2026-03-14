@@ -5,66 +5,48 @@ import { MarketingShell } from "../components/MarketingShell";
 import { getSiteHostInfo } from "../lib/site-host";
 
 export const metadata: Metadata = {
-  title: "litopc | OPC & lithography simulator",
+  title: "litopc | OPC & Lithography Simulator",
   description:
-    "Web-based OPC and lithography simulator for DUV and EUV. See mask-to-silicon in seconds. Publication-ready figures. No installation, no license fee.",
+    "Web-based OPC and lithography simulator for DUV and EUV. Hopkins wave-optics model, EPE metrics, Bossung curves, and publication-ready figures. No installation, no license fee.",
 };
 
-const navItems = [
-  { label: "Why OPC", href: "#why-opc" },
-  { label: "Features", href: "#why-litopc" },
-  { label: "Pricing", href: "#pricing" },
-];
+const navItems: { label: React.ReactNode; href: string }[] = [];
 
 const featureRail = [
   {
-    title: "Easy to approach",
-    body: "Start from representative OPC masks instead of a full process stack. DUV 193 nm and EUV 13.5 nm presets included.",
+    title: "1-click OPC correction",
+    body: "Click Run OPC. The algorithm shifts mask vertices until EPE converges at every edge segment. Watch the correction happen iteration by iteration — no scripting, no setup.",
   },
   {
-    title: "Easy to visualize",
-    body: "Mask, aerial image, contour, and 3D silicon view — all in one workspace. Compare A/B runs side by side.",
+    title: "4 view modes",
+    body: "Mask · aerial image · printed contour · 3D silicon surface — all in one workspace. Switch views instantly. A/B compare any two parameter sets side by side.",
   },
   {
-    title: "Easy to export",
-    body: "High-resolution PNG and SVG with auto-generated figure captions. Designed to go straight into papers and presentations.",
+    title: "8 color maps & export",
+    body: "Hot, Viridis, Plasma, Grayscale, Inferno, and more. Adjust the intensity scale. Export PNG up to 4200 px or SVG — every figure auto-includes λ, NA, k₁, and CD_min captions.",
   },
   {
-    title: "Real coherent optics",
-    body: "Hopkins formulation, Rayleigh criterion, k₁ factor — all computed accurately in your browser, not approximated.",
+    title: "EPE & CD per edge",
+    body: "Edge placement error computed at every contour segment. CD measured across critical dimensions. Both auto-updated on every run — no manual measurement needed.",
   },
   {
-    title: "OPC metrics built in",
-    body: "EPE and contour deviation computed automatically. See quantitatively how much correction your mask delivers.",
+    title: "Batch sweep",
+    body: "Sweep focus, dose, sigma, or any parameter across up to 120 points (Pro) or 200 points (Research). Results shown as an overlay grid — Bossung curves auto-generated.",
+    tag: "Pro",
   },
   {
-    title: "No EDA license needed",
-    body: "Works entirely in the browser. No install, no Calibre seat, no cloud queue. Open a tab and start exploring.",
+    title: "Custom process model",
+    body: "Dial in Mack resist parameters (n, m, Eth), set isotropic etch bias, and run Focus-Exposure Matrix sweeps. Process window analysis without an EDA stack.",
+    tag: "Research",
   },
 ];
 
-const builtIns = [
-  "Representative OPC templates",
-  "Manual mask edit",
-  "2D mask / aerial / contour view",
-  "3D silicon-style view",
-  "A/B compare and parameter sweep",
-  "DUV 193 nm & EUV 13.5 nm presets",
+const opcTemplates = [
+  "L-shape", "Contact hole", "Dense lines", "Isolated line",
+  "Line-end", "SRAM cell", "T-junction", "Corner rounding",
 ];
 
 /* ── SVG icon badges ── */
-const IconBolt = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <path d="M9 2L3 9h5l-1 5 6-7H8L9 2z" stroke="rgba(120,180,255,0.9)" strokeWidth="1.4" strokeLinejoin="round" fill="none"/>
-  </svg>
-);
-const IconFigure = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <rect x="2" y="9" width="3" height="5" rx="1" stroke="rgba(120,180,255,0.9)" strokeWidth="1.3" fill="none"/>
-    <rect x="6.5" y="5" width="3" height="9" rx="1" stroke="rgba(120,180,255,0.9)" strokeWidth="1.3" fill="none"/>
-    <rect x="11" y="2" width="3" height="12" rx="1" stroke="rgba(120,180,255,0.9)" strokeWidth="1.3" fill="none"/>
-  </svg>
-);
 const IconWave = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
     <path d="M1 8 C3 4, 5 4, 7 8 S11 12, 13 8 S15 4, 15 6" stroke="rgba(120,180,255,0.9)" strokeWidth="1.4" strokeLinecap="round" fill="none"/>
@@ -91,46 +73,41 @@ const IconSlides = () => (
     <path d="M5 6.5l2 1.5 4-3" stroke="rgba(120,180,255,0.9)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
+const IconFlask = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M6 2v5L2 13h12L10 7V2" stroke="rgba(120,180,255,0.9)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+    <path d="M5 2h6" stroke="rgba(120,180,255,0.9)" strokeWidth="1.3" strokeLinecap="round"/>
+    <circle cx="6" cy="11" r="1" fill="rgba(120,180,255,0.6)"/>
+  </svg>
+);
 
-const valueProps: { icon: React.ReactNode; title: string; body: string }[] = [
-  {
-    icon: <IconBolt />,
-    title: "Instant Results",
-    body: "Run aerial image simulations in your browser. No CAD tools, no setup, no waiting.",
-  },
-  {
-    icon: <IconFigure />,
-    title: "Publication-Ready Figures",
-    body: "Export high-resolution PNG and SVG — beautiful enough for papers, conference posters, and slide decks.",
-  },
-  {
-    icon: <IconWave />,
-    title: "Real Physics",
-    body: "Coherent imaging model with DUV 193 nm and EUV 13.5 nm. Rayleigh criterion, OPC correction, EPE metrics.",
-  },
-];
 
 const whoCards: { icon: React.ReactNode; title: string; body: string }[] = [
   {
     icon: <IconStudent />,
     title: "Students & Researchers",
-    body: "Understand OPC intuitively — no EDA license required. Visualize how k₁ factor limits resolution at different NA values. Generate thesis figures in minutes.",
+    body: "Understand OPC intuitively — no EDA license required. Visualize how k₁ factor limits resolution at different NA values. Generate thesis and paper figures in minutes.",
   },
   {
     icon: <IconChip />,
     title: "Process & Design Engineers",
-    body: "Quick sanity checks before running full Calibre or Synopsys flows. Generate clear lithography figures for design reviews, tapeout presentations, and internal reports.",
+    body: "Quick sanity checks before running full Calibre or Synopsys flows. Generate clear lithography figures for design reviews, tape-out presentations, and internal reports.",
   },
   {
     icon: <IconSlides />,
     title: "Educators",
     body: "Show students real aerial images, not textbook diagrams. Use litopc in lecture slides to make lithography physics tangible and interactive.",
   },
+  {
+    icon: <IconFlask />,
+    title: "Research Teams & Startups",
+    body: "Custom process models, etch bias parameters, and Bossung curves — without a six-figure EDA license. Ideal for academic process labs, equipment R&D, and semiconductor startups exploring new nodes.",
+  },
 ];
 
 const freeFeatures = [
   "DUV 193 nm dry (NA 0.93)",
-  "EUV 13.5 nm (NA 0.33)",
+  "EUV 13.5 nm Low-NA (NA 0.33)",
   "All OPC templates",
   "Manual mask editor (up to 5 shapes)",
   "2D aerial & contour view",
@@ -145,11 +122,24 @@ const proFeatures = [
   { text: "EUV High-NA (NA 0.55)", strong: true },
   { text: "Manual mask editor (up to 48 shapes)", strong: false },
   { text: "3D silicon surface view", strong: false },
-  { text: "Batch parameter sweep", strong: true },
+  { text: "Batch parameter sweep (120 pts)", strong: true },
   { text: "High-res export (up to 4200 px)", strong: true },
   { text: "Unlimited saved scenarios", strong: false },
   { text: "2,000 simulation runs / day", strong: false },
   { text: "No ads", strong: false },
+];
+
+const researchFeatures = [
+  { text: "Everything in Pro", strong: false },
+  { text: "Custom resist model (Mack: n, m, Eth)", strong: true },
+  { text: "Etch bias correction (isotropic)", strong: true },
+  { text: "Focus-Exposure Matrix / Bossung curves", strong: true },
+  { text: "Process window analysis", strong: true },
+  { text: "Custom illumination shape (annular, dipole)", strong: false },
+  { text: "Batch sweep up to 200 points", strong: false },
+  { text: "10,000 simulation runs / day", strong: false },
+  { text: "Priority simulation queue", strong: false },
+  { text: "PDF process report export", strong: false },
 ];
 
 export default function Home() {
@@ -164,16 +154,14 @@ export default function Home() {
       {/* ── HERO ── */}
       <section className="lp-hero-split landing-anchor">
         <div className="lp-hero-split-copy">
-          <div className="landing-eyebrow lp-hero-eyebrow">Lithography &amp; OPC Simulator</div>
           <h1 className="lp-hero-title">
-            From mask<br />to silicon.
+            See what prints.<br />Correct what doesn&apos;t.
           </h1>
           <p className="lp-hero-sub">
-            Simulate how DUV and EUV optics print nanometer-scale patterns —
-            and see how OPC brings the silicon contour on target.
+            Physics-accurate lithography simulation — DUV and EUV, in your browser.
           </p>
           <p className="lp-hero-sub2">
-            Web-based. No installation. No license fee.
+            1-click OPC. 4 view modes. Export-ready figures. No installation, no EDA license.
           </p>
           <div className="lp-hero-actions">
             <a href={simulatorHref} className="lp-btn-primary" target="_blank" rel="noopener noreferrer">
@@ -191,58 +179,194 @@ export default function Home() {
             />
           </div>
           <div className="landing-hero-shot-note lp-hero-img-note">
-            OPC mask · DUV/EUV aerial image · silicon contour
+            Actual litopc output — mask, aerial image, contour, and 3D silicon view
           </div>
         </div>
       </section>
 
-      {/* ── VALUE PROPS ── */}
-      <section className="lp-props-section landing-anchor">
-        <div className="lp-props-grid">
-          {valueProps.map((p) => (
-            <article key={p.title} className="lp-prop-card">
-              <div className="lp-card-icon">{p.icon}</div>
-              <h3>{p.title}</h3>
-              <p>{p.body}</p>
-            </article>
-          ))}
+      {/* ── HOW IT WORKS (3-column visual story) ── */}
+      <section className="lp-story-section landing-anchor">
+        <div className="landing-section-head landing-section-head-tight">
+          <div className="landing-eyebrow">How it works</div>
+          <h2>From mask to silicon — see the physics.</h2>
+        </div>
+
+        <div className="lp-story-cols">
+          {/* Step 01 — CSS mockup */}
+          <div className="lp-story-col">
+            <span className="lp-story-num">01</span>
+            <div className="lp-story-col-visual lp-story-col-visual-mockup">
+              <div className="lp-sim-mockup">
+                <div className="lp-sim-mockup-field">
+                  <span className="lp-sim-mockup-label">Imaging Tool</span>
+                  <div className="lp-sim-mockup-select">DUV 193 nm dry <span className="lp-sim-mockup-caret">▾</span></div>
+                </div>
+                <div className="lp-sim-mockup-field">
+                  <span className="lp-sim-mockup-label">Pattern</span>
+                  <div className="lp-sim-mockup-select">L-Shape (DUV) <span className="lp-sim-mockup-caret">▾</span></div>
+                </div>
+                <div className="lp-sim-mockup-divider" />
+                <button className="lp-sim-mockup-btn" tabIndex={-1}>Run Simulation →</button>
+              </div>
+            </div>
+            <h3 className="lp-story-title">Set up your simulation</h3>
+            <p className="lp-story-body">
+              Pick DUV 193 nm or EUV 13.5 nm. Load an L-shape, contact hole, or any built-in template. No install, no EDA license.
+            </p>
+          </div>
+
+          <div className="lp-story-arrow" aria-hidden="true">→</div>
+
+          {/* Step 02 — non-OPC 3D */}
+          <div className="lp-story-col">
+            <span className="lp-story-num">02</span>
+            <div className="lp-story-col-visual">
+              <img src="/marketing/non-opc-3d.png" alt="Non-OPC — silicon print misses the mask target" loading="lazy" />
+            </div>
+            <h3 className="lp-story-title">Diffraction distorts the print</h3>
+            <p className="lp-story-body">
+              193 nm light diffracts through the lens. Corners round, line-ends pull back. The silicon print misses the mask target.
+            </p>
+          </div>
+
+          <div className="lp-story-arrow" aria-hidden="true">→</div>
+
+          {/* Step 03 — OPC 3D */}
+          <div className="lp-story-col">
+            <span className="lp-story-num">03</span>
+            <div className="lp-story-col-visual">
+              <img src="/marketing/opc-3d.png" alt="OPC complete — silicon contour matches mask target" loading="lazy" />
+            </div>
+            <h3 className="lp-story-title">One click — OPC corrects, export</h3>
+            <p className="lp-story-body">
+              Click Run OPC. Mask vertices shift until EPE converges. Export PNG, SVG, or 3D — auto-captioned for any audience.
+            </p>
+          </div>
         </div>
       </section>
 
       <hr className="lp-section-divider" />
 
-      {/* ── WHY OPC ── */}
-      <section id="why-opc" className="landing-opc-section landing-anchor">
+      {/* ── PHYSICS ENGINE ── */}
+      <section id="physics" className="lp-physics-section landing-anchor">
         <div className="landing-section-head landing-section-head-tight">
-          <div className="landing-eyebrow">Why OPC</div>
-          <h2>The silicon print is not the mask.</h2>
+          <div className="landing-eyebrow">The Physics</div>
+          <h2>Wave-optics simulation. Real resolution limits.</h2>
           <p>
-            A clean L-shape on the mask can miss the target after lithography. OPC pre-distorts the mask so the final silicon contour lands where it needs to be.
+            Hopkins wave-optics model — the same optical framework used in commercial litho tools, running in your browser.
+            Resolution limits and EPE are physics-derived, not approximated.
           </p>
         </div>
-        <div className="landing-compare-grid landing-compare-grid-clean">
-          <article className="landing-visual-block landing-visual-block-plain">
-            <div className="landing-visual-label">
-              <span className="landing-visual-kicker">Without correction</span>
-              <h3>Non-OPC</h3>
+
+        <div className="lp-physics-grid">
+          <div className="lp-physics-left">
+            <div className="lp-physics-formula-box">
+              <div className="lp-physics-formula-label">Rayleigh Resolution Criterion</div>
+              <div className="lp-physics-formula">
+                CD<sub>min</sub> = k<sub>1</sub> &times; &lambda; / NA
+              </div>
+              <div className="lp-physics-formula-note">
+                k<sub>1</sub> &asymp; 0.26 &ndash; 0.28 &nbsp;&middot;&nbsp; Rayleigh limit &nbsp;&middot;&nbsp; Computed per preset
+              </div>
             </div>
-            <img
-              className="landing-example-image landing-example-image-non-opc"
-              src="/marketing/non-opc.svg?v=20260311d"
-              alt="Non-OPC L-shape print example"
-            />
-          </article>
-          <article className="landing-visual-block landing-visual-block-plain">
-            <div className="landing-visual-label">
-              <span className="landing-visual-kicker">Mask tuned for print</span>
-              <h3>OPC</h3>
+            <div className="lp-physics-formula-box">
+              <div className="lp-physics-formula-label">Edge Placement Error (EPE)</div>
+              <div className="lp-physics-formula lp-physics-formula-sm">
+                EPE = contour<sub>actual</sub> &minus; target
+              </div>
+              <div className="lp-physics-formula-note">
+                Signed distance in nm &nbsp;&middot;&nbsp; Auto-computed per edge segment &nbsp;&middot;&nbsp; Drives OPC iteration
+              </div>
             </div>
-            <img
-              className="landing-example-image landing-example-image-opc"
-              src="/marketing/opc.svg?v=20260311d"
-              alt="OPC corrected L-shape print example"
-            />
-          </article>
+          </div>
+
+          <div className="lp-physics-presets">
+            <div className="lp-physics-preset-row lp-physics-preset-header">
+              <span>System</span><span>&lambda;</span><span>NA</span><span>Limit</span><span>Typical</span>
+            </div>
+            <div className="lp-physics-preset-row">
+              <span>DUV dry</span><span>193 nm</span><span>0.93</span><span>~56 nm</span><span className="lp-physics-cd-typical">~65 nm</span>
+            </div>
+            <div className="lp-physics-preset-row lp-physics-preset-pro">
+              <span>DUV immersion <span className="lp-physics-plan-tag">Pro</span></span>
+              <span>193 nm</span><span>1.35</span><span>~39 nm</span><span className="lp-physics-cd-typical">~40 nm</span>
+            </div>
+            <div className="lp-physics-preset-row">
+              <span>EUV Low-NA</span><span>13.5 nm</span><span>0.33</span><span>~11 nm</span><span className="lp-physics-cd-typical">~13 nm</span>
+            </div>
+            <div className="lp-physics-preset-row lp-physics-preset-pro">
+              <span>EUV High-NA <span className="lp-physics-plan-tag">Pro</span></span>
+              <span>13.5 nm</span><span>0.55</span><span>~7 nm</span><span className="lp-physics-cd-typical">~8 nm</span>
+            </div>
+            <div className="lp-physics-preset-note">
+              Limit: k<sub>1</sub> &asymp; 0.27 (Rayleigh) &nbsp;&middot;&nbsp; Typical: production k<sub>1</sub> &asymp; 0.32 &nbsp;&middot;&nbsp; 1D nested half-pitch &nbsp;&middot;&nbsp; Pro presets require upgrade
+            </div>
+          </div>
+        </div>
+
+        {/* PLACEHOLDER_PHYSICS — uncomment to restore figure slots
+        <div className="lp-fig-placeholder-row">
+          <div className="lp-fig-placeholder">
+            <div className="lp-fig-placeholder-icon">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <rect x="2" y="5" width="16" height="10" rx="2" stroke="rgba(120,180,255,0.6)" strokeWidth="1.3" fill="none"/>
+                <circle cx="7" cy="10" r="2.5" stroke="rgba(120,180,255,0.5)" strokeWidth="1.2" fill="none"/>
+                <path d="M11 8l3 2-3 2" stroke="rgba(120,180,255,0.5)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+              </svg>
+            </div>
+            <div className="lp-fig-placeholder-label">Aerial image — Hopkins TCC output</div>
+            <div className="lp-fig-placeholder-note">Intensity map · OPC mask overlay · CD contour</div>
+          </div>
+          <div className="lp-fig-placeholder">
+            <div className="lp-fig-placeholder-icon">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M3 15 C5 8, 8 6, 10 10 S14 14, 17 5" stroke="rgba(120,180,255,0.6)" strokeWidth="1.3" strokeLinecap="round" fill="none"/>
+                <circle cx="10" cy="10" r="1.5" fill="rgba(120,180,255,0.5)"/>
+                <line x1="3" y1="15" x2="17" y2="15" stroke="rgba(120,180,255,0.3)" strokeWidth="1" strokeDasharray="2 2"/>
+              </svg>
+            </div>
+            <div className="lp-fig-placeholder-label">Bossung curve — CD vs Focus × Dose</div>
+            <div className="lp-fig-placeholder-note">Focus-Exposure Matrix · process window overlay</div>
+          </div>
+        </div>
+        END PLACEHOLDER_PHYSICS */}
+      </section>
+
+      <hr className="lp-section-divider" />
+
+      {/* ── PRESETS ── */}
+      <section className="lp-presets-section landing-anchor">
+        <div className="landing-section-head landing-section-head-tight">
+          <div className="landing-eyebrow">Optical presets & templates</div>
+          <h2>Four optical configurations. Eight OPC templates. Ready out of the box.</h2>
+        </div>
+
+        <div className="lp-presets-grid">
+          {[
+            { sys: "DUV dry",       lambda: "193 nm", na: "0.93", cd: "~56 nm", plan: "Free" },
+            { sys: "DUV immersion", lambda: "193 nm", na: "1.35", cd: "~39 nm", plan: "Pro"  },
+            { sys: "EUV Low-NA",    lambda: "13.5 nm", na: "0.33", cd: "~11 nm", plan: "Free" },
+            { sys: "EUV High-NA",   lambda: "13.5 nm", na: "0.55", cd: "~7 nm",  plan: "Pro"  },
+          ].map((p) => (
+            <article key={p.sys} className={`lp-preset-card${p.plan === "Pro" ? " lp-preset-card-pro" : ""}`}>
+              <div className="lp-preset-top">
+                <span className="lp-preset-name">{p.sys}</span>
+                <span className={`lp-preset-badge${p.plan === "Pro" ? " lp-preset-badge-pro" : ""}`}>{p.plan}</span>
+              </div>
+              <div className="lp-preset-row"><span>λ</span><span>{p.lambda}</span></div>
+              <div className="lp-preset-row"><span>NA</span><span>{p.na}</span></div>
+              <div className="lp-preset-row lp-preset-cd"><span>CD<sub>min</sub></span><span>{p.cd}</span></div>
+            </article>
+          ))}
+        </div>
+
+        <div className="lp-preset-templates">
+          <span className="lp-preset-templates-label">OPC templates included</span>
+          <div className="lp-preset-templates-chips">
+            {opcTemplates.map((t) => (
+              <span key={t} className="lp-preset-chip">{t}</span>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -256,8 +380,8 @@ export default function Home() {
             Why <span className="landing-logo-word">litopc</span>
           </h2>
           <p>
-            Built for education and fast insight — not to replace Calibre, but to make
-            lithography physics approachable before you reach for the heavy tools.
+            From quick simulation to research-grade process modeling —{" "}
+            <span className="landing-logo-word">litopc</span> scales with what you need.
           </p>
         </div>
 
@@ -265,20 +389,43 @@ export default function Home() {
           {featureRail.map((item, index) => (
             <article key={item.title} className="landing-feature-line">
               <div className="landing-feature-index">0{index + 1}</div>
-              <h3>{item.title}</h3>
+              <h3>
+                {item.title}
+                {"tag" in item && item.tag && (
+                  <span className="lp-feature-plan-tag">{item.tag}</span>
+                )}
+              </h3>
               <p>{item.body}</p>
             </article>
           ))}
         </div>
 
-        <div className="landing-builtins">
-          {builtIns.map((item) => (
-            <div key={item} className="landing-builtins-item">
-              <span className="landing-builtins-index" aria-hidden="true">&bull;</span>
-              <span className="landing-builtins-copy">{item}</span>
+        {/* PLACEHOLDER_FEATURES — uncomment to restore figure slots
+        <div className="lp-fig-placeholder-row">
+          <div className="lp-fig-placeholder">
+            <div className="lp-fig-placeholder-icon">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <rect x="3" y="3" width="6" height="6" rx="1" stroke="rgba(120,180,255,0.6)" strokeWidth="1.2" fill="none"/>
+                <rect x="11" y="3" width="6" height="6" rx="1" stroke="rgba(120,180,255,0.5)" strokeWidth="1.2" fill="rgba(120,180,255,0.06)"/>
+                <rect x="3" y="11" width="6" height="6" rx="1" stroke="rgba(120,180,255,0.5)" strokeWidth="1.2" fill="rgba(120,180,255,0.06)"/>
+                <rect x="11" y="11" width="6" height="6" rx="1" stroke="rgba(120,180,255,0.4)" strokeWidth="1.2" fill="none"/>
+              </svg>
             </div>
-          ))}
+            <div className="lp-fig-placeholder-label">Mask · aerial · contour · 3D — side by side</div>
+            <div className="lp-fig-placeholder-note">Full workspace view · A/B compare mode</div>
+          </div>
+          <div className="lp-fig-placeholder">
+            <div className="lp-fig-placeholder-icon">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M3 14 L6 9 L9 12 L12 6 L15 10 L17 7" stroke="rgba(120,180,255,0.6)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                <circle cx="9" cy="12" r="1.2" fill="rgba(120,180,255,0.5)"/>
+              </svg>
+            </div>
+            <div className="lp-fig-placeholder-label">OPC convergence — EPE per iteration</div>
+            <div className="lp-fig-placeholder-note">Edge placement error · CD deviation · MRC check</div>
+          </div>
         </div>
+        END PLACEHOLDER_FEATURES */}
       </section>
 
       <hr className="lp-section-divider" />
@@ -307,7 +454,15 @@ export default function Home() {
         <div className="landing-section-head landing-section-head-tight">
           <div className="landing-eyebrow">Pricing</div>
           <h2>Start free. Upgrade when you need more.</h2>
-          <p>Every plan includes the full physics engine. Pro unlocks advanced optics, higher resolution, and batch analysis.</p>
+          <p>Every plan includes the full physics engine. Pro unlocks advanced optics and batch analysis. Research adds custom process model integration.</p>
+        </div>
+
+        <div className="lp-pricing-beta-notice">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{flexShrink:0,marginTop:1}}>
+            <circle cx="8" cy="8" r="6.5" stroke="rgba(120,200,255,0.6)" strokeWidth="1.3"/>
+            <path d="M8 5v4M8 11v.5" stroke="rgba(120,200,255,0.7)" strokeWidth="1.4" strokeLinecap="round"/>
+          </svg>
+          <span><strong>Beta period — no subscription fee.</strong> Free plan is open to everyone. Pro is in closed beta testing; paid billing is not yet active.</span>
         </div>
 
         <div className="lp-pricing-grid">
@@ -330,13 +485,14 @@ export default function Home() {
           </article>
 
           {/* PRO */}
-          <article className="lp-pricing-card lp-pricing-card-pro">
-            <div className="lp-pricing-pro-badge">Pro</div>
+          <article className="lp-pricing-card lp-pricing-card-pro lp-pricing-card-beta">
+            <div className="lp-pricing-pro-badge">Closed Beta</div>
             <div className="lp-pricing-plan-name">Pro</div>
             <div className="lp-pricing-price">
-              <span className="lp-pricing-amount">$19</span>
+              <span className="lp-pricing-amount lp-pricing-amount-beta">$19</span>
               <span className="lp-pricing-period">/mo</span>
             </div>
+            <div className="lp-pricing-annual">or <strong>$149/yr</strong> <span className="lp-pricing-save">save $79</span></div>
             <p className="lp-pricing-desc">Advanced optics, higher resolution, and batch sweep for serious work.</p>
             <ul className="lp-pricing-features">
               {proFeatures.map((f) => (
@@ -346,23 +502,67 @@ export default function Home() {
                 </li>
               ))}
             </ul>
-            <a href={simulatorHref} className="lp-btn-pricing-pro" target="_blank" rel="noopener noreferrer">
-              Upgrade to Pro →
+            <a href="mailto:contact@litopc.com" className="lp-btn-pricing-pro lp-btn-pricing-beta">
+              Join Closed Beta →
+            </a>
+          </article>
+
+          {/* RESEARCH */}
+          <article className="lp-pricing-card lp-pricing-card-research lp-pricing-card-beta">
+            <div className="lp-pricing-research-badge">Research</div>
+            <div className="lp-pricing-plan-name">Research</div>
+            <div className="lp-pricing-price">
+              <span className="lp-pricing-amount lp-pricing-amount-beta">$79</span>
+              <span className="lp-pricing-period">/mo</span>
+            </div>
+            <div className="lp-pricing-annual">or <strong>$699/yr</strong> <span className="lp-pricing-save">save $249</span></div>
+            <p className="lp-pricing-desc">Custom process models, Bossung curves, and process window analysis for fab-grade insight.</p>
+            <ul className="lp-pricing-features">
+              {researchFeatures.map((f) => (
+                <li key={f.text}>
+                  <span className="lp-pf-check lp-pf-check-research">✓</span>
+                  {f.strong ? <strong>{f.text}</strong> : f.text}
+                </li>
+              ))}
+            </ul>
+            <a href="mailto:contact@litopc.com" className="lp-btn-pricing-research lp-btn-pricing-beta">
+              Join Closed Beta →
             </a>
           </article>
         </div>
 
         <p className="lp-pricing-note">
-          Educational simulator. Not a sign-off tool.
-          For team or institutional access, <a href="mailto:mincheol.chris.lee@gmail.com">contact us</a>.
+          For team or institutional licensing, <a href="mailto:contact@litopc.com">contact us</a>.
+          Calibre costs $100k+/year — litopc is not a sign-off replacement, but it should cost a lot less.
         </p>
+      </section>
+
+      <hr className="lp-section-divider" />
+
+      {/* ── CREATOR / ABOUT ── */}
+      <section id="about" className="lp-about-section landing-anchor">
+        <div className="lp-creator-inner">
+          <div>
+            <div className="landing-eyebrow">About</div>
+            <h2 className="lp-creator-name">Built by a working OPC engineer.</h2>
+            <p className="lp-creator-text">
+              <strong>Min-Cheol Lee</strong> — OPC and lithography engineer at Intel.
+              Ph.D. in Physics, with research background spanning optical and condensed matter physics.
+              Specialized in semiconductor patterning simulation and OPC for advanced nodes.
+            </p>
+            <div className="lp-creator-links">
+              <a href="https://mincheollee.com" target="_blank" rel="noopener noreferrer" className="lp-creator-link">mincheollee.com</a>
+              <a href="https://linkedin.com/in/min-cheol-lee" target="_blank" rel="noopener noreferrer" className="lp-creator-link">LinkedIn</a>
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* ── BOTTOM CTA ── */}
       <section className="landing-cta-strip">
         <div>
           <div className="landing-eyebrow">Start here</div>
-          <h2>The most beautiful lithography simulator on the web.</h2>
+          <h2>The most rigorous lithography simulator on the web.</h2>
           <p className="lp-cta-sub">
             Open <span className="landing-logo-word">litopc</span> and see your first aerial image in under a minute.
           </p>

@@ -8,11 +8,10 @@ export default function ModelSummaryPage() {
         Educational approximation only. Not calibrated for manufacturing sign-off.
       </p>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
-        <a className="model-guide-link" href="/litopc/advanced-analytics">Advanced Analytics</a>
+        <a className="model-guide-link" href="/litopc/opc-guide">OPC Guide</a>
         <a className="model-guide-link" href="/litopc/benchmark-gallery">Benchmark Gallery</a>
         <a className="model-guide-link" href="/litopc/model-change-log">Model Change Log</a>
         <a className="model-guide-link" href="/litopc/trust-dashboard">Trust Dashboard</a>
-        <a className="model-guide-link" href="/litopc/revenue-dashboard">Revenue Dashboard</a>
         <a className="model-guide-link" href="/litopc">Back to Lab</a>
       </div>
 

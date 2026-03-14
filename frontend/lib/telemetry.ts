@@ -20,7 +20,9 @@ export type ProductEventName =
   | "export_blocked_quota"
   | "usage_quota_exhausted"
   | "upgrade_prompt_viewed"
-  | "upgrade_prompt_clicked";
+  | "upgrade_prompt_clicked"
+  | "opc_correction_clicked"
+  | "opc_correction_completed";
 
 type EventPayloadValue = string | number | boolean | null;
 type EventRecord = {

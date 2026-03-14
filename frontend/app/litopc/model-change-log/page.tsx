@@ -9,11 +9,10 @@ export default function ModelChangeLogPage() {
           Transparent record of simulation/model-affecting updates. Dates below are absolute release dates for traceability.
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <a className="model-guide-link" href="/litopc/advanced-analytics">Advanced Analytics</a>
+          <a className="model-guide-link" href="/litopc/opc-guide">OPC Guide</a>
           <a className="model-guide-link" href="/litopc/model-summary">Model Guide</a>
           <a className="model-guide-link" href="/litopc/benchmark-gallery">Benchmark Gallery</a>
           <a className="model-guide-link" href="/litopc/trust-dashboard">Trust Dashboard</a>
-          <a className="model-guide-link" href="/litopc/revenue-dashboard">Revenue Dashboard</a>
           <a className="model-guide-link" href="/litopc">Back to Lab</a>
         </div>
       </header>

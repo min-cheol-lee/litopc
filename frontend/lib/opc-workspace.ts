@@ -1,5 +1,5 @@
 import type { MaskShape, PresetID, RectMaskShape, ShapeOp, SimResponse, TemplateID } from "./types";
-import { isLShapeOpcTemplate, isLShapeRawTemplate, normalizeTemplateId } from "./template-variants";
+import { isLineEndRawTemplate, isLShapeOpcTemplate, isLShapeRawTemplate, normalizeTemplateId } from "./template-variants";
 
 export type EditorLayer = "MASK" | "TARGET";
 export type EditorTool = "SELECT" | "DRAW_ADD_RECT" | "DRAW_SUBTRACT_RECT" | "PLACE_SRAF";
@@ -83,9 +83,27 @@ function templateRawShapes(templateId: TemplateID, params: Record<string, number
   const cx = fov * 0.5;
   const cy = fov * 0.5;
 
-  if (normalizedTemplateId === "ISO_LINE" || normalizedTemplateId === "LINE_END_RAW" || normalizedTemplateId === "LINE_END_OPC_HAMMER") {
+  if (normalizedTemplateId === "ISO_LINE_DUV" || normalizedTemplateId === "LINE_END_OPC_HAMMER") {
     const cd = params.cd_nm ?? 100;
     const h = params.length_nm ?? 900;
+    return [rect(cx - cd / 2, cy - h / 2, cd, h)];
+  }
+
+  if (normalizedTemplateId === "ISO_LINE_EUV") {
+    const cd = params.cd_nm ?? 24;
+    const h = params.length_nm ?? 500;
+    return [rect(cx - cd / 2, cy - h / 2, cd, h)];
+  }
+
+  if (normalizedTemplateId === "LINE_END_RAW_DUV") {
+    const cd = params.cd_nm ?? 100;
+    const h = params.length_nm ?? 600;
+    return [rect(cx - cd / 2, cy - h / 2, cd, h)];
+  }
+
+  if (normalizedTemplateId === "LINE_END_RAW_EUV") {
+    const cd = params.cd_nm ?? 24;
+    const h = params.length_nm ?? 160;
     return [rect(cx - cd / 2, cy - h / 2, cd, h)];
   }
 
@@ -250,6 +268,30 @@ function presetTargetGuide(templateId: TemplateID, presetId: PresetID, params: R
   const subtitle = defaultPresetSubtitle(presetId);
   const rawShapes = templateRawShapes(normalizedTemplateId, params);
 
+  if (isLineEndRawTemplate(normalizedTemplateId)) {
+    const isEuv = normalizedTemplateId === "LINE_END_RAW_EUV";
+    const fov = params.fov_nm ?? 1100;
+    const cx = fov * 0.5;
+    const cy = fov * 0.5;
+    const cd = isEuv ? (params.cd_nm ?? 24) : (params.cd_nm ?? 100);
+    const h  = isEuv ? (params.length_nm ?? 160) : (params.length_nm ?? 600);
+    const targetShapes = [rect(cx - cd / 2, cy - h / 2, cd, h)];
+    return {
+      title: isEuv ? "Line-End Target (EUV)" : "Line-End Target (DUV)",
+      subtitle,
+      objective: isEuv
+        ? "Hold the line terminal against EUV pullback. Auto-correct will add compact hammerhead serifs."
+        : "Recover line-end pullback at both ends. Auto-correct will generate hammerhead pads automatically.",
+      hint: isEuv
+        ? "EUV line-ends pull back severely near the resolution floor. Even small corrections make a big difference."
+        : "Line-end pullback is one of OPC's most recognisable artifacts. Watch both ends converge toward the target.",
+      hotspotThresholdNm: isEuv ? 8 : 18,
+      baselineShapeCount: 0,
+      targetShapes,
+      targetContours: rectContours(targetShapes),
+    };
+  }
+
   if (isLShapeRawTemplate(normalizedTemplateId) || isLShapeOpcTemplate(normalizedTemplateId)) {
     const targetShapes = [
       rect(260, 590, 450, 100),
@@ -329,6 +371,32 @@ function presetTargetGuide(templateId: TemplateID, presetId: PresetID, params: R
       baselineShapeCount: 0,
       targetShapes,
       targetContours: rectContours(targetShapes),
+    };
+  }
+
+  if (normalizedTemplateId === "ISO_LINE_DUV") {
+    return {
+      title: "Isolated Line Target (DUV)",
+      subtitle,
+      objective: "Hold the printed CD to the design intent with minimal bias and no disconnects.",
+      hint: "Isolated lines shrink under DUV defocus. A small global bias is usually all you need.",
+      hotspotThresholdNm: 18,
+      baselineShapeCount: 0,
+      targetShapes: rawShapes,
+      targetContours: rectContours(rawShapes),
+    };
+  }
+
+  if (normalizedTemplateId === "ISO_LINE_EUV") {
+    return {
+      title: "Isolated Line Target (EUV)",
+      subtitle,
+      objective: "Hold the printed EUV CD near the resolution floor. Even small mask changes matter.",
+      hint: "Near the EUV resolution limit, stochastic effects dominate. Keep the mask simple.",
+      hotspotThresholdNm: 6,
+      baselineShapeCount: 0,
+      targetShapes: rawShapes,
+      targetContours: rectContours(rawShapes),
     };
   }
 

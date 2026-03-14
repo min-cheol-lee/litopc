@@ -8,6 +8,8 @@ def _normalize_template_id(template_id: TemplateID) -> TemplateID:
         return "L_CORNER_RAW_DUV"
     if template_id == "L_CORNER_OPC_SERIF":
         return "L_CORNER_OPC_DUV"
+    if template_id == "ISO_LINE":
+        return "ISO_LINE_DUV"
     return template_id
 
 
@@ -192,9 +194,17 @@ def template_to_shapes(template_id: TemplateID, p: Dict[str, float]) -> Tuple[Li
 
     template_id = _normalize_template_id(template_id)
 
-    if template_id == "ISO_LINE":
-        cd = float(p.get("cd_nm", 80.0))
+    if template_id == "ISO_LINE_DUV":
+        # DUV 193 nm: cd=100 nm ≈ 1.7× Rayleigh floor (NA 0.93, floor ≈58 nm).
+        cd = float(p.get("cd_nm", 100.0))
         h = float(p.get("length_nm", 900.0))
+        shapes.append(RectShape(x_nm=cx - cd / 2, y_nm=cy - h / 2, w_nm=cd, h_nm=h))
+
+    elif template_id == "ISO_LINE_EUV":
+        # EUV 13.5 nm LNA: cd=24 nm ≈ 2× Rayleigh floor (NA 0.33, floor ≈12 nm).
+        # Shows real EUV proximity narrowing; 500 nm length fits in the 1100 nm FOV.
+        cd = float(p.get("cd_nm", 24.0))
+        h = float(p.get("length_nm", 500.0))
         shapes.append(RectShape(x_nm=cx - cd / 2, y_nm=cy - h / 2, w_nm=cd, h_nm=h))
 
     elif template_id == "DENSE_LS":
@@ -211,6 +221,22 @@ def template_to_shapes(template_id: TemplateID, p: Dict[str, float]) -> Tuple[Li
     elif template_id == "LINE_END_RAW":
         cd = float(p.get("cd_nm", 80.0))
         h = float(p.get("length_nm", 900.0))
+        shapes.append(RectShape(x_nm=cx - cd / 2, y_nm=cy - h / 2, w_nm=cd, h_nm=h))
+
+    elif template_id == "LINE_END_RAW_DUV":
+        # DUV 193 nm: cd=100 nm ≈ 1.7× Rayleigh floor (NA 0.93, floor ≈58 nm).
+        # Length 600 nm gives 6 strips at segmentNm=80 — enough to show both
+        # top and bottom line-end pullback simultaneously.
+        cd = float(p.get("cd_nm", 100.0))
+        h = float(p.get("length_nm", 600.0))
+        shapes.append(RectShape(x_nm=cx - cd / 2, y_nm=cy - h / 2, w_nm=cd, h_nm=h))
+
+    elif template_id == "LINE_END_RAW_EUV":
+        # EUV 13.5 nm LNA: cd=24 nm ≈ 2× Rayleigh floor (NA 0.33, floor ≈12 nm).
+        # At 2× the floor the line-end pullback is dramatic and OPC correction
+        # is clearly necessary.  Length 160 nm gives 8 strips at segmentNm=20.
+        cd = float(p.get("cd_nm", 24.0))
+        h = float(p.get("length_nm", 160.0))
         shapes.append(RectShape(x_nm=cx - cd / 2, y_nm=cy - h / 2, w_nm=cd, h_nm=h))
 
     elif template_id == "LINE_END_OPC_HAMMER":

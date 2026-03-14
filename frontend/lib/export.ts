@@ -127,7 +127,8 @@ function attachExportStyle(svg: SVGSVGElement) {
   svg.insertBefore(style, svg.firstChild);
 }
 
-function attachExportBackdrop(svg: SVGSVGElement, vbW: number, vbH: number) {
+function attachExportBackdrop(svg: SVGSVGElement, vbW: number, vbH: number, bgTheme?: "DARK" | "LIGHT" | "TRANSPARENT") {
+  if (bgTheme === "TRANSPARENT") return;
   const ns = "http://www.w3.org/2000/svg";
   const defs = document.createElementNS(ns, "defs");
 
@@ -139,13 +140,13 @@ function attachExportBackdrop(svg: SVGSVGElement, vbW: number, vbH: number) {
   lg.setAttribute("y2", "1");
   const s1 = document.createElementNS(ns, "stop");
   s1.setAttribute("offset", "0%");
-  s1.setAttribute("stop-color", "#223958");
+  s1.setAttribute("stop-color", bgTheme === "LIGHT" ? "#f0f4fa" : "#223958");
   const s2 = document.createElementNS(ns, "stop");
   s2.setAttribute("offset", "44%");
-  s2.setAttribute("stop-color", "#16293f");
+  s2.setAttribute("stop-color", bgTheme === "LIGHT" ? "#e8edf5" : "#16293f");
   const s3 = document.createElementNS(ns, "stop");
   s3.setAttribute("offset", "100%");
-  s3.setAttribute("stop-color", "#0a1628");
+  s3.setAttribute("stop-color", bgTheme === "LIGHT" ? "#dce4f0" : "#0a1628");
   lg.appendChild(s1);
   lg.appendChild(s2);
   lg.appendChild(s3);
@@ -490,7 +491,7 @@ function prepareSvgForExport(
   svgEl: SVGSVGElement,
   req: SimRequest,
   sim: SimResponse | null,
-  opts?: { includeMetaOverlay?: boolean; view?: ExportViewState; sweep?: ExportSweepPayload | null }
+  opts?: { includeMetaOverlay?: boolean; view?: ExportViewState; sweep?: ExportSweepPayload | null; bgTheme?: "DARK" | "LIGHT" | "TRANSPARENT"; resolution?: "WEB" | "HIGH_RES" }
 ): { svg: SVGSVGElement; outW: number; outH: number } {
   const clone = svgEl.cloneNode(true) as SVGSVGElement;
   clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
@@ -505,9 +506,13 @@ function prepareSvgForExport(
   const vbH = vb && vb.height > 0 ? vb.height : cssH;
   clone.setAttribute("viewBox", `0 0 ${vbW} ${vbH}`);
 
-  const outW = req.plan === "PRO"
-    ? clamp(Math.round(cssW * 2.4), 1600, 4200)
-    : clamp(Math.round(cssW * 1.35), 900, 1800);
+  const RES_CONFIG = {
+    WEB:      { scale: 1.35, min: 900,  max: 1800 },
+    HIGH_RES: { scale: 2.4,  min: 1600, max: 4200 },
+  };
+  const res = req.plan === "PRO" ? (opts?.resolution ?? "HIGH_RES") : "WEB";
+  const { scale: resScale, min: resMin, max: resMax } = RES_CONFIG[res];
+  const outW = clamp(Math.round(cssW * resScale), resMin, resMax);
   const outH = Math.round((outW * vbH) / Math.max(1, vbW));
   clone.setAttribute("width", String(outW));
   clone.setAttribute("height", String(outH));
@@ -516,7 +521,7 @@ function prepareSvgForExport(
   const desc = document.createElementNS("http://www.w3.org/2000/svg", "desc");
   desc.textContent = `litopc Export | ${compactMeta(req, sim, opts?.view)}`;
   clone.insertBefore(desc, clone.firstChild);
-  attachExportBackdrop(clone, vbW, vbH);
+  attachExportBackdrop(clone, vbW, vbH, opts?.bgTheme);
   if (opts?.includeMetaOverlay ?? true) {
     attachExportMetaOverlay(clone, req, sim, vbW, vbH, opts?.view);
   }
@@ -563,14 +568,26 @@ export function buildMetaLines(req: SimRequest, sim: SimResponse | null): string
   ];
 }
 
-export function exportSvgWithMeta(svgEl: SVGSVGElement, req: SimRequest, sim: SimResponse | null, view?: ExportViewState, sweep?: ExportSweepPayload | null) {
-  const { svg } = prepareSvgForExport(svgEl, req, sim, { includeMetaOverlay: true, view, sweep });
+export function buildFigureCaption(req: SimRequest, sim: SimResponse | null): string {
+  const preset = req.preset_id.replace(/_/g, " ");
+  const template = req.mask.mode === "CUSTOM" ? "custom mask" : (req.mask.template_id ?? "template mask").replace(/_/g, " ").toLowerCase();
+  const cd = sim?.metrics?.cd_nm != null ? `CD = ${sim.metrics.cd_nm.toFixed(1)} nm` : null;
+  const epe = sim?.metrics?.epe_mean_nm != null ? `EPE\u2098\u2091\u2090\u2099 = ${sim.metrics.epe_mean_nm.toFixed(2)} nm` : null;
+  const dose = `dose = ${req.dose.toFixed(2)}`;
+  const focus = req.focus !== 0 ? `, focus = ${req.focus.toFixed(0)} nm` : "";
+  const metrics = [cd, epe].filter(Boolean).join(", ");
+  const date = new Date().getFullYear();
+  return `Fig. Aerial image simulation of ${template} (${preset}). ${dose}${focus}${metrics ? `. ${metrics}` : ""}. Generated with litopc (litopc.com), ${date}.`;
+}
+
+export function exportSvgWithMeta(svgEl: SVGSVGElement, req: SimRequest, sim: SimResponse | null, view?: ExportViewState, sweep?: ExportSweepPayload | null, bgTheme?: "DARK" | "LIGHT" | "TRANSPARENT") {
+  const { svg } = prepareSvgForExport(svgEl, req, sim, { includeMetaOverlay: true, view, sweep, bgTheme });
   const blob = serializeSvg(svg);
   downloadBlob(blob, `${buildExportBaseName(req)}.svg`);
 }
 
-export async function exportPngWithMeta(svgEl: SVGSVGElement, req: SimRequest, sim: SimResponse | null, view?: ExportViewState, sweep?: ExportSweepPayload | null) {
-  const prepared = prepareSvgForExport(svgEl, req, sim, { includeMetaOverlay: false, view });
+export async function exportPngWithMeta(svgEl: SVGSVGElement, req: SimRequest, sim: SimResponse | null, view?: ExportViewState, sweep?: ExportSweepPayload | null, bgTheme?: "DARK" | "LIGHT" | "TRANSPARENT", resolution?: "WEB" | "HIGH_RES") {
+  const prepared = prepareSvgForExport(svgEl, req, sim, { includeMetaOverlay: false, view, bgTheme, resolution });
   const svgBlob = serializeSvg(prepared.svg);
   const src = await blobToDataUrl(svgBlob);
   const img = await imageFromSrc(src);

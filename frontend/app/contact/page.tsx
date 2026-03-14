@@ -3,25 +3,18 @@ import { MarketingShell } from "../../components/MarketingShell";
 
 export const metadata: Metadata = {
   title: "Contact | litopc",
-  description: "Support and contact information for litopc.",
+  description: "Get in touch with the litopc team for questions, bug reports, or licensing.",
 };
 
 export default function ContactPage() {
   return (
-    <MarketingShell
-      navItems={[
-        { label: "Home", href: "/" },
-        { label: "About", href: "/about" },
-        { label: "Privacy", href: "/privacy" },
-      ]}
-    >
+    <MarketingShell navItems={[{ label: "Home", href: "/" }]}>
       <article className="marketing-doc-page landing-anchor">
         <div className="marketing-doc-hero">
           <div className="landing-eyebrow">Contact</div>
-          <h1>Questions, bug reports, partnership, or testing support.</h1>
+          <h1>Questions, bug reports, or licensing inquiries.</h1>
           <p>
-            For simulator questions, internal testing coordination, billing issues, or launch inquiries, use the channels
-            below.
+            Reach out for simulator feedback, billing support, institutional or team licensing, or anything else.
           </p>
         </div>
 
@@ -46,11 +39,21 @@ export default function ContactPage() {
         </section>
 
         <section className="marketing-doc-section">
-          <h2>Support note</h2>
+          <h2>Billing support</h2>
           <div className="marketing-doc-copy">
             <p>
-              If you are testing litopc internally, include your copied Account ID from the simulator account card when asking
-              for Pro access or entitlement help.
+              For billing questions, cancellation requests, or refund inquiries, email the address above.
+              Please include your account email and a description of the issue.
+            </p>
+          </div>
+        </section>
+
+        <section className="marketing-doc-section">
+          <h2>Institutional licensing</h2>
+          <div className="marketing-doc-copy">
+            <p>
+              Team and institutional licensing is available. Email with your organization name and intended use case
+              and we will respond with options.
             </p>
           </div>
         </section>

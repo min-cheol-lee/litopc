@@ -37,7 +37,13 @@ def _requested_cd_nm(req: SimRequest) -> float | None:
             if stype == "rect":
                 w = float(getattr(s, "w_nm", 0.0))
                 h = float(getattr(s, "h_nm", 0.0))
-                d = min(w, h)
+                # For OPC sub-segments, one dimension is an artificial cut (e.g. 20 nm strip
+                # height from a 110 nm-wide line). Using min(w, h) would give 20 nm and
+                # incorrectly trigger the sub-Rayleigh guard.  Use max(w, h) so the guard
+                # sees the real printed feature dimension (the line width).  If the feature
+                # is genuinely too small in all directions, find_contours_iso will return
+                # empty contours naturally without needing the guard.
+                d = max(w, h)
                 if d > 0:
                     dims.append(d)
             elif stype == "polygon":
