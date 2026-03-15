@@ -33,37 +33,46 @@ export default function ModelSummaryPage() {
             </tr>
             <tr>
               <td style={tdStyle}>Optics</td>
-              <td style={tdStyle}>FFT pupil low-pass + focus blur + diffraction blur</td>
-              <td style={tdStyle}>Scalar coherent proxy, not full vector/partial coherence</td>
+              <td style={tdStyle}>Scalar coherent proxy — FFT pupil + Gaussian MTF + focus blur</td>
+              <td style={tdStyle}>No partial coherence (σ), no Zernike aberrations, no source-shape modeling</td>
             </tr>
             <tr>
-              <td style={tdStyle}>Print</td>
-              <td style={tdStyle}>Single threshold on absolute aerial intensity</td>
-              <td style={tdStyle}>Dose is an absolute threshold in [0,1], no per-pattern min-max normalization</td>
+              <td style={tdStyle}>Resist</td>
+              <td style={tdStyle}>Binary threshold on aerial intensity</td>
+              <td style={tdStyle}>No resist blur, no contrast model. Dose = normalized intensity threshold [0, 1], not physical mJ/cm²</td>
+            </tr>
+            <tr>
+              <td style={tdStyle}>Etch bias</td>
+              <td style={tdStyle}>None — contour = resist edge = silicon edge</td>
+              <td style={tdStyle}>No isotropic or proximity-dependent etch offset is applied</td>
             </tr>
             <tr>
               <td style={tdStyle}>Contour</td>
-              <td style={tdStyle}>Iso-contour from intensity field</td>
-              <td style={tdStyle}>Contours are extracted at level = dose</td>
+              <td style={tdStyle}>Iso-contour at level = dose</td>
+              <td style={tdStyle}>Represents resist-printed boundary, not post-etch silicon</td>
             </tr>
             <tr>
               <td style={tdStyle}>CD Metric</td>
               <td style={tdStyle}>Center-line simple CD + Rayleigh printability guard</td>
-              <td style={tdStyle}>Sub-limit requested CD is treated as non-printing in this educational model</td>
+              <td style={tdStyle}>Sub-limit requested CD is treated as non-printing</td>
             </tr>
           </tbody>
         </table>
       </section>
 
       <section style={{ marginTop: 28 }}>
-        <h2 style={{ fontSize: 24, marginBottom: 10 }}>2) Core Flow</h2>
-        <pre style={preStyle}>{`Preset/Custom mask
-  -> rasterize to binary mask
-  -> FFT optics (pupil cutoff from NA/lambda + focus filter + diffraction filter)
-  -> aerial intensity clip to [0,1] (absolute scale)
-  -> threshold by dose
-  -> contour extraction (iso-level = dose)
-  -> metrics (simple CD + printability guard)`}</pre>
+        <h2 style={{ fontSize: 24, marginBottom: 10 }}>2) Core Simulation Flow</h2>
+        <pre style={preStyle}>{`Mask (rectangles)
+  → rasterize to binary amplitude mask
+  → FFT optics: pupil cutoff (NA/λ) × Gaussian MTF (0.10·λ/NA) × focus blur
+  → aerial intensity I(x,y), clipped to [0, 1]  ← absolute scale, open field ≈ 1.0
+  → resist: printed(x,y) = 1  if  I(x,y) ≥ dose  else 0  ← binary threshold
+  → contour extraction at iso-level = dose
+  → CD metric (center-line) + Rayleigh printability guard`}</pre>
+        <p style={{ marginTop: 12, fontSize: 13.5, opacity: 0.75 }}>
+          No etch step is applied. The extracted contour represents the resist-developed boundary,
+          not the post-etch silicon feature.
+        </p>
       </section>
 
       <section style={{ marginTop: 28 }}>
@@ -121,24 +130,79 @@ export default function ModelSummaryPage() {
       </section>
 
       <section style={{ marginTop: 28 }}>
-        <h2 style={{ fontSize: 24, marginBottom: 10 }}>5) Current Physics Simplifications</h2>
-        <ul>
-          <li>Optics: scalar coherent approximation in Fourier domain.</li>
-          <li>Mask: binary transmission, rectangle-only primitives in current stage.</li>
-          <li>Printing: single-threshold contour, no stochastic resist model.</li>
-          <li>Limits: k1 values are conservative educational guardrails, not fab calibration.</li>
+        <h2 style={{ fontSize: 24, marginBottom: 10 }}>5) Optical Parameters Explained</h2>
+        <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid rgba(25,35,52,0.16)" }}>
+          <thead>
+            <tr style={{ background: "rgba(240,245,252,0.75)" }}>
+              <th style={thStyle}>Parameter</th>
+              <th style={thStyle}>Physical Meaning</th>
+              <th style={thStyle}>In this simulator</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style={tdStyle}><strong>Dose</strong></td>
+              <td style={tdStyle}>Exposure energy (mJ/cm²) × resist sensitivity</td>
+              <td style={tdStyle}>Normalized aerial-intensity threshold [0, 1]. Higher dose = less printed area (higher bar to expose). Not in mJ/cm².</td>
+            </tr>
+            <tr>
+              <td style={tdStyle}><strong>Focus</strong> (Pro)</td>
+              <td style={tdStyle}>Defocus Δz from best focus plane</td>
+              <td style={tdStyle}>Proxy [0, 1]. At 0 = sharpest imaging. Higher values apply additional Gaussian blur to the aerial image. Not in nm.</td>
+            </tr>
+            <tr>
+              <td style={tdStyle}><strong>NA</strong></td>
+              <td style={tdStyle}>Numerical aperture — sets the optical bandwidth</td>
+              <td style={tdStyle}>Set by preset. Determines pupil cutoff frequency and Rayleigh CD floor.</td>
+            </tr>
+            <tr>
+              <td style={tdStyle}><strong>λ</strong></td>
+              <td style={tdStyle}>Illumination wavelength</td>
+              <td style={tdStyle}>193 nm (DUV) or 13.5 nm (EUV). Set by preset. Scales both pupil cutoff and diffraction blur.</td>
+            </tr>
+            <tr>
+              <td style={tdStyle}><strong>σ (partial coherence)</strong></td>
+              <td style={tdStyle}>Source coherence — determines NILS and DoF</td>
+              <td style={tdStyle}>Not yet exposed as a user control. Internal value σ = 0.7 applies to all presets via the diffraction blur term.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section style={{ marginTop: 28 }}>
+        <h2 style={{ fontSize: 24, marginBottom: 10 }}>6) Physics Simplifications</h2>
+        <ul style={{ lineHeight: 1.8, fontSize: 14 }}>
+          <li><strong>Optics:</strong> scalar coherent approximation — no vector polarization, no partial coherence, no Zernike aberrations.</li>
+          <li><strong>Resist:</strong> binary threshold only — no acid-diffusion blur, no contrast model (γ), no development kinetics.</li>
+          <li><strong>Etch:</strong> not modeled — contour = resist edge. No isotropic, proximity, or loading-effect bias.</li>
+          <li><strong>Mask:</strong> binary transmission, rectangles only. No sub-resolution assist features (SRAF).</li>
+          <li><strong>k₁ limits:</strong> conservative educational guardrails (DUV dry 0.28, DUV imm 0.26, EUV LNA 0.30, EUV HNA 0.26) — not process-of-record values.</li>
         </ul>
       </section>
 
       <section style={{ marginTop: 28 }}>
-        <h2 style={{ fontSize: 24, marginBottom: 10 }}>6) FAQ</h2>
-        <p><b>Q:</b> Is this sign-off accurate?<br /><b>A:</b> No. It is educational visualization only.</p>
-        <p><b>Q:</b> Why does changing dose move contour strongly?<br /><b>A:</b> Dose is directly the absolute aerial threshold used for contour extraction.</p>
-        <p><b>Q:</b> Can this be extended?<br /><b>A:</b> Yes. Next steps include partial coherence, resist model, and calibrated process data.</p>
+        <h2 style={{ fontSize: 24, marginBottom: 10 }}>7) FAQ</h2>
+        {[
+          ["Is this sign-off accurate?",
+           "No. Educational visualization only. Results are physics-inspired approximations, not calibrated for manufacturing."],
+          ["Why does changing dose move the contour so strongly?",
+           "Dose is directly the aerial-intensity threshold. Lowering it means a fainter aerial signal can still expose the resist — expanding the printed area. Real lithography doses are buffered by resist contrast (γ), which this model does not include."],
+          ["What does the contour actually represent?",
+           "The resist-developed boundary after applying the dose threshold to the aerial image. It is not the post-etch silicon edge — no etch bias is applied."],
+          ["Why doesn't a very small feature print?",
+           "The Rayleigh printability guard (CD_min = k₁·λ/NA) removes contours when the requested feature size is below the physical resolution limit of the selected optical tool."],
+          ["Can the model be extended with a custom resist or etch recipe?",
+           "Not in the current release. Pro adds a resist blur slider (σ_resist); Research tier will expose a full sigmoid/Dill resist model and an isotropic etch-bias offset. Custom Zernike aberration upload is also planned for Research."],
+        ].map(([q, a]) => (
+          <p key={q as string} style={{ marginTop: 12, fontSize: 14 }}>
+            <strong>Q: {q}</strong><br />
+            <span style={{ opacity: 0.8 }}>A: {a}</span>
+          </p>
+        ))}
       </section>
 
       <section style={{ marginTop: 28 }}>
-        <h2 style={{ fontSize: 24, marginBottom: 10 }}>7) Reference Notes for k1 Guard</h2>
+        <h2 style={{ fontSize: 24, marginBottom: 10 }}>8) Reference Notes for k₁ Guard</h2>
         <p>
           The k1 guard values in this app are hard-coded educational guardrails, selected from common
           industry Rayleigh ranges rather than copied from a single process-of-record.

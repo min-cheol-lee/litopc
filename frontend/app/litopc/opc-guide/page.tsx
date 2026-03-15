@@ -322,43 +322,89 @@ bottom → h_nm  += delta   (outward = +y)`}
           <thead>
             <tr style={{ background: "rgba(240,245,252,0.75)" }}>
               <th style={thStyle}>In scope</th>
-              <th style={thStyle}>Out of scope</th>
+              <th style={thStyle}>Out of scope / planned</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td style={tdStyle}>Edge-by-edge EPE measurement and correction</td>
-              <td style={tdStyle}>Full vector/partial coherence imaging</td>
+              <td style={tdStyle}>Full vector / partial coherence imaging</td>
             </tr>
             <tr>
-              <td style={tdStyle}>Sub-segmented 2D contact and line correction</td>
-              <td style={tdStyle}>Inter-feature proximity (SRAF placement)</td>
+              <td style={tdStyle}>Sub-segmented 2D contacts and lines</td>
+              <td style={tdStyle}>Inter-feature proximity / SRAF placement</td>
             </tr>
             <tr>
-              <td style={tdStyle}>DUV and EUV process nodes</td>
-              <td style={tdStyle}>Resist / etch bias models</td>
+              <td style={tdStyle}>DUV 193 nm and EUV 13.5 nm nodes</td>
+              <td style={tdStyle}>Diagonal proximity, layer-to-layer rules</td>
             </tr>
             <tr>
               <td style={tdStyle}>MRC: min CD, min space, max bias, grid snap</td>
-              <td style={tdStyle}>Diagonal proximity, layer interaction rules</td>
-            </tr>
-            <tr>
-              <td style={tdStyle}>Convergence detection, best-iter restore, rollback</td>
               <td style={tdStyle}>Full-chip OPC (single-feature only)</td>
             </tr>
             <tr>
-              <td style={tdStyle}>Auto-reset on preset change (different physics)</td>
-              <td style={tdStyle}>Resist / etch bias models</td>
+              <td style={tdStyle}>Convergence detection, best-iter restore, rollback</td>
+              <td style={tdStyle}>Resist model beyond binary threshold (planned — Pro/Research)</td>
+            </tr>
+            <tr>
+              <td style={tdStyle}>Auto-reset on preset change</td>
+              <td style={tdStyle}>Etch bias model (planned — Pro/Research)</td>
             </tr>
           </tbody>
         </table>
+
+        <div style={calloutStyle("#fff8ee", "rgba(160,100,20,0.18)")}>
+          <strong>What the OPC contour represents:</strong> EPE is measured against the
+          resist-printed contour — the aerial image after dose thresholding. No etch step
+          is applied. In a real process flow the OPC target would be offset by the etch
+          bias so the final silicon CD matches the design intent. litopc does not apply
+          this offset today; resist blur (σ_resist) and etch bias will be introduced as
+          Pro and Research plan features.
+        </div>
+      </section>
+
+      {/* 8 — OPC Parameters */}
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>8 — OPC Algorithm Parameters</h2>
+        <table style={tableStyle}>
+          <thead>
+            <tr style={{ background: "rgba(240,245,252,0.75)" }}>
+              <th style={thStyle}>Parameter</th>
+              <th style={thStyle}>Default</th>
+              <th style={thStyle}>Effect</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              ["gain", "0.5", "Fraction of mean EPE applied per iteration. Adapted downward when EPE worsens (floor: gain / 4)."],
+              ["iterations", "3 (Free) / 5 (Pro)", "Simulate → correct cycles per batch. Continue adds another batch."],
+              ["nSamples", "7", "EPE sample points per edge. More samples reduce noise on curved contours."],
+              ["segmentNm", "preset-dependent", "Target cell size for sub-segmentation. Smaller cells allow finer edge profiles but must stay above the Rayleigh printability floor."],
+              ["maxBiasNm", "preset-dependent", "Maximum edge displacement per batch. Resets each batch; limits staircase amplitude."],
+              ["gridNm", "1 nm (DUV) / 0.5 nm (EUV)", "Manufacturing grid. All edges snapped after each iteration."],
+            ].map(([param, def, effect]) => (
+              <tr key={param as string}>
+                <td style={tdStyle}><code>{param}</code></td>
+                <td style={tdStyle}>{def}</td>
+                <td style={tdStyle}>{effect}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <div style={calloutStyle("#eef4ff", "rgba(30,80,200,0.15)")}>
+          <strong>Segment size and fidelity:</strong> The default segment sizes (DUV dry: 80 nm,
+          DUV imm: 50 nm, EUV LNA: 20 nm, EUV HNA: 15 nm) are chosen to sit safely above the
+          Rayleigh printability floor for each process node. Reducing segment size improves
+          correction fidelity on complex shapes but each cell must remain printable.
+        </div>
       </section>
 
       {/* Footer note */}
       <p style={{ marginTop: 36, fontSize: 12.5, opacity: 0.55, borderTop: "1px solid rgba(33,44,64,0.1)", paddingTop: 16 }}>
-        This simulation uses a scalar coherent imaging proxy. Results are educational approximations —
-        not calibrated for manufacturing sign-off.
-        See the <a href="/litopc/model-summary" style={{ color: "inherit" }}>Model Guide</a> for full assumptions.
+        This simulation uses a scalar coherent imaging proxy with a binary-threshold resist model and no etch bias.
+        Results are educational approximations — not calibrated for manufacturing sign-off.
+        See the <a href="/litopc/model-summary" style={{ color: "inherit" }}>Model Guide</a> for optical parameters, resist/etch assumptions, and the physics simplification list.
       </p>
     </main>
   );
