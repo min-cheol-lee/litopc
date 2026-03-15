@@ -445,6 +445,7 @@ async function simulateCustom(
     //      making sub-nm edge biases invisible after rasterization.
     grid: isEuv ? base.grid : Math.min(base.grid, 384),
     return_intensity: true,  // required: backend only computes contours_nm when true
+    opc_sim: true,           // tells backend to skip per-plan rect-count guard (segments > free limit)
     mask: {
       ...base.mask,
       mode: "CUSTOM",

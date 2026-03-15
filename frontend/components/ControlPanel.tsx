@@ -174,6 +174,8 @@ export function ControlPanel(props: {
   opcHasCheckpoint?: boolean;
   opcBatchStatus?: "improved" | "plateau" | "diverged" | null;
   opcBestIterIndex?: number | null;
+  opcError?: string | null;
+  opcOriginMaskMode?: "TEMPLATE" | "CUSTOM" | null;
 }) {
   const PLAN_PANEL_COLLAPSED_KEY = "litopc_plan_panel_collapsed_v1";
   const LEGACY_PLAN_PANEL_COLLAPSED_KEY = "opclab_plan_panel_collapsed_v1";
@@ -309,6 +311,8 @@ export function ControlPanel(props: {
     opcHasCheckpoint = false,
     opcBatchStatus = null,
     opcBestIterIndex = null,
+    opcError = null,
+    opcOriginMaskMode = null,
   } = props;
 
   const [maskPresetName, setMaskPresetName] = useState("");
@@ -602,7 +606,7 @@ export function ControlPanel(props: {
         </div>
 
         {/* ── OPC Auto-Correction ── */}
-        {onRunOpcCorrection && targetShapes.length > 0 && (
+        {onRunOpcCorrection && (targetShapes.length > 0 || maskMode === "CUSTOM") && (
           <div className="group-card compact run-card opc-card">
 
             {/* Header row */}
@@ -617,10 +621,17 @@ export function ControlPanel(props: {
                 <button
                   className="opc-card-run-btn"
                   onClick={onRunOpcCorrection}
-                  disabled={loading}
+                  disabled={loading || targetShapes.length === 0}
+                  title={targetShapes.length === 0 ? "Add a target shape in the Target layer first" : undefined}
                 >
                   <span className="run-main-label">Correct</span><span className="opc-card-run-sub">OPC · {opcIterations} iter</span>
                 </button>
+                {targetShapes.length === 0 && (
+                  <p className="opc-no-target-note">Set a target shape in the Target layer to enable OPC.</p>
+                )}
+                {opcError && (
+                  <div className="opc-error-msg">⚠ {opcError}</div>
+                )}
               </>
             )}
 
@@ -776,23 +787,16 @@ export function ControlPanel(props: {
             ))}
           </select>
           <label className="label" style={{ marginTop: 10 }}>Pattern</label>
-          <select value={templateId} onChange={(e) => setTemplateId(e.target.value as any)} style={{ width: "100%" }}>
+          <select value={maskMode === "CUSTOM" && opcOriginMaskMode !== "TEMPLATE" ? "__custom__" : templateId} onChange={(e) => { if (e.target.value !== "__custom__") setTemplateId(e.target.value as any); }} style={{ width: "100%" }}>
+            {maskMode === "CUSTOM" && opcOriginMaskMode !== "TEMPLATE" && <option value="__custom__">— Custom Layout —</option>}
             {templateOptions.map((t) => (
               <option key={t.id} value={t.id}>{t.label}</option>
             ))}
           </select>
-          <div className="mask-seed-block">
-            <div className="mask-action-stack">
-              <div className="mask-action-row">
-                <button className="mini-btn mask-seed-btn" onClick={onReinitializeTemplate}>Reinitialize</button>
-                <button className="mini-btn mask-seed-btn secondary" onClick={onStartBlankWorkspace}>Start Blank</button>
-              </div>
-            </div>
-          </div>
-
-          <div className="mask-seed-block mask-library-block">
-            <div className="mask-library-head">
-              <div className="mask-library-title">Mask Library</div>
+          <div className="mask-action-group">
+            <div className="mask-action-row">
+              <button className="mini-btn mask-seed-btn" onClick={maskMode === "CUSTOM" && opcOriginMaskMode !== "TEMPLATE" ? onStartBlankWorkspace : onReinitializeTemplate}>Reinitialize</button>
+              <button className="mini-btn mask-seed-btn secondary" onClick={onStartBlankWorkspace}>Start Blank</button>
             </div>
             <div className="mask-library-file-row">
               <button
@@ -824,7 +828,7 @@ export function ControlPanel(props: {
               />
             </div>
             {plan === "PRO" && (
-              <div className="mask-library-save-row" style={{ marginTop: 6 }}>
+              <div className="mask-library-save-row">
                 <input
                   type="text"
                   placeholder="snapshot name"
@@ -845,11 +849,11 @@ export function ControlPanel(props: {
               </div>
             )}
             {customMaskPresets.length > 0 && (
-              <div className="shape-chip-list pro">
+              <div className="mask-snapshot-list">
                 {customMaskPresets.map((m) => (
-                  <div key={m.id} className="shape-chip">
-                    <button className="mini-btn slim" onClick={() => onLoadCustomMaskPreset(m.id)}>{m.name}</button>
-                    <button className="mini-btn slim danger" onClick={() => onDeleteCustomMaskPreset(m.id)} aria-label={`Delete ${m.name}`}>x</button>
+                  <div key={m.id} className="mask-snapshot-chip">
+                    <button className="mask-snapshot-load" onClick={() => onLoadCustomMaskPreset(m.id)}>{m.name}</button>
+                    <button className="mask-snapshot-del" onClick={() => onDeleteCustomMaskPreset(m.id)} aria-label={`Delete ${m.name}`}>×</button>
                   </div>
                 ))}
               </div>
@@ -1161,8 +1165,8 @@ export function ControlPanel(props: {
                 </svg>
               </span>
               <span className="resource-link-copy">
-                <strong>Imaging & Limits Guide</strong>
-                <small>Optics presets, model boundaries, and interpretation notes.</small>
+                <strong>How Imaging Works</strong>
+                <small>Optics model, resolution limits, and preset reference.</small>
               </span>
             </a>
             <a href="/litopc/opc-guide" className="resource-link-card resource-link-card-accent">
@@ -1173,8 +1177,8 @@ export function ControlPanel(props: {
                 </svg>
               </span>
               <span className="resource-link-copy">
-                <strong>OPC Correction Guide</strong>
-                <small>Algorithm, sub-segmentation, convergence detection, and limitations.</small>
+                <strong>How OPC Works</strong>
+                <small>Algorithm, sub-segmentation, convergence, and limitations.</small>
               </span>
             </a>
           </div>

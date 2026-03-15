@@ -304,9 +304,11 @@ export default function Page() {
   } | null>(null);
   // "improved" | "plateau" | "diverged" | null — set after each batch
   const [opcBatchStatus, setOpcBatchStatus] = useState<"improved" | "plateau" | "diverged" | null>(null);
+  const [opcError, setOpcError] = useState<string | null>(null);
   // Global index (into opcProgress) of the iteration with the lowest EPE in the last batch.
   // null means the last iteration was already the best.
   const [opcBestIterIndex, setOpcBestIterIndex] = useState<number | null>(null);
+  const [opcOriginMaskMode, setOpcOriginMaskMode] = useState<"TEMPLATE" | "CUSTOM" | null>(null);
   const [authState, setAuthState] = useState(() => getRuntimeAuthState());
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("STUDIO");
@@ -410,11 +412,13 @@ export default function Page() {
     }
     return customGuide;
   }, [targetShapes, presetId, effectiveTargetParams, normalizedTargetTemplateId, basePresetGuide]);
-  const targetCanUseGlobalInspector = Boolean(
-    normalizedTargetTemplateId
-    && basePresetGuide
-    && maskShapeListEquals(targetShapes, basePresetGuide.targetShapes),
-  );
+  // Global inspector for target: available whenever the target has a known template ID.
+  // The previous check (maskShapeListEquals) required the target to exactly match the
+  // preset, which was too strict — e.g. after any manual target edit the Global tab
+  // disappeared. Changing a global param calls setTargetGlobalParams which regenerates
+  // the target shapes from the template, so manual edits are intentionally replaced
+  // (same behaviour as "Reinitialize Target").
+  const targetCanUseGlobalInspector = Boolean(normalizedTargetTemplateId);
   const targetMetrics = useMemo(
     () => evaluateTargetScore({ guide: targetGuide, sim, maskShapes: resolvedMaskShapes }),
     [targetGuide, sim, resolvedMaskShapes],
@@ -559,6 +563,7 @@ export default function Page() {
     setOpcCheckpoint(null);
     setOpcBatchStatus(null);
     setOpcBestIterIndex(null);
+    setOpcError(null);
     // OPC forces maskMode="CUSTOM"; corrections tuned for the old preset/template are
     // meaningless after either changes, so return to template view.
     setMaskMode("TEMPLATE");
@@ -585,15 +590,18 @@ export default function Page() {
     if (trimmedPresetTargetOverrides.length !== presetTargetOverrides.length) {
       setPresetTargetOverrides(trimmedPresetTargetOverrides);
     }
-    const trimmedMaskShapes = customShapes.slice(0, FREE_CUSTOM_RECT_LIMIT);
-    if (trimmedMaskShapes.length !== customShapes.length) {
-      setCustomShapes(trimmedMaskShapes);
-    }
-    const trimmedTargetShapes = targetShapes.slice(0, FREE_CUSTOM_RECT_LIMIT);
-    if (trimmedTargetShapes.length !== targetShapes.length) {
-      setTargetShapes(trimmedTargetShapes);
-    }
-  }, [plan, presetId, templateId, dose, presetEditShapes, presetFeatureOverrides, presetTargetOverrides, customShapes, targetShapes]);
+    // Use functional updaters so customShapes / targetShapes are NOT in the dep array.
+    // If they were deps, the effect would re-fire every time OPC calls setCustomShapes(segments),
+    // trimming the OPC-generated sub-rects back to 5 and destroying the mid-OPC mask state.
+    setCustomShapes((prev) => {
+      const trimmed = prev.slice(0, FREE_CUSTOM_RECT_LIMIT);
+      return trimmed.length !== prev.length ? trimmed : prev;
+    });
+    setTargetShapes((prev) => {
+      const trimmed = prev.slice(0, FREE_CUSTOM_RECT_LIMIT);
+      return trimmed.length !== prev.length ? trimmed : prev;
+    });
+  }, [plan, presetId, templateId, dose, presetEditShapes, presetFeatureOverrides, presetTargetOverrides]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const preferredTemplateId = getCompatibleTemplateIdForPreset(templateId, presetId);
@@ -1505,7 +1513,16 @@ export default function Page() {
     trackProductEvent("run_sim_clicked", { plan, presetId, maskMode });
     setLoading(true);
     try {
-      const executeReq = resolveSimulationRequest(req);
+      let executeReq = resolveSimulationRequest(req);
+      // When FREE plan has more shapes than the manual limit, they must have come from OPC
+      // segmentation (appendShapeToActiveLayer blocks manual addition beyond the limit).
+      // Mark as opc_sim so the backend skips the per-plan rect-count guard.
+      if (
+        plan === "FREE" &&
+        (executeReq.mask.shapes?.length ?? 0) > FREE_CUSTOM_RECT_LIMIT
+      ) {
+        executeReq = { ...executeReq, opc_sim: true };
+      }
       if (process.env.NODE_ENV !== "production" && isLShapeOpcTemplate(executeReq.mask.template_id)) {
         const debugTemplateId = normalizeTemplateId(executeReq.mask.template_id) ?? executeReq.mask.template_id;
         const baseShapes = buildTemplateBaseShapes(debugTemplateId, executeReq.mask.params_nm ?? {});
@@ -1585,6 +1602,7 @@ export default function Page() {
 
     const abort = new AbortController();
     opcAbortRef.current = abort;
+    setOpcError(null);
     setOpcRunning(true);
 
     // Segment size must exceed the Rayleigh floor for the preset.
@@ -1642,6 +1660,7 @@ export default function Page() {
         : cleanBase;
       setOpcSegmentedTarget(segTarget);
       setOpcProgress([]);
+      setOpcOriginMaskMode(maskMode);
       setMaskMode("CUSTOM");
       setCustomShapes(cloneMaskShapes(cleanBase));
       initialMask = cloneMaskShapes(cleanBase);
@@ -1718,6 +1737,10 @@ export default function Page() {
       }
     } catch (err) {
       console.error("[OPC correction]", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.toLowerCase().includes("aborted") && !msg.toLowerCase().includes("abort")) {
+        setOpcError(msg);
+      }
     } finally {
       setOpcRunning(false);
       opcAbortRef.current = null;
@@ -1725,6 +1748,11 @@ export default function Page() {
   }
 
   function applyOpcResult() {
+    if (opcOriginMaskMode === "TEMPLATE") {
+      setPresetEditShapes(cloneMaskShapes(customShapes));
+      setMaskMode("TEMPLATE");
+    }
+    setOpcOriginMaskMode(null);
     setOpcProgress([]);
     setOpcSegmentedTarget([]);
     setOpcCheckpoint(null);
@@ -1750,6 +1778,7 @@ export default function Page() {
     setOpcCheckpoint(null);
     setOpcBatchStatus(null);
     setOpcBestIterIndex(null);
+    setOpcOriginMaskMode(null);
     setMaskMode("TEMPLATE");
   }
 
@@ -2405,6 +2434,7 @@ export default function Page() {
               loading={loading}
               onRun={runSim}
               opcRunning={opcRunning}
+              opcOriginMaskMode={opcOriginMaskMode}
               opcProgress={opcProgress}
               onRunOpcCorrection={() => { void runOpcCorrectionFlow(false); }}
               onContinueOpcCorrection={() => { void runOpcCorrectionFlow(true); }}
@@ -2417,6 +2447,7 @@ export default function Page() {
               opcHasCheckpoint={!!opcCheckpoint}
               opcBatchStatus={opcBatchStatus}
               opcBestIterIndex={opcBestIterIndex}
+              opcError={opcError}
               scenarios={scenarios}
               scenarioLimit={scenarioLimit}
               scenarioLimitReached={scenarioLimitReached}
@@ -2551,6 +2582,7 @@ export default function Page() {
                   onCopyMaskToTarget={copyMaskToTarget}
                   onClearTargetLayer={clearTargetLayer}
                   onUpgradeIntent={(source) => { void startUpgradeCheckout(source); }}
+                  onReinitWithParams={maskMode === "CUSTOM" ? reinitializeFromTemplate : undefined}
                 />
               )}
               resolvedMaskShapes={maskMode === "TEMPLATE" ? resolvedMaskShapes : undefined}
@@ -2763,7 +2795,7 @@ function templateParamDefaults(id: NonNullable<SimRequest["mask"]["template_id"]
       // Shows real EUV proximity effects; 500 nm length fits well in the 1100 nm FOV.
       return { cd_nm: 24, length_nm: 500 };
     case "DENSE_LS":
-      return { cd_nm: 60, length_nm: 900, pitch_nm: 140 };
+      return { cd_nm: 150, length_nm: 900, pitch_nm: 250 };
     case "LINE_END_RAW_DUV":
       return { cd_nm: 100, length_nm: 600 };
     case "LINE_END_RAW_EUV":

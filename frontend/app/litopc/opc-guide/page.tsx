@@ -8,7 +8,7 @@ export default function OpcGuidePage() {
       {/* ── Hero ─────────────────────────────────────────────────────── */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
         <div>
-          <h1 style={h1Style}>Model-Based OPC Correction</h1>
+          <h1 style={h1Style}>How OPC Works</h1>
           <p style={subtitleStyle}>
             How litopc iteratively reshapes mask polygons so the printed contour
             matches your design target — and what happens under the hood.

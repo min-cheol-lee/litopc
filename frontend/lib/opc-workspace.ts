@@ -108,8 +108,8 @@ function templateRawShapes(templateId: TemplateID, params: Record<string, number
   }
 
   if (normalizedTemplateId === "DENSE_LS") {
-    const cd = params.cd_nm ?? 60;
-    const pitch = params.pitch_nm ?? 140;
+    const cd = params.cd_nm ?? 150;
+    const pitch = params.pitch_nm ?? 250;
     const nReq = Math.max(1, Math.floor(params.n_lines ?? 7));
     const n = fitDenseLineCountInFov(cd, pitch, nReq, fov);
     const h = params.length_nm ?? 900;

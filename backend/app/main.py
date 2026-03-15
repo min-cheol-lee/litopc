@@ -93,10 +93,12 @@ DISABLED_TEMPLATES = {
 ENABLED_TEMPLATES_BY_PRESET_FAMILY = {
     "DUV": {
         "ISO_LINE",
+        "ISO_LINE_DUV",
         "DENSE_LS",
         "CONTACT_RAW",
         "CONTACT_OPC_SERIF",
         "LINE_END_RAW",
+        "LINE_END_RAW_DUV",
         "LINE_END_OPC_HAMMER",
         # Keep DUV staircase presets disabled for now.
         # Re-enable later by adding them back here.
@@ -108,7 +110,9 @@ ENABLED_TEMPLATES_BY_PRESET_FAMILY = {
     },
     "EUV": {
         "ISO_LINE",
+        "ISO_LINE_EUV",
         "DENSE_LS",
+        "LINE_END_RAW_EUV",
         # Keep EUV-specific square, L-shape, and stepped presets disabled for now.
         # Re-enable later by adding their canonical IDs here.
     },
@@ -358,6 +362,12 @@ def _validate_custom_mode(req: SimRequest) -> None:
                 status_code=403,
                 detail="Custom mode currently supports rectangle-only shapes.",
             )
+        # OPC internal iterations segment user shapes into many sub-rects.
+        # Skip the per-plan rect-count guard for those requests so that a
+        # Free user with 2 manual shapes can still run OPC (which may produce
+        # 8–60 sub-segments internally).
+        if req.opc_sim:
+            return
         if req.plan == "FREE":
             if len(shapes) > FREE_CUSTOM_MAX_RECTS:
                 raise HTTPException(

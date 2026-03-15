@@ -141,6 +141,8 @@ export function EditStudioDock(props: {
   onCopyMaskToTarget: () => void;
   onClearTargetLayer: () => void;
   onUpgradeIntent: (source: string) => void;
+  /** Called when the user edits a global mask param while maskMode=CUSTOM; should reinitialise the mask from the template. */
+  onReinitWithParams?: () => void;
 }) {
   const {
     layout = "full",
@@ -192,6 +194,7 @@ export function EditStudioDock(props: {
     onCopyMaskToTarget,
     onClearTargetLayer,
     onUpgradeIntent,
+    onReinitWithParams,
   } = props;
 
   const targetEditing = activeEditLayer === "TARGET";
@@ -230,9 +233,13 @@ export function EditStudioDock(props: {
   const activeInspectorTemplateId = inspectorTemplateId ?? templateId;
   const steppedTemplate = inspectorTemplateId === "STAIRCASE" || inspectorTemplateId === "STAIRCASE_OPC";
   const squareTemplate = inspectorTemplateId === "CONTACT_RAW" || inspectorTemplateId === "CONTACT_OPC_SERIF";
-  const canUseGlobalInspector = targetEditing
-    ? targetCanUseGlobalInspector
-    : (maskMode === "TEMPLATE" && activeEditLayer === "MASK");
+  // Global inspector is available whenever a template is selected.
+  // For mask: always enabled (not just in TEMPLATE mode) so users can see and adjust
+  // template-wide dims after OPC has run (maskMode="CUSTOM"). Changing a global param
+  // in CUSTOM mode updates the template params state for the next Reinitialize without
+  // overwriting the current OPC mask.
+  // For target: delegated to targetCanUseGlobalInspector (see page.tsx).
+  const canUseGlobalInspector = targetEditing ? targetCanUseGlobalInspector : true;
   const [inspectorScope, setInspectorScope] = useState<"LOCAL" | "GLOBAL">("LOCAL");
   const globalInspector = canUseGlobalInspector && inspectorScope === "GLOBAL";
   const dockMeta = useMemo(() => "Workspace", []);
@@ -241,6 +248,14 @@ export function EditStudioDock(props: {
       setInspectorScope("LOCAL");
     }
   }, [canUseGlobalInspector, inspectorScope]);
+  // When mask switches to CUSTOM mode (e.g. after OPC runs), auto-switch inspector to
+  // GLOBAL so template dims are immediately visible instead of the empty "select a rect" state.
+  // When switching back to TEMPLATE mode (Reinitialize), keep the user's last scope choice.
+  useEffect(() => {
+    if (!targetEditing && maskMode === "CUSTOM") {
+      setInspectorScope("GLOBAL");
+    }
+  }, [maskMode, targetEditing]);
   const inspectorChip = useMemo(() => {
     if (globalInspector) {
       return {
@@ -295,6 +310,9 @@ export function EditStudioDock(props: {
       return;
     }
     setParams({ ...params, [key]: v });
+    // In CUSTOM mode (e.g. after OPC), a global-inspector param change should reinitialise
+    // the mask from the template so the canvas responds immediately.
+    if (maskMode === "CUSTOM") onReinitWithParams?.();
   }
 
   function requestUpgrade(source: string) {
@@ -364,6 +382,7 @@ export function EditStudioDock(props: {
       return;
     }
     setParams(next);
+    if (maskMode === "CUSTOM") onReinitWithParams?.();
   }
 
   function setGlobalHeight(v: number) {
@@ -402,29 +421,27 @@ export function EditStudioDock(props: {
     step = 1,
   ) {
     return (
-      <>
-        <label className="label workspace-inspector-label">{label}</label>
-        <div className="row workspace-inspector-row">
-          <input
-            type="range"
-            min={min}
-            max={max}
-            step={step}
-            value={value}
-            onChange={(e) => onChange(Number(e.target.value))}
-            style={{ flex: 1 }}
-          />
-          <input
-            type="number"
-            min={min}
-            max={max}
-            step={step}
-            value={Math.round(value)}
-            onChange={(e) => onChange(Number(e.target.value))}
-            className="workspace-inspector-number"
-          />
-        </div>
-      </>
+      <div className="inspector-control-row">
+        <span className="inspector-control-label">{label}</span>
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="inspector-control-slider"
+        />
+        <input
+          type="number"
+          min={min}
+          max={max}
+          step={step}
+          value={Math.round(value)}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="inspector-control-number"
+        />
+      </div>
     );
   }
 
@@ -452,14 +469,23 @@ export function EditStudioDock(props: {
                   onClick={() => onSetActiveEditLayer("TARGET")}
                   disabled={activeEditLayer === "TARGET"}
                 >
-                  Target
+                  Target{targetShapes.length === 0 && activeEditLayer !== "TARGET" && (
+                    <span className="layer-tab-dot" aria-hidden="true" />
+                  )}
                 </button>
               </div>
             </div>
-            <div className="workspace-inline-actions workspace-layer-actions">
-              <button className="mini-btn slim" onClick={onCopyTargetToMask}>Target -&gt; Mask</button>
-              <button className="mini-btn slim" onClick={onCopyMaskToTarget}>Mask -&gt; Target</button>
-              <button className="mini-btn slim" onClick={onClearTargetLayer}>Clear</button>
+            <div className={`workspace-layer-actions${targetShapes.length === 0 ? " no-target" : ""}`}>
+              <button className="layer-action-btn" onClick={onCopyMaskToTarget} title="Copy current mask shapes to Target layer">
+                <span>Mask</span><span className="layer-action-arrow">→</span><span>Target</span>
+              </button>
+              <button className="layer-action-btn" onClick={onCopyTargetToMask} title="Copy target shapes back to Mask layer" disabled={targetShapes.length === 0}>
+                <span>Target</span><span className="layer-action-arrow">→</span><span>Mask</span>
+              </button>
+              <button className="layer-action-btn danger" onClick={onClearTargetLayer} title="Clear all target shapes" disabled={targetShapes.length === 0}>
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 2l8 8M10 2l-8 8"/></svg>
+                Clear
+              </button>
             </div>
           </div>
 
@@ -486,7 +512,7 @@ export function EditStudioDock(props: {
                   aria-label="Add rectangle"
                 >
                   <StudioToolIcon kind="add" />
-                  <span>Add Rect</span>
+                  <span>Add</span>
                 </button>
                 <button
                   className={`mini-btn draw-action workspace-tool-button ${editorTool === "DRAW_SUBTRACT_RECT" ? "active-draw-btn" : ""}`}
@@ -496,7 +522,7 @@ export function EditStudioDock(props: {
                   aria-label="Subtract rectangle"
                 >
                   <StudioToolIcon kind="subtract" />
-                  <span>Sub Rect</span>
+                  <span>Sub</span>
                 </button>
               </div>
             </div>
@@ -565,7 +591,7 @@ export function EditStudioDock(props: {
                           >
                             {`T${i + 1}`}
                           </button>
-                          <button className="mini-btn slim danger" onClick={() => onDeleteCustomShape(i)} aria-label={`Delete target ${i + 1}`}>x</button>
+                          <button className="mini-btn slim danger" onClick={() => onDeleteCustomShape(i)} aria-label={`Delete target ${i + 1}`}>×</button>
                         </div>
                       ))}
                     </div>
@@ -604,7 +630,7 @@ export function EditStudioDock(props: {
                               >
                                 {label}
                               </button>
-                              <button className="mini-btn slim danger" onClick={() => onDeleteCustomShape(i)} aria-label={`Delete edit ${i + 1}`}>x</button>
+                              <button className="mini-btn slim danger" onClick={() => onDeleteCustomShape(i)} aria-label={`Delete edit ${i + 1}`}>×</button>
                             </div>
                           );
                         })}
@@ -709,41 +735,50 @@ export function EditStudioDock(props: {
         <div className="workspace-edit-dock-side">
           <div className="workspace-studio-block workspace-edit-inspector">
             <div className="workspace-mini-head">
-              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                <span>Inspector</span>
-                <div className={`workspace-inspector-chip workspace-inspector-chip-${inspectorChip.kind}`} title={inspectorChip.title}>
-                  {inspectorChip.label}
+              <span>Inspector</span>
+              <span>
+                {globalInspector
+                  ? (targetEditing ? "Target" : "Pattern")
+                  : hasMultiManualSelection
+                    ? "Multi-select"
+                    : selectedRect
+                      ? `${Math.round(selectedRect.w_nm)} × ${Math.round(selectedRect.h_nm)} nm`
+                      : "—"}
+              </span>
+            </div>
+            <div className="inspector-meta-row">
+              <div className={`workspace-inspector-chip workspace-inspector-chip-${inspectorChip.kind}`} title={inspectorChip.title}>
+                {inspectorChip.label}
+              </div>
+              {canUseGlobalInspector && (
+                <div className="workspace-inspector-scope">
+                  <button
+                    className={inspectorScope === "LOCAL" ? "is-active" : ""}
+                    onClick={() => {
+                      setInspectorScope("LOCAL");
+                      // In CUSTOM mode, auto-select the first shape so local controls appear immediately.
+                      if (maskMode === "CUSTOM" && !hasManualSelection && editableShapes.length > 0) {
+                        onSelectCustomShapeChip(0);
+                      }
+                    }}
+                    disabled={inspectorScope === "LOCAL"}
+                  >Local</button>
+                  <button
+                    className={inspectorScope === "GLOBAL" ? "is-active" : ""}
+                    onClick={() => setInspectorScope("GLOBAL")}
+                    disabled={inspectorScope === "GLOBAL"}
+                  >Global</button>
                 </div>
-              </div>
-              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-                {canUseGlobalInspector && (
-                  <div className="workspace-inspector-scope">
-                    <button
-                      className={inspectorScope === "LOCAL" ? "is-active" : ""}
-                      onClick={() => setInspectorScope("LOCAL")}
-                      disabled={inspectorScope === "LOCAL"}
-                    >Local</button>
-                    <button
-                      className={inspectorScope === "GLOBAL" ? "is-active" : ""}
-                      onClick={() => setInspectorScope("GLOBAL")}
-                      disabled={inspectorScope === "GLOBAL"}
-                    >Global</button>
-                  </div>
-                )}
-                <span>
-                  {globalInspector
-                    ? (targetEditing ? "Target" : "Pattern")
-                    : hasMultiManualSelection
-                      ? "Move only"
-                      : selectedRect
-                        ? `${Math.round(selectedRect.w_nm)} × ${Math.round(selectedRect.h_nm)} nm`
-                        : "—"}
-                </span>
-              </div>
+              )}
             </div>
 
             {globalInspector ? (
               <>
+                {!targetEditing && maskMode === "CUSTOM" && (
+                  <div className="small-note tiny-note workspace-inspector-note" style={{ marginBottom: 6 }}>
+                    Template dims — changes apply on Reinitialize.
+                  </div>
+                )}
                 {(activeInspectorTemplateId === "ISO_LINE" || activeInspectorTemplateId === "DENSE_LS") && renderInspectorControl(
                   "Width (nm)",
                   inspectorParams.cd_nm ?? 100,
@@ -876,9 +911,11 @@ export function EditStudioDock(props: {
               </>
             ) : (
               <div className="small-note tiny-note workspace-inspector-note">
-                {canUseGlobalInspector
-                  ? "Select a feature to edit locally, or switch to Global for pattern-wide tuning."
-                  : "Select a manual rectangle or a preset main feature to tune its geometry."}
+                {targetEditing
+                  ? "Select a target shape to edit locally, or switch to Global for pattern-wide tuning."
+                  : maskMode === "CUSTOM"
+                    ? "Select a mask rect to edit locally, or switch to Global to view/adjust template dims."
+                    : "Select a feature to edit locally, or switch to Global for pattern-wide tuning."}
               </div>
             )}
 

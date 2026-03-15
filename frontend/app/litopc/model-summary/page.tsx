@@ -7,7 +7,7 @@ export default function ModelSummaryPage() {
       {/* ── Hero ─────────────────────────────────────────────────────── */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
         <div>
-          <h1 style={h1Style}>Imaging &amp; Limits Guide</h1>
+          <h1 style={h1Style}>How Imaging Works</h1>
           <p style={subtitleStyle}>
             How litopc's optical model works, what it simplifies, and where the
             physics boundaries are — so you can interpret simulation results correctly.

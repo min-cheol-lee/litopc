@@ -32,6 +32,7 @@ export type SimRequest = {
   dose: number;
   focus: number;
   return_intensity: boolean;
+  opc_sim?: boolean;
   mask: {
     mode: "TEMPLATE" | "CUSTOM";
     template_id?: TemplateID;

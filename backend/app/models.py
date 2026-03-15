@@ -86,6 +86,7 @@ class SimRequest(BaseModel):
     dose: float = Field(0.5, ge=0.0, le=1.0)           # threshold proxy
     focus: float = Field(0.0, ge=0.0, le=1.0)          # Pro blur proxy
     return_intensity: bool = False                     # Optional aerial intensity payload
+    opc_sim: bool = False                              # Internal OPC iteration — bypasses per-plan rect-count guard
 
 
 SweepParam = Literal[
