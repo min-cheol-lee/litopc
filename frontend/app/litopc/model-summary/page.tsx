@@ -15,9 +15,6 @@ export default function ModelSummaryPage() {
           <nav style={navStyle}>
             {[
               ["OPC Guide", "/litopc/opc-guide"],
-              ["Benchmark Gallery", "/litopc/benchmark-gallery"],
-              ["Model Change Log", "/litopc/model-change-log"],
-              ["Trust Dashboard", "/litopc/trust-dashboard"],
             ].map(([label, href]) => (
               <a key={href} className="model-guide-link" href={href}>{label}</a>
             ))}
@@ -287,6 +284,69 @@ export default function ModelSummaryPage() {
         </ul>
       </section>
 
+      {/* ── §9 Validated Cases ───────────────────────────────────────── */}
+      <section style={sectionStyle}>
+        <h2 style={h2Style}><SectionBadge n={9} />Validated Behaviors</h2>
+        <p style={{ fontSize: 14, opacity: 0.78, marginBottom: 14 }}>
+          Representative cases verified against expected physics behavior. Educational
+          validation only — not manufacturing qualification.
+        </p>
+        <table style={tableStyle}>
+          <thead>
+            <tr style={theadRowStyle}>
+              <th style={thStyle}>Case</th>
+              <th style={thStyle}>Preset</th>
+              <th style={thStyle}>What is checked</th>
+              <th style={{ ...thStyle, textAlign: "center" }}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              ["ISO line dose monotonicity", "DUV 193 nm Imm", "Higher dose threshold shrinks printed CD monotonically", "verified"],
+              ["Sub-resolution guardrail non-print", "DUV 193 nm Dry", "Features below k₁λ/NA return no contour and CD = null", "verified"],
+              ["Square width monotonicity", "DUV 193 nm Dry", "Larger mask width yields non-decreasing printed CD", "verified"],
+              ["Stepped interconnect dose stability", "EUV Low-NA", "CD monotonically shrinks with dose across sampled range", "verified"],
+              ["Dense L/S EUV presence", "EUV Low-NA", "Representative dense pattern prints within expected CD band", "verified"],
+              ["OPC serif response", "DUV 193 nm Dry", "Increasing serif size yields monotonic non-decreasing CD", "verified"],
+            ].map(([title, preset, check, status], i) => (
+              <tr key={title as string} style={i % 2 === 1 ? zebraStyle : {}}>
+                <td style={tdStyle}>{title}</td>
+                <td style={{ ...tdStyle, whiteSpace: "nowrap", fontSize: 12.5 }}>{preset}</td>
+                <td style={tdStyle}>{check}</td>
+                <td style={{ ...tdStyle, textAlign: "center" }}>
+                  <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 20, fontSize: 11, fontWeight: 700, letterSpacing: "0.03em", background: "rgba(27,133,84,0.1)", color: "#176744", border: "1px solid rgba(27,133,84,0.25)" }}>
+                    ✓ {(status as string).toUpperCase()}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      {/* ── §10 Recent Updates ───────────────────────────────────────── */}
+      <section style={sectionStyle}>
+        <h2 style={h2Style}><SectionBadge n={10} />Recent Updates</h2>
+        <div style={{ display: "grid", gap: 10, marginTop: 4 }}>
+          {[
+            { date: "2026-02-24", tag: "visualization", summary: "Non-dose stack view and 3D sweep rendering", impact: "Sweep stacks are now readable in both 2D and 3D across camera angles." },
+            { date: "2026-02-23", tag: "visualization", summary: "Sweep overlay in 2D/3D with active-point focus controls", impact: "Dose/focus/CD sweep trends can be inspected directly on geometry and contour overlays." },
+            { date: "2026-02-20", tag: "model", summary: "Baseline educational guard model with CD_min check", impact: "Features below k₁λ/NA are treated as non-printing. Contour output suppressed." },
+          ].map(({ date, tag, summary, impact }) => (
+            <div key={date + summary} style={{ display: "flex", gap: 14, alignItems: "flex-start", padding: "12px 0", borderBottom: "1px solid rgba(33,44,64,0.08)" }}>
+              <div style={{ flexShrink: 0, minWidth: 90 }}>
+                <div style={{ fontSize: 12, fontWeight: 660, color: "rgba(16,28,48,0.55)" }}>{date}</div>
+                <span style={{ display: "inline-block", marginTop: 4, padding: "1px 7px", borderRadius: 20, fontSize: 11, fontWeight: 660, background: "rgba(30,80,200,0.07)", color: "rgba(30,80,200,0.8)", border: "1px solid rgba(30,80,200,0.15)" }}>{tag}</span>
+              </div>
+              <div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 3 }}>{summary}</div>
+                <div style={{ fontSize: 13, opacity: 0.72, lineHeight: 1.55 }}>{impact}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* ── Upgrade card ─────────────────────────────────────────────── */}
       <UpgradeCard />
 
@@ -298,8 +358,6 @@ export default function ModelSummaryPage() {
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
           <a href="/litopc" style={footerLinkStyle}>← Back to Lab</a>
           <a href="/litopc/opc-guide" style={footerLinkStyle}>OPC Guide</a>
-          <a href="/litopc/benchmark-gallery" style={footerLinkStyle}>Benchmark Gallery</a>
-          <a href="/litopc/model-change-log" style={footerLinkStyle}>Change Log</a>
         </div>
       </footer>
     </main>

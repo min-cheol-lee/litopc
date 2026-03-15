@@ -16,9 +16,6 @@ export default function OpcGuidePage() {
           <nav style={navStyle}>
             {[
               ["Model Guide", "/litopc/model-summary"],
-              ["Benchmark Gallery", "/litopc/benchmark-gallery"],
-              ["Trust Dashboard", "/litopc/trust-dashboard"],
-              ["Model Change Log", "/litopc/model-change-log"],
             ].map(([label, href]) => (
               <a key={href} className="model-guide-link" href={href}>{label}</a>
             ))}
@@ -321,8 +318,6 @@ bottom →  h_nm  += delta   (outward = +y)`}</pre>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
           <a href="/litopc" style={footerLinkStyle}>← Back to Lab</a>
           <a href="/litopc/model-summary" style={footerLinkStyle}>Model Guide</a>
-          <a href="/litopc/benchmark-gallery" style={footerLinkStyle}>Benchmark Gallery</a>
-          <a href="/litopc/model-change-log" style={footerLinkStyle}>Change Log</a>
         </div>
       </footer>
     </main>
