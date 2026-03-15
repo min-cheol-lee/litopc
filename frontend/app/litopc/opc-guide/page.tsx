@@ -1,117 +1,104 @@
+"use client";
+import { useState } from "react";
+
 export default function OpcGuidePage() {
   return (
-    <main style={{ maxWidth: 960, margin: "0 auto", padding: "28px 22px 56px", lineHeight: 1.65, color: "rgba(16,28,48,0.92)" }}>
+    <main style={pageStyle}>
 
-      {/* Header */}
-      <h1 style={{ margin: 0, fontSize: 36, letterSpacing: "-0.025em", fontWeight: 720 }}>
-        Model-Based OPC Correction
-      </h1>
-      <p style={{ marginTop: 10, fontSize: 16, opacity: 0.72, maxWidth: 680 }}>
-        How litopc iteratively reshapes mask polygons so the simulated printed contour
-        matches your design target — and what happens under the hood.
-      </p>
-
-      {/* Nav */}
-      <nav style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
-        {[
-          ["Model Guide", "/litopc/model-summary"],
-          ["Benchmark Gallery", "/litopc/benchmark-gallery"],
-          ["Trust Dashboard", "/litopc/trust-dashboard"],
-          ["Model Change Log", "/litopc/model-change-log"],
-          ["← Back to Lab", "/litopc"],
-        ].map(([label, href]) => (
-          <a key={href} className="model-guide-link" href={href}>{label}</a>
-        ))}
-      </nav>
-
-      {/* 1 — Why OPC */}
-      <section style={sectionStyle}>
-        <h2 style={h2Style}>1 — Why OPC?</h2>
-        <p>
-          Light diffracts. When a 100 nm feature is imaged through a lens with wavelength λ = 193 nm,
-          the aerial intensity pattern at wafer level is heavily blurred — corners round, line-ends
-          pull back, and contacts shrink asymmetrically. Without correction, the printed shape
-          can differ from the intended design by tens of nanometers.
-        </p>
-        <p>
-          <strong>Optical Proximity Correction (OPC)</strong> pre-distorts the mask so that after
-          diffraction and resist exposure, the printed shape is as close to the design intent as
-          possible. Rule-based OPC uses fixed biasing tables derived from process characterization.
-          Model-based OPC — what litopc implements — uses a fast simulation loop to measure the
-          error directly and converge on the correct mask shape.
-        </p>
-        <div style={calloutStyle("#eef4ff", "rgba(30,80,200,0.15)")}>
-          <strong>Analogy:</strong> Imagine shooting at a target while accounting for wind.
-          Rule-based OPC says "wind is usually from the west, offset 5 cm left."
-          Model-based OPC measures the actual wind each shot and adjusts accordingly.
+      {/* ── Hero ─────────────────────────────────────────────────────── */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
+        <div>
+          <h1 style={h1Style}>Model-Based OPC Correction</h1>
+          <p style={subtitleStyle}>
+            How litopc iteratively reshapes mask polygons so the printed contour
+            matches your design target — and what happens under the hood.
+          </p>
+          <nav style={navStyle}>
+            {[
+              ["Model Guide", "/litopc/model-summary"],
+              ["Benchmark Gallery", "/litopc/benchmark-gallery"],
+              ["Trust Dashboard", "/litopc/trust-dashboard"],
+              ["Model Change Log", "/litopc/model-change-log"],
+            ].map(([label, href]) => (
+              <a key={href} className="model-guide-link" href={href}>{label}</a>
+            ))}
+            <a href="/litopc" style={backBtnStyle}>← Back to Lab</a>
+          </nav>
         </div>
+      </div>
+
+      {/* ── §1 Why OPC? ──────────────────────────────────────────────── */}
+      <section style={sectionStyle}>
+        <h2 style={h2Style}><SectionBadge n={1} />Why OPC?</h2>
+        <p>
+          Light diffracts. A 100 nm feature imaged at λ = 193 nm arrives at the wafer
+          heavily blurred — corners round, line-ends pull back, contacts shrink
+          asymmetrically. Without correction the printed shape can deviate from design
+          intent by tens of nanometers.
+        </p>
+        <p style={{ marginTop: 10 }}>
+          <strong>Optical Proximity Correction (OPC)</strong> pre-distorts the mask so
+          that after diffraction and resist exposure the printed shape is as close to the
+          design intent as possible. Rule-based OPC uses fixed biasing tables.
+          Model-based OPC — what litopc implements — measures the error directly each
+          iteration and converges on the correct mask shape.
+        </p>
+        <Callout type="info">
+          <strong>Analogy:</strong> Imagine shooting at a target in wind. Rule-based OPC
+          says "wind is usually from the west — offset 5 cm left." Model-based OPC
+          measures the actual wind each shot and adjusts accordingly.
+        </Callout>
       </section>
 
-      {/* 2 — The EPE Feedback Loop */}
+      {/* ── §2 EPE Feedback Loop ─────────────────────────────────────── */}
       <section style={sectionStyle}>
-        <h2 style={h2Style}>2 — The EPE Feedback Loop</h2>
+        <h2 style={h2Style}><SectionBadge n={2} />The EPE Feedback Loop</h2>
         <p>
-          The correction algorithm is built around <strong>Edge Placement Error (EPE)</strong>:
-          the signed distance from the simulated contour to the target edge, measured along
-          the outward normal of that edge.
+          The algorithm is built around <strong>Edge Placement Error (EPE)</strong>:
+          the signed distance from the simulated contour to the target edge, measured
+          along the outward normal.
         </p>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 14 }}>
-          <div style={cardStyle}>
-            <div style={cardLabelStyle}>EPE &lt; 0</div>
-            <div style={{ fontSize: 13, marginTop: 4 }}>
-              Contour is <em>inside</em> the target → mask needs to grow outward
-            </div>
-          </div>
-          <div style={cardStyle}>
-            <div style={cardLabelStyle}>EPE &gt; 0</div>
-            <div style={{ fontSize: 13, marginTop: 4 }}>
-              Contour is <em>outside</em> the target → mask needs to shrink inward
-            </div>
-          </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
+          <StatCard label="EPE < 0" desc="Contour is inside the target → mask grows outward" />
+          <StatCard label="EPE > 0" desc="Contour is outside the target → mask shrinks inward" />
         </div>
 
         <p style={{ marginTop: 16 }}>Each iteration follows four steps:</p>
-        <ol style={{ paddingLeft: 22, display: "grid", gap: 6 }}>
-          <li><strong>Simulate</strong> the current mask → extract the printed contour at the dose threshold.</li>
-          <li><strong>Sample</strong> N evenly-spaced points along each target edge (15 % margin from corners).</li>
+        <ol style={{ paddingLeft: 22, display: "grid", gap: 7, marginTop: 6 }}>
+          <li><strong>Simulate</strong> the current mask → extract printed contour at dose threshold.</li>
+          <li><strong>Sample</strong> N evenly-spaced points along each target edge (15% margin from corners).</li>
           <li><strong>Measure EPE</strong> at each sample: find nearest contour point, project onto outward normal.</li>
-          <li><strong>Bias</strong> the mask edge by <code>−gain × mean(EPE)</code> in the outward direction.</li>
+          <li><strong>Bias</strong> the mask edge by <code style={inlineCode}>−gain × mean(EPE)</code> in the outward direction.</li>
         </ol>
 
-        <div style={codeBlockStyle}>
-{`delta = −gain × mean_EPE
+        <pre style={codeBlockStyle}>{`delta = −gain × mean_EPE
 
-// Apply to edge:
-left   → x_nm  −= delta   (outward = −x)
-right  → w_nm  += delta   (outward = +x)
-top    → y_nm  −= delta   (outward = −y)
-bottom → h_nm  += delta   (outward = +y)`}
-        </div>
+// Applied per edge direction:
+left   →  x_nm  −= delta   (outward = −x)
+right  →  w_nm  += delta   (outward = +x)
+top    →  y_nm  −= delta   (outward = −y)
+bottom →  h_nm  += delta   (outward = +y)`}</pre>
 
-        <p>
-          Sampling is performed on the <em>target</em> edge position (fixed reference frame),
-          not on the shifting mask edge. This keeps the EPE measurement stable across iterations
-          and prevents feedback oscillation.
+        <p style={{ marginTop: 12 }}>
+          EPE is sampled on the <em>target</em> edge (fixed reference frame), not the
+          shifting mask edge. This keeps the measurement stable and prevents feedback oscillation.
         </p>
       </section>
 
-      {/* 3 — Sub-Segmentation */}
+      {/* ── §3 Sub-Segmentation ──────────────────────────────────────── */}
       <section style={sectionStyle}>
-        <h2 style={h2Style}>3 — Sub-Segmentation for Shape Correction</h2>
+        <h2 style={h2Style}><SectionBadge n={3} />Sub-Segmentation for Shape Correction</h2>
         <p>
-          A single un-segmented rectangle can only move its edges uniformly — the entire left edge
-          shifts by the same amount. Real OPC correction creates <em>non-uniform</em> edge profiles:
-          hammerheads at line ends, serifs at corners, asymmetric bias near adjacent features.
-        </p>
-        <p>
-          litopc splits each mask shape into smaller cells before running the correction loop.
-          Each cell then corrects its own portion of the edge independently.
+          A single rectangle can only move its edges uniformly. Real OPC produces
+          non-uniform profiles — hammerheads at line ends, serifs at corners, asymmetric
+          bias near adjacent features. litopc splits each shape into smaller cells;
+          each cell corrects its own portion of the edge independently.
         </p>
 
         <table style={tableStyle}>
           <thead>
-            <tr style={{ background: "rgba(240,245,252,0.75)" }}>
+            <tr style={theadRowStyle}>
               <th style={thStyle}>Shape</th>
               <th style={thStyle}>Condition</th>
               <th style={thStyle}>Segmentation</th>
@@ -119,128 +106,94 @@ bottom → h_nm  += delta   (outward = +y)`}
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td style={tdStyle}>Contact hole / pad</td>
-              <td style={tdStyle}>Aspect ratio &lt; 2</td>
-              <td style={tdStyle}>2D grid (N × M cells)</td>
-              <td style={tdStyle}>Corner serifs emerge naturally</td>
-            </tr>
-            <tr>
-              <td style={tdStyle}>Vertical line</td>
-              <td style={tdStyle}>h ≥ w, AR ≥ 2</td>
-              <td style={tdStyle}>Horizontal strips</td>
-              <td style={tdStyle}>Hammerheads at line ends</td>
-            </tr>
-            <tr>
-              <td style={tdStyle}>Horizontal line</td>
-              <td style={tdStyle}>w &gt; h, AR ≥ 2</td>
-              <td style={tdStyle}>Vertical strips</td>
-              <td style={tdStyle}>Line-end pullback compensation</td>
-            </tr>
+            {[
+              ["Contact / pad", "Aspect ratio < 2", "2D grid (N × M cells)", "Corner serifs emerge naturally"],
+              ["Vertical line", "h ≥ w, AR ≥ 2", "Horizontal strips", "Hammerheads at line ends"],
+              ["Horizontal line", "w > h, AR ≥ 2", "Vertical strips", "Line-end pullback compensation"],
+            ].map(([s, c, seg, r], i) => (
+              <tr key={s} style={i % 2 === 1 ? zebraStyle : {}}>
+                <td style={tdStyle}>{s}</td>
+                <td style={tdStyle}>{c}</td>
+                <td style={tdStyle}>{seg}</td>
+                <td style={tdStyle}>{r}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
 
         <p style={{ marginTop: 14 }}>
-          Internal boundaries between adjacent cells are automatically detected and skipped —
-          only the <em>outer</em> edges of the union are corrected. This works by probing 2 nm
-          outward from each edge: if the probe lands inside a neighboring cell, the edge
-          is marked interior.
+          Internal boundaries between adjacent cells are automatically detected and
+          skipped — only <em>outer</em> edges of the union are corrected. Detection works
+          by probing 2 nm outward from each edge: if the probe lands inside a neighboring
+          cell, the edge is marked interior and excluded.
         </p>
-
-        <div style={calloutStyle("#f0fbf4", "rgba(30,160,80,0.15)")}>
-          <strong>Segment size and lithography physics:</strong> The minimum segment size is
-          chosen per process node so that each cell remains above the Rayleigh printability
-          floor (k₁λ/NA). Cells below this floor would produce no contour and stall correction.
-          DUV dry uses 80 nm cells; EUV can use 15–20 nm.
-        </div>
+        <Callout type="tip">
+          <strong>Segment size and physics:</strong> The minimum cell size is chosen per
+          process so each cell stays above the Rayleigh printability floor (k₁λ/NA).
+          Cells below this floor produce no contour and stall correction.
+          Default sizes: DUV dry 80 nm · DUV imm 50 nm · EUV LNA 20 nm · EUV HNA 15 nm.
+        </Callout>
       </section>
 
-      {/* 4 — Convergence */}
+      {/* ── §4 Convergence ───────────────────────────────────────────── */}
       <section style={sectionStyle}>
-        <h2 style={h2Style}>4 — Convergence and Auto-Stop</h2>
+        <h2 style={h2Style}><SectionBadge n={4} />Convergence and Auto-Stop</h2>
         <p>
-          OPC is not guaranteed to converge monotonically. Gain values that are too high cause
-          oscillation; features near the Rayleigh limit can diverge when the mask grows into
-          diffraction-dominated territory.
+          OPC is not guaranteed to converge monotonically. Gain values that are too high
+          cause oscillation; features near the Rayleigh limit can diverge as the mask
+          grows into diffraction-dominated territory.
         </p>
-        <p>
-          litopc monitors EPE after each iteration within a batch. If the EPE rises more than
-          20 % above the best value seen in that batch for two consecutive iterations,
-          the run is automatically stopped. After each batch, the UI classifies the outcome:
+        <p style={{ marginTop: 10 }}>
+          litopc monitors EPE after each iteration. If EPE rises more than 20% above
+          the best value seen in the batch for two consecutive iterations, the run
+          stops automatically. After each batch the UI classifies the outcome:
         </p>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginTop: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginTop: 12 }}>
           {[
-            { label: "Improved", desc: "> 5 % EPE reduction", color: "#e6f8ee", border: "rgba(30,160,80,0.2)" },
-            { label: "Plateau", desc: "< 5 % reduction — further iterations unlikely to help", color: "#fffbec", border: "rgba(160,120,20,0.2)" },
-            { label: "Diverged", desc: "EPE increased — roll back recommended", color: "#fff0ee", border: "rgba(200,60,40,0.2)" },
-          ].map(({ label, desc, color, border }) => (
-            <div key={label} style={{ background: color, border: `1px solid ${border}`, borderRadius: 10, padding: "10px 12px" }}>
-              <div style={{ fontWeight: 650, fontSize: 13 }}>{label}</div>
-              <div style={{ fontSize: 12, marginTop: 4, opacity: 0.8 }}>{desc}</div>
+            { label: "Improved", desc: "> 5% EPE reduction", bg: "#e8f8ee", border: "rgba(30,160,80,0.25)" },
+            { label: "Plateau", desc: "< 5% reduction — further iterations unlikely to help", bg: "#fffbec", border: "rgba(160,120,20,0.25)" },
+            { label: "Diverged", desc: "EPE increased — roll back recommended", bg: "#fff0ee", border: "rgba(200,60,40,0.25)" },
+          ].map(({ label, desc, bg, border }) => (
+            <div key={label} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 10, padding: "12px 14px" }}>
+              <div style={{ fontWeight: 660, fontSize: 13 }}>{label}</div>
+              <div style={{ fontSize: 12.5, marginTop: 5, opacity: 0.82, lineHeight: 1.5 }}>{desc}</div>
             </div>
           ))}
         </div>
 
         <p style={{ marginTop: 14 }}>
-          A <strong>rollback checkpoint</strong> is saved before each "+5 iter" continuation batch.
+          A <strong>rollback checkpoint</strong> is saved before each "+5 iter" batch.
           If results worsen, one click restores the previous mask, contours, and EPE history.
         </p>
       </section>
 
-      {/* 5 — MRC Constraints */}
+      {/* ── §5 MRC Constraints ───────────────────────────────────────── */}
       <section style={sectionStyle}>
-        <h2 style={h2Style}>5 — Mask Rule Check (MRC) Constraints</h2>
+        <h2 style={h2Style}><SectionBadge n={5} />Mask Rule Check (MRC) Constraints</h2>
         <p>
-          Real photomask manufacturing imposes geometric ground rules — collectively called
-          MRC — that OPC must respect. Violating them produces masks that either cannot be
-          fabricated or print incorrectly. litopc enforces three classes of MRC constraint
-          on every edge delta before it is applied.
+          Real photomask manufacturing imposes geometric ground rules (MRC) that OPC
+          must respect. litopc enforces four constraint classes on every edge delta
+          before it is applied.
         </p>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
           {[
-            {
-              label: "Min CD — no break",
-              desc: "Minimum feature width / height. A cell that shrinks below the Rayleigh printability floor creates a physical disconnection — the mask 'breaks' mid-feature. OPC is clamped so this never happens.",
-              color: "#eef4ff",
-              border: "rgba(30,80,200,0.15)",
-            },
-            {
-              label: "Min Space — no bridge",
-              desc: "Minimum gap between distinct shapes. Outward OPC growth is clamped so two separately-corrected cells cannot merge into an unintended bridge connection.",
-              color: "#f0fbf4",
-              border: "rgba(30,160,80,0.15)",
-            },
-            {
-              label: "Max Bias — bounded amplitude",
-              desc: "Maximum edge displacement from the batch-start position. Bounds the total correction amplitude per run so extreme staircase profiles remain within manufacturable limits.",
-              color: "#fffbec",
-              border: "rgba(160,120,20,0.15)",
-            },
-            {
-              label: "Grid snap — e-beam writeability",
-              desc: "All edge coordinates are snapped to the manufacturing grid after each iteration (1 nm for DUV, 0.5 nm for EUV). Prevents sub-grid features that an e-beam mask writer cannot address.",
-              color: "#fdf0ff",
-              border: "rgba(120,40,160,0.15)",
-            },
-          ].map(({ label, desc, color, border }) => (
-            <div key={label} style={{ background: color, border: `1px solid ${border}`, borderRadius: 10, padding: "12px 14px" }}>
-              <div style={{ fontWeight: 650, fontSize: 13 }}>{label}</div>
+            { label: "Min CD — no break", desc: "A cell that shrinks below the Rayleigh floor creates a physical disconnection. OPC is clamped so this never happens.", bg: "#eef4ff", border: "rgba(30,80,200,0.18)" },
+            { label: "Min Space — no bridge", desc: "Outward OPC growth is clamped so two separately-corrected cells cannot merge into an unintended bridge.", bg: "#f0fbf4", border: "rgba(30,160,80,0.18)" },
+            { label: "Max Bias — bounded amplitude", desc: "Maximum edge displacement from the batch-start position. Limits correction amplitude so staircase profiles stay manufacturable.", bg: "#fffbec", border: "rgba(160,120,20,0.18)" },
+            { label: "Grid snap — e-beam writeability", desc: "All coordinates snapped to the manufacturing grid after each iteration (1 nm DUV, 0.5 nm EUV). Prevents sub-grid features.", bg: "#fdf0ff", border: "rgba(120,40,160,0.18)" },
+          ].map(({ label, desc, bg, border }) => (
+            <div key={label} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 10, padding: "12px 14px" }}>
+              <div style={{ fontWeight: 660, fontSize: 13 }}>{label}</div>
               <div style={{ fontSize: 12.5, marginTop: 5, lineHeight: 1.5, opacity: 0.85 }}>{desc}</div>
             </div>
           ))}
         </div>
 
-        <p style={{ marginTop: 16 }}>
-          Each constraint is preset-specific. Min CD and min space are derived from
-          the Rayleigh resolution limit (k₁·λ/NA); max bias is ≈ half the segment size;
-          grid pitch reflects the e-beam address unit for each process node:
-        </p>
-
-        <table style={tableStyle}>
+        <table style={{ ...tableStyle, marginTop: 16 }}>
           <thead>
-            <tr style={{ background: "rgba(240,245,252,0.75)" }}>
+            <tr style={theadRowStyle}>
               <th style={thStyle}>Process</th>
               <th style={thStyle}>Min CD</th>
               <th style={thStyle}>Min Space</th>
@@ -252,10 +205,10 @@ bottom → h_nm  += delta   (outward = +y)`}
             {[
               ["DUV 193 nm Dry (NA 0.93)", "50 nm", "50 nm", "40 nm", "1 nm"],
               ["DUV 193 nm Imm (NA 1.35)", "32 nm", "32 nm", "25 nm", "1 nm"],
-              ["EUV Low NA (13.5 nm, NA 0.33)", "12 nm", "12 nm", "10 nm", "0.5 nm"],
-              ["EUV High NA (13.5 nm, NA 0.55)", "6 nm", "6 nm", "6 nm", "0.5 nm"],
-            ].map(([proc, cd, sp, bias, grid]) => (
-              <tr key={proc}>
+              ["EUV Low-NA (13.5 nm, NA 0.33)", "12 nm", "12 nm", "10 nm", "0.5 nm"],
+              ["EUV High-NA (13.5 nm, NA 0.55)", "6 nm", "6 nm", "6 nm", "0.5 nm"],
+            ].map(([proc, cd, sp, bias, grid], i) => (
+              <tr key={proc} style={i % 2 === 1 ? zebraStyle : {}}>
                 <td style={tdStyle}>{proc}</td>
                 <td style={tdStyle}>{cd}</td>
                 <td style={tdStyle}>{sp}</td>
@@ -266,109 +219,19 @@ bottom → h_nm  += delta   (outward = +y)`}
           </tbody>
         </table>
 
-        <div style={calloutStyle("#f0fbf4", "rgba(30,160,80,0.15)")}>
-          <strong>What MRC does not cover here:</strong> diagonal proximity, mask-to-mask
-          layer interactions, resist/etch bias, and sub-resolution assist feature (SRAF)
-          placement — all of which are enforced post-OPC in production EDA flows.
-          In litopc these remain out of scope (educational model).
-        </div>
+        <Callout type="caution">
+          <strong>Not covered here:</strong> diagonal proximity, mask-to-mask layer
+          interactions, resist/etch bias, and SRAF placement — all enforced
+          post-OPC in production EDA flows. Out of scope for this educational model.
+        </Callout>
       </section>
 
-      {/* 6 — Parameters */}
+      {/* ── §6 Algorithm Parameters ──────────────────────────────────── */}
       <section style={sectionStyle}>
-        <h2 style={h2Style}>6 — Algorithm Parameters</h2>
+        <h2 style={h2Style}><SectionBadge n={6} />Algorithm Parameters</h2>
         <table style={tableStyle}>
           <thead>
-            <tr style={{ background: "rgba(240,245,252,0.75)" }}>
-              <th style={thStyle}>Parameter</th>
-              <th style={thStyle}>Default</th>
-              <th style={thStyle}>Effect</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td style={tdStyle}><code>iterations</code></td>
-              <td style={tdStyle}>5</td>
-              <td style={tdStyle}>Number of simulate → correct cycles per batch</td>
-            </tr>
-            <tr>
-              <td style={tdStyle}><code>gain</code></td>
-              <td style={tdStyle}>0.5</td>
-              <td style={tdStyle}>Fraction of mean EPE applied per iteration (0 = no correction, 1 = full)</td>
-            </tr>
-            <tr>
-              <td style={tdStyle}><code>nSamples</code></td>
-              <td style={tdStyle}>7</td>
-              <td style={tdStyle}>Sample points per edge for EPE averaging</td>
-            </tr>
-            <tr>
-              <td style={tdStyle}><code>segmentNm</code></td>
-              <td style={tdStyle}>preset-dependent</td>
-              <td style={tdStyle}>Target cell size for sub-segmentation</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-
-      {/* 7 — Limitations */}
-      <section style={sectionStyle}>
-        <h2 style={h2Style}>7 — Scope and Limitations</h2>
-        <p>
-          litopc implements a physically grounded but intentionally simplified OPC engine.
-          It is accurate enough to demonstrate the key phenomena and give intuition for
-          real-world OPC — not to replace production EDA tools.
-        </p>
-        <table style={tableStyle}>
-          <thead>
-            <tr style={{ background: "rgba(240,245,252,0.75)" }}>
-              <th style={thStyle}>In scope</th>
-              <th style={thStyle}>Out of scope / planned</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td style={tdStyle}>Edge-by-edge EPE measurement and correction</td>
-              <td style={tdStyle}>Full vector / partial coherence imaging</td>
-            </tr>
-            <tr>
-              <td style={tdStyle}>Sub-segmented 2D contacts and lines</td>
-              <td style={tdStyle}>Inter-feature proximity / SRAF placement</td>
-            </tr>
-            <tr>
-              <td style={tdStyle}>DUV 193 nm and EUV 13.5 nm nodes</td>
-              <td style={tdStyle}>Diagonal proximity, layer-to-layer rules</td>
-            </tr>
-            <tr>
-              <td style={tdStyle}>MRC: min CD, min space, max bias, grid snap</td>
-              <td style={tdStyle}>Full-chip OPC (single-feature only)</td>
-            </tr>
-            <tr>
-              <td style={tdStyle}>Convergence detection, best-iter restore, rollback</td>
-              <td style={tdStyle}>Resist model beyond binary threshold (planned — Pro/Research)</td>
-            </tr>
-            <tr>
-              <td style={tdStyle}>Auto-reset on preset change</td>
-              <td style={tdStyle}>Etch bias model (planned — Pro/Research)</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div style={calloutStyle("#fff8ee", "rgba(160,100,20,0.18)")}>
-          <strong>What the OPC contour represents:</strong> EPE is measured against the
-          resist-printed contour — the aerial image after dose thresholding. No etch step
-          is applied. In a real process flow the OPC target would be offset by the etch
-          bias so the final silicon CD matches the design intent. litopc does not apply
-          this offset today; resist blur (σ_resist) and etch bias will be introduced as
-          Pro and Research plan features.
-        </div>
-      </section>
-
-      {/* 8 — OPC Parameters */}
-      <section style={sectionStyle}>
-        <h2 style={h2Style}>8 — OPC Algorithm Parameters</h2>
-        <table style={tableStyle}>
-          <thead>
-            <tr style={{ background: "rgba(240,245,252,0.75)" }}>
+            <tr style={theadRowStyle}>
               <th style={thStyle}>Parameter</th>
               <th style={thStyle}>Default</th>
               <th style={thStyle}>Effect</th>
@@ -377,105 +240,243 @@ bottom → h_nm  += delta   (outward = +y)`}
           <tbody>
             {[
               ["gain", "0.5", "Fraction of mean EPE applied per iteration. Adapted downward when EPE worsens (floor: gain / 4)."],
-              ["iterations", "3 (Free) / 5 (Pro)", "Simulate → correct cycles per batch. Continue adds another batch."],
+              ["iterations", "3 (Free) · 5 (Pro)", "Simulate → correct cycles per batch. Continue adds another batch."],
               ["nSamples", "7", "EPE sample points per edge. More samples reduce noise on curved contours."],
-              ["segmentNm", "preset-dependent", "Target cell size for sub-segmentation. Smaller cells allow finer edge profiles but must stay above the Rayleigh printability floor."],
+              ["segmentNm", "preset-dependent", "Target cell size for sub-segmentation. Must stay above the Rayleigh printability floor. Smaller cells improve fidelity on complex shapes."],
               ["maxBiasNm", "preset-dependent", "Maximum edge displacement per batch. Resets each batch; limits staircase amplitude."],
-              ["gridNm", "1 nm (DUV) / 0.5 nm (EUV)", "Manufacturing grid. All edges snapped after each iteration."],
-            ].map(([param, def, effect]) => (
-              <tr key={param as string}>
-                <td style={tdStyle}><code>{param}</code></td>
-                <td style={tdStyle}>{def}</td>
+              ["gridNm", "1 nm (DUV) · 0.5 nm (EUV)", "Manufacturing grid. All edges snapped after each iteration."],
+            ].map(([param, def, effect], i) => (
+              <tr key={param as string} style={i % 2 === 1 ? zebraStyle : {}}>
+                <td style={tdStyle}><code style={inlineCode}>{param}</code></td>
+                <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{def}</td>
                 <td style={tdStyle}>{effect}</td>
               </tr>
             ))}
           </tbody>
         </table>
-
-        <div style={calloutStyle("#eef4ff", "rgba(30,80,200,0.15)")}>
-          <strong>Segment size and fidelity:</strong> The default segment sizes (DUV dry: 80 nm,
-          DUV imm: 50 nm, EUV LNA: 20 nm, EUV HNA: 15 nm) are chosen to sit safely above the
-          Rayleigh printability floor for each process node. Reducing segment size improves
-          correction fidelity on complex shapes but each cell must remain printable.
-        </div>
       </section>
 
-      {/* Footer note */}
-      <p style={{ marginTop: 36, fontSize: 12.5, opacity: 0.55, borderTop: "1px solid rgba(33,44,64,0.1)", paddingTop: 16 }}>
-        This simulation uses a scalar coherent imaging proxy with a binary-threshold resist model and no etch bias.
-        Results are educational approximations — not calibrated for manufacturing sign-off.
-        See the <a href="/litopc/model-summary" style={{ color: "inherit" }}>Model Guide</a> for optical parameters, resist/etch assumptions, and the physics simplification list.
-      </p>
+      {/* ── §7 Scope & Customization ─────────────────────────────────── */}
+      <section style={sectionStyle}>
+        <h2 style={h2Style}><SectionBadge n={7} />Scope and Customization</h2>
+        <p>
+          litopc implements a physically grounded but intentionally simplified OPC engine —
+          accurate enough to demonstrate key phenomena and build intuition for real-world OPC,
+          not a replacement for production EDA tools.
+        </p>
+
+        <table style={{ ...tableStyle, marginTop: 14 }}>
+          <thead>
+            <tr style={theadRowStyle}>
+              <th style={thStyle}>Feature</th>
+              <th style={{ ...thStyle, textAlign: "center" }}>Free</th>
+              <th style={{ ...thStyle, textAlign: "center" }}>Pro</th>
+              <th style={{ ...thStyle, textAlign: "center" }}>Research</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              ["Edge-by-edge EPE correction", "✓", "✓", "✓"],
+              ["Sub-segmented contacts and lines", "✓", "✓", "✓"],
+              ["DUV 193 nm + EUV 13.5 nm nodes", "✓", "✓", "✓"],
+              ["MRC: min CD, min space, max bias, grid snap", "✓", "✓", "✓"],
+              ["Convergence detection + rollback", "✓", "✓", "✓"],
+              ["Iterations per batch", "3", "5", "5"],
+              ["Resist blur σ (Gaussian)", "—", "✦ Pro", "✦ Pro"],
+              ["Isotropic etch bias", "—", "✦ Pro", "✦ Pro"],
+              ["Custom segment size (finer cells)", "—", "—", "✦ Research"],
+              ["Partial coherence σ + illumination shape", "—", "—", "✦ Research"],
+              ["Zernike aberration correction", "—", "—", "✦ Research"],
+              ["Full vector / partial coherence imaging", "—", "—", "planned"],
+              ["Inter-feature proximity / SRAF placement", "—", "—", "planned"],
+              ["Full-chip OPC", "—", "—", "out of scope"],
+            ].map(([feat, free, pro, res], i) => (
+              <tr key={feat as string} style={i % 2 === 1 ? zebraStyle : {}}>
+                <td style={tdStyle}>{feat}</td>
+                <td style={{ ...tdStyle, textAlign: "center", color: free === "✓" ? "rgba(30,140,70,0.9)" : "rgba(0,0,0,0.3)" }}>{free}</td>
+                <td style={{ ...tdStyle, textAlign: "center", color: pro === "✦ Pro" ? "rgba(30,80,200,0.9)" : pro === "✓" ? "rgba(30,140,70,0.9)" : "rgba(0,0,0,0.3)" }}>{pro}</td>
+                <td style={{ ...tdStyle, textAlign: "center", color: res === "✦ Research" ? "rgba(120,40,160,0.9)" : res === "✓" ? "rgba(30,140,70,0.9)" : "rgba(0,0,0,0.35)" }}>{res}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <Callout type="caution">
+          <strong>What the OPC contour represents:</strong> EPE is measured against the
+          resist-printed contour — aerial image after dose thresholding. No etch step
+          is applied. In a real flow the OPC target would be offset by etch bias so
+          final silicon CD matches design intent. Resist blur and etch bias are planned
+          for Pro; custom segment size and optical overrides for Research.
+        </Callout>
+
+        <UpgradeCard />
+      </section>
+
+      {/* ── Footer ───────────────────────────────────────────────────── */}
+      <footer style={footerStyle}>
+        <p style={{ margin: 0, fontSize: 12.5, opacity: 0.55 }}>
+          Scalar coherent imaging proxy · binary-threshold resist · no etch bias.
+          Educational approximations — not calibrated for manufacturing sign-off.
+        </p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+          <a href="/litopc" style={footerLinkStyle}>← Back to Lab</a>
+          <a href="/litopc/model-summary" style={footerLinkStyle}>Model Guide</a>
+          <a href="/litopc/benchmark-gallery" style={footerLinkStyle}>Benchmark Gallery</a>
+          <a href="/litopc/model-change-log" style={footerLinkStyle}>Change Log</a>
+        </div>
+      </footer>
     </main>
+  );
+}
+
+// ── Shared sub-components ─────────────────────────────────────────────────────
+
+function SectionBadge({ n }: { n: number }) {
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", justifyContent: "center",
+      width: 24, height: 24, borderRadius: "50%",
+      background: "rgba(30,80,200,0.1)", color: "rgba(30,80,200,0.85)",
+      fontSize: 12, fontWeight: 720, marginRight: 10, flexShrink: 0,
+    }}>{n}</span>
+  );
+}
+
+function Callout({ type, children }: { type: "info" | "tip" | "caution"; children: React.ReactNode }) {
+  const cfg = {
+    info:    { bg: "#eef4ff", border: "rgba(30,80,200,0.2)" },
+    tip:     { bg: "#f0fbf4", border: "rgba(30,160,80,0.2)" },
+    caution: { bg: "#fff8ee", border: "rgba(180,110,20,0.25)" },
+  }[type];
+  return (
+    <div style={{ background: cfg.bg, border: `1px solid ${cfg.border}`, borderRadius: 10, padding: "12px 16px", marginTop: 14, fontSize: 14, lineHeight: 1.6 }}>
+      {children}
+    </div>
+  );
+}
+
+function StatCard({ label, desc }: { label: string; desc: string }) {
+  return (
+    <div style={{ border: "1px solid rgba(33,44,64,0.13)", borderRadius: 10, padding: "12px 14px", background: "rgba(246,250,255,0.8)" }}>
+      <div style={{ fontWeight: 680, fontSize: 14 }}>{label}</div>
+      <div style={{ fontSize: 13, marginTop: 5, opacity: 0.78, lineHeight: 1.5 }}>{desc}</div>
+    </div>
+  );
+}
+
+function UpgradeCard() {
+  return (
+    <div style={{
+      marginTop: 20,
+      border: "1px solid rgba(30,80,200,0.18)",
+      borderRadius: 12,
+      padding: "18px 20px",
+      background: "linear-gradient(135deg, rgba(240,246,255,0.9) 0%, rgba(248,244,255,0.9) 100%)",
+    }}>
+      <div style={{ fontWeight: 680, fontSize: 14, marginBottom: 10 }}>Unlock advanced OPC controls</div>
+      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px 12px", fontSize: 13, alignItems: "start" }}>
+        <span style={planBadge("pro")}>Pro</span>
+        <span style={{ opacity: 0.82 }}>Resist blur σ · Isotropic etch bias · 5 iterations/batch</span>
+        <span style={planBadge("research")}>Research</span>
+        <span style={{ opacity: 0.82 }}>Custom segment size · Partial coherence σ · Zernike aberrations · TMM stack</span>
+      </div>
+      <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+        <a href="/litopc" style={{ ...ctaBtnStyle, background: "rgba(30,80,200,0.9)", color: "#fff" }}>Try it free →</a>
+        <a href="/#pricing" style={{ ...ctaBtnStyle, background: "transparent", color: "rgba(30,80,200,0.85)", border: "1px solid rgba(30,80,200,0.25)" }}>View plans</a>
+      </div>
+    </div>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const sectionStyle: React.CSSProperties = { marginTop: 36 };
+const pageStyle: React.CSSProperties = {
+  maxWidth: 960, margin: "0 auto", padding: "32px 22px 64px",
+  lineHeight: 1.65, color: "rgba(16,28,48,0.92)",
+};
+
+const h1Style: React.CSSProperties = {
+  margin: 0, fontSize: 38, letterSpacing: "-0.025em", fontWeight: 740,
+};
+
+const subtitleStyle: React.CSSProperties = {
+  marginTop: 10, fontSize: 16, opacity: 0.68, maxWidth: 640,
+};
+
+const navStyle: React.CSSProperties = {
+  display: "flex", gap: 8, flexWrap: "wrap", marginTop: 16, alignItems: "center",
+};
+
+const backBtnStyle: React.CSSProperties = {
+  padding: "5px 14px", borderRadius: 20,
+  background: "rgba(30,80,200,0.08)", color: "rgba(30,80,200,0.85)",
+  fontSize: 13, fontWeight: 560, textDecoration: "none",
+  border: "1px solid rgba(30,80,200,0.15)",
+};
+
+const sectionStyle: React.CSSProperties = { marginTop: 40 };
 
 const h2Style: React.CSSProperties = {
-  fontSize: 22,
-  fontWeight: 680,
-  letterSpacing: "-0.01em",
-  marginBottom: 12,
-  paddingBottom: 6,
+  display: "flex", alignItems: "center",
+  fontSize: 21, fontWeight: 700, letterSpacing: "-0.01em",
+  marginBottom: 14, paddingBottom: 8,
   borderBottom: "1px solid rgba(33,44,64,0.1)",
 };
 
-const calloutStyle = (bg: string, border: string): React.CSSProperties => ({
-  background: bg,
-  border: `1px solid ${border}`,
-  borderRadius: 10,
-  padding: "12px 16px",
-  marginTop: 14,
-  fontSize: 14,
-});
-
-const cardStyle: React.CSSProperties = {
-  border: "1px solid rgba(33,44,64,0.13)",
-  borderRadius: 10,
-  padding: "12px 14px",
-  background: "rgba(246,250,255,0.8)",
-};
-
-const cardLabelStyle: React.CSSProperties = {
-  fontWeight: 680,
-  fontSize: 14,
-  letterSpacing: "0.01em",
-};
-
 const codeBlockStyle: React.CSSProperties = {
-  background: "rgba(22,32,50,0.04)",
-  border: "1px solid rgba(33,44,64,0.1)",
-  borderRadius: 8,
-  padding: "12px 16px",
-  fontFamily: "monospace",
-  fontSize: 13,
-  lineHeight: 1.8,
-  whiteSpace: "pre",
-  overflowX: "auto",
-  marginTop: 14,
+  background: "rgba(18,28,48,0.04)", border: "1px solid rgba(33,44,64,0.1)",
+  borderRadius: 8, padding: "12px 16px", fontFamily: "monospace",
+  fontSize: 13, lineHeight: 1.8, whiteSpace: "pre", overflowX: "auto", marginTop: 14,
+};
+
+const inlineCode: React.CSSProperties = {
+  background: "rgba(18,28,48,0.06)", borderRadius: 4,
+  padding: "1px 5px", fontSize: "0.88em", fontFamily: "monospace",
 };
 
 const tableStyle: React.CSSProperties = {
-  width: "100%",
-  borderCollapse: "collapse",
-  border: "1px solid rgba(25,35,52,0.14)",
-  fontSize: 13.5,
+  width: "100%", borderCollapse: "collapse",
+  border: "1px solid rgba(25,35,52,0.13)", fontSize: 13.5,
+};
+
+const theadRowStyle: React.CSSProperties = {
+  background: "rgba(15,30,80,0.07)",
 };
 
 const thStyle: React.CSSProperties = {
-  padding: "8px 12px",
-  textAlign: "left",
-  fontWeight: 640,
-  borderBottom: "1px solid rgba(25,35,52,0.14)",
+  padding: "9px 12px", textAlign: "left", fontWeight: 650,
+  borderBottom: "1px solid rgba(25,35,52,0.13)",
   borderRight: "1px solid rgba(25,35,52,0.08)",
 };
 
 const tdStyle: React.CSSProperties = {
-  padding: "8px 12px",
-  borderBottom: "1px solid rgba(25,35,52,0.08)",
-  borderRight: "1px solid rgba(25,35,52,0.06)",
-  verticalAlign: "top",
+  padding: "8px 12px", borderBottom: "1px solid rgba(25,35,52,0.08)",
+  borderRight: "1px solid rgba(25,35,52,0.06)", verticalAlign: "top",
+};
+
+const zebraStyle: React.CSSProperties = { background: "rgba(248,251,255,0.55)" };
+
+const footerStyle: React.CSSProperties = {
+  marginTop: 48, paddingTop: 18,
+  borderTop: "1px solid rgba(33,44,64,0.1)",
+};
+
+const footerLinkStyle: React.CSSProperties = {
+  fontSize: 13, color: "rgba(30,80,200,0.7)", textDecoration: "none",
+  padding: "4px 10px", borderRadius: 6,
+  background: "rgba(30,80,200,0.05)",
+};
+
+const planBadge = (tier: "pro" | "research"): React.CSSProperties => ({
+  display: "inline-flex", alignItems: "center", justifyContent: "center",
+  padding: "2px 9px", borderRadius: 20, fontWeight: 660, fontSize: 11.5,
+  background: tier === "pro" ? "rgba(30,80,200,0.1)" : "rgba(120,40,160,0.1)",
+  color: tier === "pro" ? "rgba(30,80,200,0.9)" : "rgba(120,40,160,0.9)",
+  border: tier === "pro" ? "1px solid rgba(30,80,200,0.2)" : "1px solid rgba(120,40,160,0.2)",
+  whiteSpace: "nowrap", marginTop: 2,
+});
+
+const ctaBtnStyle: React.CSSProperties = {
+  display: "inline-block", padding: "7px 16px", borderRadius: 8,
+  fontSize: 13, fontWeight: 600, textDecoration: "none", cursor: "pointer",
 };
