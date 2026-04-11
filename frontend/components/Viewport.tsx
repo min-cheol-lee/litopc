@@ -1387,12 +1387,21 @@ export function Viewport(props: {
             </button>
             <button
               type="button"
-              className={`panel-mini-control ${useWebGL ? "is-active" : ""}`}
-              onClick={() => { const next = !useWebGL; setUseWebGL(next); try { localStorage.setItem("litopc_webgl3d", next ? "1" : "0"); } catch {} }}
-              title={useWebGL ? "Switch to Classic 3D" : "Switch to Cosmic 3D"}
-              aria-label={useWebGL ? "Switch to Classic 3D" : "Switch to Cosmic 3D"}
+              className={`panel-mini-control ${!useWebGL ? "is-active" : ""}`}
+              onClick={() => { setUseWebGL(false); try { localStorage.setItem("litopc_webgl3d", "0"); } catch {} }}
+              title="Classic 3D"
+              aria-label="Switch to Classic 3D"
             >
-              ✦ {useWebGL ? "Cosmic" : "Classic"}
+              + Classic
+            </button>
+            <button
+              type="button"
+              className={`panel-mini-control ${useWebGL ? "is-active" : ""}`}
+              onClick={() => { setUseWebGL(true); try { localStorage.setItem("litopc_webgl3d", "1"); } catch {} }}
+              title="Cosmic 3D"
+              aria-label="Switch to Cosmic 3D"
+            >
+              ✦ Cosmic
             </button>
             {useWebGL && (
               <button
@@ -2278,13 +2287,33 @@ export function Viewport(props: {
                     </button>
                     <button
                       type="button"
-                      className={`panel-mini-control ${useWebGL ? "is-active" : ""}`}
-                      onClick={() => { const next = !useWebGL; setUseWebGL(next); try { localStorage.setItem("litopc_webgl3d", next ? "1" : "0"); } catch {} }}
-                      title={useWebGL ? "Switch to Classic 3D" : "Switch to Cosmic 3D"}
-                      aria-label={useWebGL ? "Switch to Classic 3D" : "Switch to Cosmic 3D"}
+                      className={`panel-mini-control ${!useWebGL ? "is-active" : ""}`}
+                      onClick={() => { setUseWebGL(false); try { localStorage.setItem("litopc_webgl3d", "0"); } catch {} }}
+                      title="Classic 3D"
+                      aria-label="Switch to Classic 3D"
                     >
-                      ✦ {useWebGL ? "Cosmic" : "Classic"}
+                      + Classic
                     </button>
+                    <button
+                      type="button"
+                      className={`panel-mini-control ${useWebGL ? "is-active" : ""}`}
+                      onClick={() => { setUseWebGL(true); try { localStorage.setItem("litopc_webgl3d", "1"); } catch {} }}
+                      title="Cosmic 3D"
+                      aria-label="Switch to Cosmic 3D"
+                    >
+                      ✦ Cosmic
+                    </button>
+                    {useWebGL && (
+                      <button
+                        type="button"
+                        className={`panel-mini-control ${surfLightEffect ? "is-active" : ""}`}
+                        onClick={() => setSurfLightEffect((v) => !v)}
+                        title={surfLightEffect ? "Turn off light effect" : "Turn on light effect"}
+                        aria-label={surfLightEffect ? "Turn off light effect" : "Turn on light effect"}
+                      >
+                        ☀ Light
+                      </button>
+                    )}
                   </div>
                 )}
               </>
