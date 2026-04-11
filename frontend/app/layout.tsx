@@ -1,6 +1,7 @@
 import "./globals.css";
 import React from "react";
 import { Inter, Jost } from "next/font/google";
+import Script from "next/script";
 import { AppProviders } from "../components/AppProviders";
 
 const inter = Inter({
@@ -28,6 +29,20 @@ export const metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-ZZLNK73VZQ"
+          strategy="afterInteractive"
+        />
+        <Script id="ga4-init" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-ZZLNK73VZQ');
+          `}
+        </Script>
+      </head>
       <body className={`${inter.variable} ${jost.variable}`}>
         <AppProviders>{children}</AppProviders>
       </body>
