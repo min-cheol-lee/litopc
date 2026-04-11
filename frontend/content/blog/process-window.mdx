@@ -1,0 +1,45 @@
+---
+title: "Process Window Analysis: Focus-Exposure Matrix Basics"
+date: "2026-04-10"
+excerpt: "The process window is the range of focus and dose conditions over which a feature prints within spec — mapping it with a Focus-Exposure Matrix is essential for robust manufacturing."
+---
+
+## What Is the Process Window?
+
+No lithography tool exposes every wafer at exactly the same focus depth and dose. There is always some variation: wafer flatness, lens heating, shot-to-shot dose noise. The process window defines the range of focus-dose combinations over which all critical features remain within their EPE tolerance.
+
+A large process window means the process is robust — small perturbations in the scanner do not cause failures. A small process window means the process is marginal, and yield will be highly sensitive to equipment drift.
+
+## The Focus-Exposure Matrix (FEM)
+
+A Focus-Exposure Matrix is an experiment (in simulation or on silicon) where focus offset and exposure dose are swept across a grid of values. At each grid point, key metrics are measured: CD of critical features, EPE at edge segments, or simply whether the pattern passes or fails.
+
+Typical sweep ranges:
+- **Focus:** ±100 nm to ±300 nm around best focus, in 20–50 nm steps
+- **Dose:** ±5% to ±15% around nominal dose, in 1–2% steps
+
+The result is a 2D map. On silicon, this is done by exposing a special FEM reticle and measuring CDs under SEM. In simulation, each grid point is a separate aerial image calculation with the appropriate defocus term added to the pupil function.
+
+## The Bossung Curve
+
+A Bossung curve is a slice through the FEM at a fixed dose: CD plotted as a function of focus offset. The classic shape is an asymmetric bell curve, with CD at best focus defining the nominal value and the width of the "flat top" defining the depth of focus (DoF).
+
+The Bossung curve reveals whether the nominal dose is at the top of the process window or on a steep slope. Tilted or asymmetric Bossung curves indicate that the feature is sensitive to focus in one direction, which narrows the usable process window.
+
+## Depth of Focus (DoF)
+
+The depth of focus is the total focus range over which a feature prints within ±10% of its nominal CD (a common industry criterion). It depends on:
+
+- **Wavelength and NA:** DoF ≈ k₂ × λ / NA² (Rayleigh DoF criterion)
+- **Feature pitch:** isolated features have larger DoF than nested features at the same CD
+- **OPC quality:** well-optimized OPC can recover some DoF by correcting the systematic bias across focus
+
+At NA 1.35 (193 nm immersion), DoF for 40 nm half-pitch is roughly ±60–80 nm. EUV High-NA has intrinsically smaller DoF, making focus control more critical.
+
+## Why This Matters for OPC
+
+OPC is typically tuned at nominal focus and dose, but the mask must print correctly across the entire process window. Post-OPC verification includes simulating EPE at the corners of the process window (best focus ± DoF/2, best dose ± dose budget). If EPE at any corner exceeds tolerance, the OPC recipe must be adjusted — sometimes by intentionally biasing the nominal CD to keep all window corners in spec.
+
+litopc's batch sweep mode lets you run a full Focus-Exposure Matrix and visualize the Bossung curves directly in the browser, without an EDA stack.
+
+Try it yourself in the litopc simulator — no installation required. [Open Simulator →](/litopc)

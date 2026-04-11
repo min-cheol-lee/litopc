@@ -76,7 +76,7 @@ export function MarketingShell({
           <div className="landing-footer-block">
             <div className="landing-footer-title">litopc</div>
             <p className="landing-footer-copy">
-              Browser-based OPC education and visual debugging. Built for learning, exploration, and early process discussion.
+              Physics-accurate lithography and OPC simulator. DUV &amp; EUV. No EDA license. No installation.
             </p>
           </div>
           <div className="landing-footer-block">
@@ -106,7 +106,7 @@ export function MarketingShell({
           </div>
         </div>
         <div className="landing-footer-meta">
-          <span>Educational simulator. Not a sign-off tool.</span>
+          <span>Not a sign-off tool. For exploration, research, and fast iteration.</span>
           <span>{year} litopc</span>
         </div>
       </footer>

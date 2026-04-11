@@ -20,9 +20,34 @@ const jost = Jost({
 
 export const metadata = {
   title: "litopc",
-  description: "Educational optical proximity correction sandbox",
+  description: "Web-based OPC and lithography simulator for DUV and EUV. Hopkins wave-optics model, EPE metrics, Bossung curves, and publication-ready figures. No installation, no license fee.",
   other: {
     "google-adsense-account": "ca-pub-3497543025675458",
+  },
+  alternates: {
+    canonical: "https://litopc.com",
+  },
+  openGraph: {
+    type: "website",
+    url: "https://litopc.com",
+    title: "litopc | OPC & Lithography Simulator",
+    description:
+      "Web-based OPC and lithography simulator for DUV and EUV. Hopkins wave-optics model, EPE metrics, Bossung curves, and publication-ready figures. No installation, no license fee.",
+    images: [
+      {
+        url: "https://litopc.com/marketing/hero-3d-opc.png",
+        width: 3200,
+        height: 3200,
+        alt: "OPC mask correction and DUV/EUV aerial imaging — 3D view",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "litopc | OPC & Lithography Simulator",
+    description:
+      "Web-based OPC and lithography simulator for DUV and EUV. Hopkins wave-optics model, EPE metrics, Bossung curves, and publication-ready figures. No installation, no license fee.",
+    images: ["https://litopc.com/marketing/hero-3d-opc.png"],
   },
 };
 

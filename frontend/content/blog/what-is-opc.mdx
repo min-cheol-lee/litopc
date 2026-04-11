@@ -1,0 +1,35 @@
+---
+title: "What is Optical Proximity Correction (OPC)?"
+date: "2026-04-10"
+excerpt: "OPC pre-distorts the photomask so that diffraction effects cancel out, allowing the printed silicon pattern to match the intended design."
+---
+
+## The Problem OPC Solves
+
+When you project a mask pattern through a lens using 193 nm DUV or 13.5 nm EUV light, diffraction is unavoidable. The optical system has a finite numerical aperture (NA), which means it cannot capture all spatial frequencies in the mask image. High-frequency features — sharp corners, narrow line-ends — get blurred.
+
+The result: corners round, line-ends pull back by tens of nanometers, and dense lines print at a different width than isolated ones. At 7 nm node feature sizes, even a 2 nm edge placement error (EPE) can cause a transistor to fail.
+
+## What OPC Actually Does
+
+Optical Proximity Correction is a pre-distortion of the mask geometry. Instead of drawing exactly what you want printed, you draw a corrected version that, after passing through the optical system and resist, produces the intended shape on silicon.
+
+The correction works iteratively:
+
+1. Simulate the aerial image for the current mask using the Hopkins wave-optics model.
+2. Threshold the aerial image to predict where the resist will clear.
+3. Measure EPE at every edge segment — the signed distance between the actual printed contour and the target.
+4. Shift each mask edge by a fraction of the EPE.
+5. Repeat until EPE converges below a tolerance (typically 1–2 nm).
+
+## Sub-Resolution Assist Features (SRAFs)
+
+For isolated lines, printing bias differs from nested lines. OPC algorithms also insert sub-resolution assist features (SRAFs) — small shapes on the mask that never print themselves but scatter light in a way that makes isolated lines behave more like nested ones. This equalizes the process window across feature types.
+
+## Why OPC Matters at Advanced Nodes
+
+At 193 nm immersion (NA 1.35), the theoretical resolution limit is around 39 nm half-pitch. Production designs push below this with multiple-exposure schemes and aggressive OPC. At EUV (13.5 nm, NA 0.33), mask 3D effects and stochastic noise add new error sources on top of diffraction — OPC must account for all of them.
+
+Without OPC, no advanced-node chip would function. It is the invisible corrective layer that makes semiconductor manufacturing possible at modern feature sizes.
+
+Try it yourself in the litopc simulator — no installation required. [Open Simulator →](/litopc)

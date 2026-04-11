@@ -1,0 +1,43 @@
+---
+title: "Edge Placement Error (EPE): What It Measures and Why It Matters"
+date: "2026-04-10"
+excerpt: "EPE is the signed distance between where the resist contour actually lands and where the design target edge should be — the single most important metric for OPC quality."
+---
+
+## What Is EPE?
+
+Edge Placement Error (EPE) is the signed distance between the actual printed contour edge and the intended design target edge, measured perpendicular to the edge direction.
+
+**EPE = contour_actual − target**
+
+A positive EPE means the printed feature is larger than intended (the edge printed outside the target). A negative EPE means the feature shrank (the edge pulled back inside the target). Zero EPE means perfect edge placement.
+
+## Why EPE Drives Yield
+
+At 5 nm node, a gate length of ~18 nm has a total EPE budget of roughly ±2 nm across all sources — lithography, OPC residuals, mask error, overlay, and etch bias. Exceed that budget and the transistor either fails to switch (too much EPE, shorting to adjacent gates) or leaks unacceptably (insufficient channel length).
+
+EPE is not a single number — it varies along every edge segment of every polygon on the chip. OPC algorithms divide each mask edge into small evaluation segments (typically 2–5 nm wide) and compute EPE at each segment independently. The worst-case segment determines whether the design passes manufacturing rules check (MRC).
+
+## EPE vs. CD Error
+
+Critical Dimension (CD) error measures the width of a printed feature. EPE is more general: it applies to every edge of every shape, whether or not "width" is a well-defined concept. For an L-shaped contact or a T-junction, width is ambiguous — EPE is not.
+
+Another distinction: CD error is typically measured from a cross-section (SEM image), while EPE is a simulation metric that guides OPC before any silicon is made. In post-OPC verification, EPE maps are checked against tolerances to flag potential defect sites before tape-out.
+
+## EPE in the OPC Loop
+
+Every iteration of the OPC algorithm uses EPE as its feedback signal:
+
+1. Simulate the aerial image for the current mask.
+2. Threshold the image to get the predicted resist contour.
+3. Compute EPE at every edge evaluation point.
+4. Move each mask edge by a fraction of the local EPE (with damping to avoid oscillation).
+5. Re-simulate. Repeat until max EPE < tolerance.
+
+Convergence is usually achieved in 3–8 iterations for a well-conditioned optical system. The final OPC mask contains thousands of vertex moves per polygon, each chosen to drive EPE toward zero.
+
+## Visualizing EPE
+
+In litopc, EPE is displayed as a color-coded overlay on the printed contour. Each segment shows a colored tick — red for positive EPE (feature too large), blue for negative (feature too small), green for convergence. This makes the spatial distribution of error immediately visible, which is often more informative than a table of numbers.
+
+Try it yourself in the litopc simulator — no installation required. [Open Simulator →](/litopc)

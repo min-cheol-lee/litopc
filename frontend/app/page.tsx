@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import React from "react";
-import LitopcPage from "./litopc/page";
+import Image from "next/image";
+import dynamic from "next/dynamic";
 import { MarketingShell } from "../components/MarketingShell";
 import { getSiteHostInfo } from "../lib/site-host";
+
+const LitopcPage = dynamic(() => import("./litopc/page"), { ssr: false });
 
 export const metadata: Metadata = {
   title: "litopc | OPC & Lithography Simulator",
@@ -149,7 +152,21 @@ export default function Home() {
     return <LitopcPage />;
   }
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "litopc",
+    "applicationCategory": "SimulationApplication",
+    "operatingSystem": "Web",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  };
+
   return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
     <MarketingShell navItems={navItems}>
       {/* ── HERO ── */}
       <section className="lp-hero-split landing-anchor">
@@ -158,24 +175,25 @@ export default function Home() {
             See what prints.<br />Correct what doesn&apos;t.
           </h1>
           <p className="lp-hero-sub">
-            Physics-accurate lithography simulation — DUV and EUV, in your browser.
-          </p>
-          <p className="lp-hero-sub2">
-            1-click OPC. 4 view modes. Export-ready figures. No installation, no EDA license.
+            Run DUV/EUV lithography simulations and OPC correction in seconds. No EDA license. No installation. Export publication-ready figures.
           </p>
           <div className="lp-hero-actions">
             <a href={simulatorHref} className="lp-btn-primary" target="_blank" rel="noopener noreferrer">
-              Try Free →
+              Try for free — no signup needed
             </a>
             <a href="#pricing" className="lp-btn-ghost">See Pricing</a>
           </div>
         </div>
         <div className="lp-hero-split-visual">
           <div className="lp-hero-img-wrap">
-            <img
+            <Image
               src="/marketing/hero-3d-opc.png"
               alt="OPC mask correction and DUV/EUV aerial imaging — 3D view"
               className="lp-hero-img"
+              width={3200}
+              height={3200}
+              priority
+              sizes="(max-width: 768px) 100vw, 50vw"
             />
           </div>
           <div className="landing-hero-shot-note lp-hero-img-note">
@@ -183,6 +201,19 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* ── SOCIAL PROOF STRIP ── */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:"12px",padding:"0 0 2.5rem"}}>
+        <article className="lp-preset-card" style={{textAlign:"center",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <p style={{margin:0,fontWeight:700,fontSize:"13px",letterSpacing:"0.02em"}}>DUV 193nm · EUV 13.5nm</p>
+        </article>
+        <article className="lp-preset-card" style={{textAlign:"center",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <p style={{margin:0,fontWeight:700,fontSize:"13px",letterSpacing:"0.02em"}}>Hopkins coherent imaging</p>
+        </article>
+        <article className="lp-preset-card" style={{textAlign:"center",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <p style={{margin:0,fontWeight:700,fontSize:"13px",letterSpacing:"0.02em"}}>Export-ready PNG / SVG / CSV</p>
+        </article>
+      </div>
 
       {/* ── HOW IT WORKS (3-column visual story) ── */}
       <section className="lp-story-section landing-anchor">
@@ -221,7 +252,7 @@ export default function Home() {
           <div className="lp-story-col">
             <span className="lp-story-num">02</span>
             <div className="lp-story-col-visual">
-              <img src="/marketing/non-opc-3d.png" alt="Non-OPC — silicon print misses the mask target" loading="lazy" />
+              <Image src="/marketing/non-opc-3d.png" alt="Non-OPC — silicon print misses the mask target" width={900} height={900} loading="lazy" />
             </div>
             <h3 className="lp-story-title">Diffraction distorts the print</h3>
             <p className="lp-story-body">
@@ -235,7 +266,7 @@ export default function Home() {
           <div className="lp-story-col">
             <span className="lp-story-num">03</span>
             <div className="lp-story-col-visual">
-              <img src="/marketing/opc-3d.png" alt="OPC complete — silicon contour matches mask target" loading="lazy" />
+              <Image src="/marketing/opc-3d.png" alt="OPC complete — silicon contour matches mask target" width={900} height={900} loading="lazy" />
             </div>
             <h3 className="lp-story-title">One click — OPC corrects, export</h3>
             <p className="lp-story-body">
@@ -386,7 +417,7 @@ export default function Home() {
         </div>
 
         <div className="landing-feature-rail">
-          {featureRail.map((item, index) => (
+          {[featureRail[0], featureRail[1], featureRail[4]].map((item, index) => (
             <article key={item.title} className="landing-feature-line">
               <div className="landing-feature-index">0{index + 1}</div>
               <h3>
@@ -399,6 +430,23 @@ export default function Home() {
             </article>
           ))}
         </div>
+        <details style={{marginTop:"1.5rem"}}>
+          <summary style={{cursor:"pointer",fontSize:"14px",opacity:0.6,userSelect:"none",marginBottom:"1rem"}}>More features ↓</summary>
+          <div className="landing-feature-rail">
+            {[featureRail[2], featureRail[3], featureRail[5]].map((item, index) => (
+              <article key={item.title} className="landing-feature-line">
+                <div className="landing-feature-index">0{index + 4}</div>
+                <h3>
+                  {item.title}
+                  {"tag" in item && item.tag && (
+                    <span className="lp-feature-plan-tag">{item.tag}</span>
+                  )}
+                </h3>
+                <p>{item.body}</p>
+              </article>
+            ))}
+          </div>
+        </details>
 
         {/* PLACEHOLDER_FEATURES — uncomment to restore figure slots
         <div className="lp-fig-placeholder-row">
@@ -561,19 +609,16 @@ export default function Home() {
       {/* ── BOTTOM CTA ── */}
       <section className="landing-cta-strip">
         <div>
-          <div className="landing-eyebrow">Start here</div>
-          <h2>The most rigorous lithography simulator on the web.</h2>
-          <p className="lp-cta-sub">
-            Open <span className="landing-logo-word">litopc</span> and see your first aerial image in under a minute.
-          </p>
+          <h2>Ready to simulate?</h2>
+          <p className="lp-cta-sub">Free to use. No sign-up required to start.</p>
         </div>
         <div className="lp-cta-actions">
           <a href={simulatorHref} className="lp-btn-primary" target="_blank" rel="noopener noreferrer">
-            Try Free →
+            Open Simulator →
           </a>
-          <a href="#pricing" className="lp-btn-ghost-cta">See Pricing</a>
         </div>
       </section>
     </MarketingShell>
+    </>
   );
 }

@@ -7,6 +7,11 @@ import { buildFigureCaption, exportPngWithMeta, exportRunsCsv, exportSvgWithMeta
 import { consumeUsage } from "../lib/usage";
 import { trackProductEvent } from "../lib/telemetry";
 import { isLShapeOpcTemplate, isLShapeRawTemplate } from "../lib/template-variants";
+import dynamic from "next/dynamic";
+const Surface3DCanvas = dynamic(() => import("./Surface3DCanvas"), { ssr: false });
+import type { Surface3DHandle } from "../lib/surface3d-types";
+
+// WebGL 3D flag — toggled via 3D Ctrl panel, persisted in localStorage
 
 const DEFAULT_FOV = 1100;
 const COMPARE_A_COLOR = "#2f7dff";
@@ -139,6 +144,10 @@ export function Viewport(props: {
   const [epeOverlayMode, setEpeOverlayMode] = useState<"NONE" | "COLOR" | "ARROWS" | "BOTH">(initialEpeOverlayMode);
   const [exportResolution, setExportResolution] = useState<"WEB" | "HIGH_RES">(() => req.plan === "PRO" ? "HIGH_RES" : "WEB");
   const [showSurface3d, setShowSurface3d] = useState(true);
+  const [useWebGL, setUseWebGL] = useState<boolean>(() => {
+    try { return localStorage.getItem("litopc_webgl3d") === "1"; } catch { return false; }
+  });
+  const [surfLightEffect, setSurfLightEffect] = useState(true);
   const [showSurfaceControls, setShowSurfaceControls] = useState(false);
   const [surfaceSwapMain, setSurfaceSwapMain] = useState(false);
   const [compareContourMode, setCompareContourMode] = useState<"MIXED" | "AB_ONLY">("AB_ONLY");
@@ -164,6 +173,7 @@ export function Viewport(props: {
   const [surfaceQuality, setSurfaceQuality] = useState<"FAST" | "FULL">("FULL");
   const dragStart = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
   const surfaceCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const surface3dRef = useRef<Surface3DHandle | null>(null);
   const viewportFrameRef = useRef<HTMLDivElement | null>(null);
   const contourDebugKeyRef = useRef<string>("");
   const surfaceDragRef = useRef<
@@ -1363,7 +1373,7 @@ export function Viewport(props: {
         {!isMainSurface && surfacePanelVisible && (
           <div
             className="panel-corner-actions panel-corner-actions-bottom-left"
-            style={{ top: "auto", right: "auto", bottom: 12, left: 12, zIndex: 9 }}
+            style={{ top: "auto", right: "auto", bottom: 12, left: 12, zIndex: 9, display: "flex", gap: 4 }}
           >
             <button
               type="button"
@@ -1375,57 +1385,118 @@ export function Viewport(props: {
               <ToolbarIcon kind="cube" />
               3D Ctrl
             </button>
+            <button
+              type="button"
+              className={`panel-mini-control ${useWebGL ? "is-active" : ""}`}
+              onClick={() => { const next = !useWebGL; setUseWebGL(next); try { localStorage.setItem("litopc_webgl3d", next ? "1" : "0"); } catch {} }}
+              title={useWebGL ? "Switch to Classic 3D" : "Switch to Cosmic 3D"}
+              aria-label={useWebGL ? "Switch to Classic 3D" : "Switch to Cosmic 3D"}
+            >
+              ✦ {useWebGL ? "Cosmic" : "Classic"}
+            </button>
+            {useWebGL && (
+              <button
+                type="button"
+                className={`panel-mini-control ${surfLightEffect ? "is-active" : ""}`}
+                onClick={() => setSurfLightEffect((v) => !v)}
+                title={surfLightEffect ? "Turn off light effect" : "Turn on light effect"}
+                aria-label={surfLightEffect ? "Turn off light effect" : "Turn on light effect"}
+              >
+                ☀ Light
+              </button>
+            )}
           </div>
         )}
         {!isMainSurface && renderSweepStatusLine("3d")}
-        <div style={{ padding: 0, flex: 1, minHeight: 0, position: "relative", zIndex: 1 }}>
-          <canvas
-            ref={surfaceCanvasRef}
-            style={{
-              width: isMainSurface && isCanvasLayout ? "calc(100% + 2px)" : "100%",
-              height: isMainSurface && isCanvasLayout ? "calc(100% + 2px)" : "100%",
-              marginLeft: isMainSurface && isCanvasLayout ? -1 : 0,
-              marginTop: isMainSurface && isCanvasLayout ? -1 : 0,
-              border: isMainSurface ? "none" : "1px solid rgba(96,108,132,0.4)",
-              borderRadius: isMainSurface ? (isCanvasLayout ? 0 : 18) : 16,
-              background:
-                "radial-gradient(168% 158% at 18% 2%, #334763 0%, #25364e 40%, #172538 78%, #121c2b 100%)",
-              boxShadow: isMainSurface
-                ? "none"
-                : "inset 0 1px 0 rgba(244,248,255,0.18), inset 0 -34px 72px rgba(4,10,22,0.46), 0 10px 20px rgba(20,30,46,0.22)",
-              cursor: "grab",
-            }}
-            onMouseDown={(e) => {
-              if (e.shiftKey) {
-                surfaceDragRef.current = { mode: "pan", x: e.clientX, y: e.clientY, ox: surfOffsetX, oy: surfOffsetY };
-              } else {
-                surfaceDragRef.current = { mode: "rotate", x: e.clientX, y: e.clientY, az: surfAzimuth, el: surfElevation };
-              }
-              setSurfaceFastMode();
-            }}
-            onMouseMove={(e) => {
-              if (!surfaceDragRef.current) return;
-              const d = surfaceDragRef.current;
-              const dx = e.clientX - d.x;
-              const dy = e.clientY - d.y;
-              if (d.mode === "rotate") {
-                setSurfAzimuth(Math.max(-160, Math.min(160, d.az + dx * 0.3)));
-                setSurfElevation(Math.max(-12, Math.min(85, d.el + dy * 0.22)));
-              } else {
-                setSurfOffsetX(Math.max(-1, Math.min(1, d.ox + dx / 240)));
-                setSurfOffsetY(Math.max(-1, Math.min(1, d.oy + dy / 240)));
-              }
-              setSurfaceFastMode();
-            }}
-            onMouseUp={() => {
-              surfaceDragRef.current = null;
-              scheduleSurfaceFullMode(120);
-            }}
-            onMouseLeave={() => {
-              surfaceDragRef.current = null;
-              scheduleSurfaceFullMode(120);
-            }}
-          />
+        <div
+          style={{ padding: 0, flex: 1, minHeight: 0, position: "relative", zIndex: 1, cursor: "grab" }}
+          onMouseDown={(e) => {
+            if (e.shiftKey) {
+              surfaceDragRef.current = { mode: "pan", x: e.clientX, y: e.clientY, ox: surfOffsetX, oy: surfOffsetY };
+            } else {
+              surfaceDragRef.current = { mode: "rotate", x: e.clientX, y: e.clientY, az: surfAzimuth, el: surfElevation };
+            }
+            setSurfaceFastMode();
+          }}
+          onMouseMove={(e) => {
+            if (!surfaceDragRef.current) return;
+            const d = surfaceDragRef.current;
+            const dx = e.clientX - d.x;
+            const dy = e.clientY - d.y;
+            if (d.mode === "rotate") {
+              setSurfAzimuth(Math.max(-180, Math.min(180, d.az + dx * 0.3)));
+              setSurfElevation(Math.max(-89, Math.min(89, d.el + dy * 0.22)));
+            } else {
+              setSurfOffsetX(Math.max(-1, Math.min(1, d.ox + dx / 240)));
+              setSurfOffsetY(Math.max(-1, Math.min(1, d.oy + dy / 240)));
+            }
+            setSurfaceFastMode();
+          }}
+          onMouseUp={() => { surfaceDragRef.current = null; scheduleSurfaceFullMode(120); }}
+          onMouseLeave={() => { surfaceDragRef.current = null; scheduleSurfaceFullMode(120); }}
+        >
+          {useWebGL ? (
+            <Surface3DCanvas
+              ref={surface3dRef}
+              intensityW={sim?.intensity?.w ?? 0}
+              intensityH={sim?.intensity?.h ?? 0}
+              intensityData={sim?.intensity?.data ?? []}
+              nmPerPixel={sim?.nm_per_pixel ?? (fovNm / Math.max(1, sim?.intensity?.w ?? 1))}
+              azimuthDeg={surfAzimuth}
+              elevationDeg={surfElevation}
+              rollDeg={surfRoll}
+              offsetX={surfOffsetX}
+              offsetY={surfOffsetY}
+              offsetZ={surfOffsetZ}
+              depthScale={surfDepth}
+              zoomScale={scale}
+              qualityMode={surfaceQuality}
+              fovNm={fovNm}
+              colormapType={colormapType}
+              contourStyle={contourStyle}
+              showAerial={showAerial}
+              maskOpacityPreset={maskOpacityPreset}
+              contours={sim?.contours_nm ?? []}
+              targetContours={targetContours}
+              showTargetOverlay={showTargetOverlay}
+              showMainContour={effectiveShowMainContour}
+              finalMaskContours={finalMaskContours}
+              maskAddRects={maskAddRects}
+              maskSubtractRects={maskSubtractRects}
+              overlayAddRects={overlayAddRects}
+              compareActive={compareActive}
+              compareAContours={compareAContours ?? []}
+              compareBContours={compareBContours ?? []}
+              sweepContourSets={sweepContourSets3d}
+              epeContours={epeOverlayMode !== "NONE" ? epeSegments : null}
+              epeMode={epeOverlayMode !== "NONE" ? epeOverlayMode : undefined}
+              showLightEffect={surfLightEffect}
+              style={{
+                width: isMainSurface && isCanvasLayout ? "calc(100% + 2px)" : "100%",
+                height: isMainSurface && isCanvasLayout ? "calc(100% + 2px)" : "100%",
+                marginLeft: isMainSurface && isCanvasLayout ? -1 : 0,
+                marginTop: isMainSurface && isCanvasLayout ? -1 : 0,
+                borderRadius: isMainSurface ? (isCanvasLayout ? 0 : 18) : 16,
+              }}
+            />
+          ) : (
+            <canvas
+              ref={surfaceCanvasRef}
+              style={{
+                width: isMainSurface && isCanvasLayout ? "calc(100% + 2px)" : "100%",
+                height: isMainSurface && isCanvasLayout ? "calc(100% + 2px)" : "100%",
+                marginLeft: isMainSurface && isCanvasLayout ? -1 : 0,
+                marginTop: isMainSurface && isCanvasLayout ? -1 : 0,
+                border: isMainSurface ? "none" : "1px solid rgba(96,108,132,0.4)",
+                borderRadius: isMainSurface ? (isCanvasLayout ? 0 : 18) : 16,
+                background:
+                  "radial-gradient(168% 158% at 18% 2%, #334763 0%, #25364e 40%, #172538 78%, #121c2b 100%)",
+                boxShadow: isMainSurface
+                  ? "none"
+                  : "inset 0 1px 0 rgba(244,248,255,0.18), inset 0 -34px 72px rgba(4,10,22,0.46), 0 10px 20px rgba(20,30,46,0.22)",
+              }}
+            />
+          )}
           {!sim?.intensity && (
             <div className="small-note" style={{ marginTop: 6 }}>
               Run simulation to generate 3D aerial surface.
@@ -1461,8 +1532,8 @@ export function Viewport(props: {
               <span className="surface-inline-label"><ToolbarIcon kind="azimuth" /> Az</span>
               <input
                 type="range"
-                min={-160}
-                max={160}
+                min={-180}
+                max={180}
                 step={1}
                 value={surfAzimuth}
                 onChange={(e) => setSurfAzimuth(Number(e.target.value))}
@@ -1472,8 +1543,8 @@ export function Viewport(props: {
               <span className="surface-inline-label"><ToolbarIcon kind="elevation" /> El</span>
               <input
                 type="range"
-                min={-12}
-                max={85}
+                min={-89}
+                max={89}
                 step={1}
                 value={surfElevation}
                 onChange={(e) => setSurfElevation(Number(e.target.value))}
@@ -2081,7 +2152,7 @@ export function Viewport(props: {
       {sweepResult && sweepPoints.length > 0 && (
         <details className="view-menu view-menu-align-right">
           <summary className="toolbar-pill">
-            <ToolbarIcon kind="contour" /> Sweep View
+            <ToolbarIcon kind="contour" /> Sweep
           </summary>
           <div className="view-menu-panel view-menu-panel-minimal sweep-view-menu-panel">
             <div className="view-chip-grid sweep-view-grid">
@@ -2094,7 +2165,7 @@ export function Viewport(props: {
             </div>
             <label className="sweep-view-slider">
               <span className="sweep-view-slider-label">
-                Focus point
+                Step
                 <b>{sweepIndexClamped + 1}/{sweepPoints.length}</b>
               </span>
               <input
@@ -2193,7 +2264,7 @@ export function Viewport(props: {
                 {surfacePanelVisible && (
                   <div
                     className="panel-corner-actions panel-corner-actions-bottom-left"
-                    style={{ top: "auto", right: "auto", bottom: 12, left: 12, zIndex: 9 }}
+                    style={{ top: "auto", right: "auto", bottom: 12, left: 12, zIndex: 9, display: "flex", gap: 4 }}
                   >
                     <button
                       type="button"
@@ -2204,6 +2275,15 @@ export function Viewport(props: {
                     >
                       <ToolbarIcon kind="cube" />
                       3D Ctrl
+                    </button>
+                    <button
+                      type="button"
+                      className={`panel-mini-control ${useWebGL ? "is-active" : ""}`}
+                      onClick={() => { const next = !useWebGL; setUseWebGL(next); try { localStorage.setItem("litopc_webgl3d", next ? "1" : "0"); } catch {} }}
+                      title={useWebGL ? "Switch to Classic 3D" : "Switch to Cosmic 3D"}
+                      aria-label={useWebGL ? "Switch to Classic 3D" : "Switch to Cosmic 3D"}
+                    >
+                      ✦ {useWebGL ? "Cosmic" : "Classic"}
                     </button>
                   </div>
                 )}
@@ -2946,8 +3026,8 @@ export function Viewport(props: {
                   <span className="surface-inline-label"><ToolbarIcon kind="azimuth" /> Az</span>
                   <input
                     type="range"
-                    min={-160}
-                    max={160}
+                    min={-180}
+                    max={180}
                     step={1}
                     value={surfAzimuth}
                     onChange={(e) => setSurfAzimuth(Number(e.target.value))}
@@ -2957,8 +3037,8 @@ export function Viewport(props: {
                   <span className="surface-inline-label"><ToolbarIcon kind="elevation" /> El</span>
                   <input
                     type="range"
-                    min={-12}
-                    max={85}
+                    min={-89}
+                    max={89}
                     step={1}
                     value={surfElevation}
                     onChange={(e) => setSurfElevation(Number(e.target.value))}
@@ -3008,6 +3088,29 @@ export function Viewport(props: {
                     onChange={(e) => setSurfOffsetZ(Number(e.target.value))}
                   />
                 </label>
+                <label className="surface-inline-item">
+                  <span className="surface-inline-label">✦ Cosmic</span>
+                  <input
+                    type="checkbox"
+                    checked={useWebGL}
+                    onChange={(e) => {
+                      setUseWebGL(e.target.checked);
+                      try { localStorage.setItem("litopc_webgl3d", e.target.checked ? "1" : "0"); } catch {}
+                    }}
+                    style={{ width: 14, height: 14, cursor: "pointer", accentColor: "#60a8e8" }}
+                  />
+                </label>
+                {useWebGL && (
+                  <label className="surface-inline-item">
+                    <span className="surface-inline-label">✦ Light</span>
+                    <input
+                      type="checkbox"
+                      checked={surfLightEffect}
+                      onChange={(e) => setSurfLightEffect(e.target.checked)}
+                      style={{ width: 14, height: 14, cursor: "pointer", accentColor: "#60a8e8" }}
+                    />
+                  </label>
+                )}
               </div>
             </div>
           )}

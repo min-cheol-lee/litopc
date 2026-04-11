@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /litopc/internal-login
+Disallow: /litopc/revenue-dashboard
+Disallow: /litopc/trust-dashboard
+Disallow: /litopc/advanced-analytics
+Sitemap: https://litopc.com/sitemap.xml

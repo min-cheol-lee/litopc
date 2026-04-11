@@ -176,6 +176,8 @@ export function ControlPanel(props: {
   opcBestIterIndex?: number | null;
   opcError?: string | null;
   opcOriginMaskMode?: "TEMPLATE" | "CUSTOM" | null;
+  onExportOpcGif?: () => void;
+  opcGifExporting?: boolean;
 }) {
   const PLAN_PANEL_COLLAPSED_KEY = "litopc_plan_panel_collapsed_v1";
   const LEGACY_PLAN_PANEL_COLLAPSED_KEY = "opclab_plan_panel_collapsed_v1";
@@ -313,6 +315,8 @@ export function ControlPanel(props: {
     opcBestIterIndex = null,
     opcError = null,
     opcOriginMaskMode = null,
+    onExportOpcGif,
+    opcGifExporting = false,
   } = props;
 
   const [maskPresetName, setMaskPresetName] = useState("");
@@ -749,6 +753,13 @@ export function ControlPanel(props: {
                       <>
                         <button className="opc-btn opc-btn-apply" onClick={onApplyOpcResult}>
                           Apply to Mask
+                        </button>
+                        <button
+                          className="opc-btn opc-btn-gif"
+                          onClick={onExportOpcGif}
+                          disabled={opcGifExporting || !onExportOpcGif}
+                          title="Export OPC correction progress as animated GIF">
+                          {opcGifExporting ? "Encoding…" : "Export GIF"}
                         </button>
                         <button
                           className="opc-btn opc-btn-rerun"

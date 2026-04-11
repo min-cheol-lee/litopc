@@ -16,6 +16,7 @@ import {
 } from "../../lib/types";
 import { SavedScenario, loadScenarios, saveScenarios } from "../../lib/scenarios";
 import { exportSweepCsv } from "../../lib/export";
+import { exportOpcGif } from "../../lib/opc-gif-export";
 import { createCheckoutSession, createPortalSession, fetchBillingStatus, type BillingStatus } from "../../lib/billing";
 import { getApiBase } from "../../lib/api-base";
 import {
@@ -305,6 +306,7 @@ export default function Page() {
   // "improved" | "plateau" | "diverged" | null — set after each batch
   const [opcBatchStatus, setOpcBatchStatus] = useState<"improved" | "plateau" | "diverged" | null>(null);
   const [opcError, setOpcError] = useState<string | null>(null);
+  const [opcGifExporting, setOpcGifExporting] = useState(false);
   // Global index (into opcProgress) of the iteration with the lowest EPE in the last batch.
   // null means the last iteration was already the best.
   const [opcBestIterIndex, setOpcBestIterIndex] = useState<number | null>(null);
@@ -1786,6 +1788,20 @@ export default function Page() {
     opcAbortRef.current?.abort();
   }
 
+  async function handleExportOpcGif() {
+    if (opcGifExporting || opcProgress.length === 0) return;
+    setOpcGifExporting(true);
+    try {
+      const effectiveTarget = opcSegmentedTarget.length > 0 ? opcSegmentedTarget : targetShapes;
+      await exportOpcGif(opcProgress, effectiveTarget, {
+        fovNm: params.fov_nm ?? 1100,
+        presetLabel: presetId,
+      });
+    } finally {
+      setOpcGifExporting(false);
+    }
+  }
+
   async function runSweep() {
     if (sweepLocked) return;
     trackProductEvent("sweep_run_clicked", { plan, sweepParam, maskMode, sweepGeometryScope });
@@ -2441,6 +2457,8 @@ export default function Page() {
               canContinueOpc={canContinueOpc}
               onApplyOpcResult={applyOpcResult}
               onCancelOpcCorrection={cancelOpcCorrection}
+              onExportOpcGif={() => { void handleExportOpcGif(); }}
+              opcGifExporting={opcGifExporting}
               onRollbackOpcResult={rollbackOpcResult}
               onResetOpc={resetOpcToTarget}
               opcIterations={OPC_ITERATIONS}

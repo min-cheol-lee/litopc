@@ -1,0 +1,43 @@
+---
+title: "How Aerial Image Simulation Works (Hopkins Model)"
+date: "2026-04-10"
+excerpt: "The Hopkins model computes aerial image intensity by decomposing the source into incoherent point sources and summing their coherent contributions through the pupil function."
+---
+
+## What Is the Aerial Image?
+
+The aerial image is the intensity distribution of light just above the wafer surface, before it enters the photoresist. It is the optical system's output — a direct consequence of the mask pattern, the illumination source shape, and the lens aberrations. Simulating it accurately is the foundation of all OPC work.
+
+## The Hopkins Formulation
+
+In 1953, H.H. Hopkins derived a compact formulation for partially coherent imaging that remains the basis of all modern lithography simulators. The key insight: a partially coherent source can be decomposed into incoherent point sources. Each point source illuminates the mask coherently, producing a coherent aerial image. The total intensity is the incoherent sum over all source points.
+
+The formulation involves three key quantities:
+
+- **S(f,g)** — the source intensity distribution (the illumination shape in spatial frequency coordinates)
+- **M(f,g)** — the Fourier transform of the mask transmission function
+- **P(f,g)** — the pupil function, equal to 1 inside the NA circle and 0 outside (for an ideal aberration-free lens)
+
+For each source point, the coherent image amplitude is computed by multiplying the shifted mask spectrum with the pupil function and inverse-Fourier-transforming back to the spatial domain. The total intensity is the incoherent sum of the squared amplitudes across all source points.
+
+## Transmission Cross-Coefficients (TCCs)
+
+Direct evaluation of the Hopkins integral is expensive for every new mask. In practice, simulators precompute the Transmission Cross-Coefficient (TCC) matrix, which captures how pairs of mask spatial frequency components interfere at the image plane.
+
+The TCC is a property of the optical system only — it depends on the source shape, pupil function, and NA, but not on the mask. Once computed for a given optical configuration, it can be reused for any mask pattern on that tool.
+
+For efficiency, the TCC is decomposed into eigenvectors, called coherent decomposition kernels. A small number of dominant kernels — typically 8 to 20 — captures more than 99% of the optical response. Each kernel is convolved with the mask independently (a coherent image), and the resulting intensities are summed. This kernel-based approach is what makes real-time aerial image simulation feasible.
+
+## Resist Threshold Model
+
+The aerial image alone does not predict the printed pattern. After the aerial image reaches the resist, a threshold model determines where the resist clears. In the simplest model, pixels with intensity above a threshold Ith clear the resist (define the bright features). More accurate models (Dill, Mack) account for the chemical amplification and diffusion in the resist film.
+
+The predicted contour — the iso-intensity line at the threshold — becomes the basis for measuring EPE and driving OPC iterations.
+
+## What litopc Computes
+
+litopc implements the Hopkins TCC kernel decomposition for all four optical presets: DUV dry (NA 0.93), DUV immersion (NA 1.35), EUV Low-NA (NA 0.33), and EUV High-NA (NA 0.55). The aerial image, resist contour, and EPE values are all derived from this physical model — not from approximations.
+
+The 2D intensity map you see in the simulator is a direct output of the TCC convolution, visualized with your choice of colormap.
+
+Try it yourself in the litopc simulator — no installation required. [Open Simulator →](/litopc)
