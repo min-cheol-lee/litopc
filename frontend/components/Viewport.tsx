@@ -796,7 +796,7 @@ export function Viewport(props: {
   useEffect(() => {
     const canvas = surfaceCanvasRef.current;
     const intensity = sim?.intensity;
-    if (!canvas || !intensity || req.plan !== "PRO" || !showSurface3d) return;
+    if (!canvas || !intensity || !showSurface3d) return;
 
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();

@@ -2192,7 +2192,7 @@ export default function Page() {
   const sidebarVisible = isFocusMode ? focusControlsVisible : sidebarExpanded;
   const editPanelVisible = isFocusMode ? focusEditVisible : studioEditVisible;
   const surfacePanelVisible = isFocusMode ? focusSurfaceVisible : studioSurfaceVisible;
-  const surfacePanelActive = plan === "PRO" && surfacePanelVisible;
+  const surfacePanelActive = surfacePanelVisible;
   const effectiveWorkspaceScale = isFocusMode ? workspaceScale : Math.min(workspaceScale, 1);
   const inverseSidebarScale = Number((100 / effectiveWorkspaceScale).toFixed(3));
   const sidebarScaleStyle = {
@@ -2230,7 +2230,6 @@ export default function Page() {
     setStudioEditVisible((v) => !v);
   };
   const toggleSurfacePanel = () => {
-    if (plan !== "PRO") return;
     if (isFocusMode) {
       setFocusSurfaceVisible((v) => !v);
       return;
