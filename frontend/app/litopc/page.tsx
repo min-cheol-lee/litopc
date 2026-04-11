@@ -2335,10 +2335,7 @@ export default function Page() {
           type="button"
           className={`workspace-mode-chip ${surfacePanelVisible ? "is-active" : ""}`}
           onClick={toggleSurfacePanel}
-          disabled={plan !== "PRO"}
-          title={plan !== "PRO"
-            ? "3D panel is available on Pro."
-            : (surfacePanelVisible ? "Hide 3D panel" : "Show 3D panel")}
+          title={surfacePanelVisible ? "Hide 3D panel" : "Show 3D panel"}
           aria-label={surfacePanelVisible ? "Hide 3D panel" : "Show 3D panel"}
         >
           3D
