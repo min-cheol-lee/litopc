@@ -1249,7 +1249,7 @@ export function Viewport(props: {
   const twoDPanelHeight = panelLayoutMode === "overlay"
     ? "100dvh"
     : "calc(100dvh - 24px)";
-  const allowSurfacePanel = req.plan === "PRO" && showSurfacePanel;
+  const allowSurfacePanel = showSurfacePanel;
   const surfacePanelVisible = allowSurfacePanel && showSurface3d;
   const canSwapSurfaceMain = surfacePanelVisible;
   const surfaceAsBackground = canSwapSurfaceMain && surfaceSwapMain;
