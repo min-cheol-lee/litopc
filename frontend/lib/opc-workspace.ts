@@ -1,3 +1,4 @@
+import { L_SHAPE_RAW_DEFAULTS } from "./template-defaults";
 import type { MaskShape, PresetID, RectMaskShape, ShapeOp, SimResponse, TemplateID } from "./types";
 import { isLineEndRawTemplate, isLShapeOpcTemplate, isLShapeRawTemplate, normalizeTemplateId } from "./template-variants";
 
@@ -124,11 +125,12 @@ function templateRawShapes(templateId: TemplateID, params: Record<string, number
 
   if (isLShapeRawTemplate(normalizedTemplateId) || isLShapeOpcTemplate(normalizedTemplateId)) {
     const family = normalizedTemplateId === "L_CORNER_RAW_EUV" || normalizedTemplateId === "L_CORNER_OPC_EUV" ? "EUV" : "DUV";
-    const cd = params.cd_nm ?? (family === "DUV" ? 100 : 96);
-    const horiz = params.length_nm ?? (family === "DUV" ? 450 : 440);
-    const vert = params.arm_nm ?? (family === "DUV" ? 420 : 408);
-    const elbowX = cx + (params.elbow_x_offset_nm ?? (family === "DUV" ? 160 : 164));
-    const elbowY = cy + (params.elbow_y_offset_nm ?? (family === "DUV" ? 140 : 136));
+    const defaults = L_SHAPE_RAW_DEFAULTS[family];
+    const cd = params.cd_nm ?? defaults.cd_nm;
+    const horiz = params.length_nm ?? defaults.length_nm;
+    const vert = params.arm_nm ?? defaults.arm_nm;
+    const elbowX = cx + (params.elbow_x_offset_nm ?? defaults.elbow_x_offset_nm);
+    const elbowY = cy + (params.elbow_y_offset_nm ?? defaults.elbow_y_offset_nm);
     return [
       rect(elbowX - horiz, elbowY - cd, horiz, cd),
       rect(elbowX - cd, elbowY - vert, cd, vert),
@@ -293,7 +295,8 @@ function presetTargetGuide(templateId: TemplateID, presetId: PresetID, params: R
   }
 
   if (isLShapeRawTemplate(normalizedTemplateId) || isLShapeOpcTemplate(normalizedTemplateId)) {
-    const targetShapes = [
+    // RAW targets must match the selected dimensions, including EUV and edits.
+    const targetShapes = isLShapeRawTemplate(normalizedTemplateId) ? rawShapes : [
       rect(260, 590, 450, 100),
       rect(610, 270, 100, 420),
     ];
@@ -307,7 +310,7 @@ function presetTargetGuide(templateId: TemplateID, presetId: PresetID, params: R
       hint: isEuvVariant
         ? "Use smaller corner pads and shorter hammerheads. EUV usually benefits from subtler edits than 193 nm dry."
         : "Connected hammerheads and modest local bias are more stable here than tiny floating assists.",
-      hotspotThresholdNm: 22,
+      hotspotThresholdNm: isEuvVariant ? 8 : 22,
       baselineShapeCount: isLShapeOpcTemplate(normalizedTemplateId) ? 0 : 0,
       targetShapes,
       targetContours: rectContours(targetShapes),

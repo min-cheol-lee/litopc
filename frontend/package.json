@@ -5,7 +5,8 @@
     "dev": "next dev",
     "dev:clean": "powershell -NoProfile -Command \"if (Test-Path .next) { try { Remove-Item .next -Recurse -Force -ErrorAction Stop } catch { Write-Host 'Skipping .next cleanup because it is in use.' } }\"; next dev",
     "build": "next build",
-    "test:opc": "node --test tests/opc-correction.test.cjs",
+    "test:opc": "node --test tests/opc-correction.test.cjs tests/template-defaults.test.cjs",
+    "test:surface": "node --test tests/surface3d-view.test.cjs tests/epe-overlay.test.cjs tests/colormap-display.test.cjs",
     "report:fonts": "node scripts/report-font-usage.mjs",
     "report:fonts:build": "powershell -NoProfile -Command \"$env:NEXT_DIST_DIR='.next-font-report'; next build; if ($LASTEXITCODE -eq 0) { node scripts/report-font-usage.mjs }\""
   },

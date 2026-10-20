@@ -206,9 +206,47 @@ function edgeSearchBox(
   }
 }
 
-// ── Nearest contour point ─────────────────────────────────────────────────────
+// ── Nearest point on the printed contour ───────────────────────────────────────
 
 type BBox = { x1: number; y1: number; x2: number; y2: number };
+
+function nearestOnContourSegment(
+  px: number,
+  py: number,
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  searchBox?: BBox,
+): { x: number; y: number } | null {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lengthSq = dx * dx + dy * dy;
+  if (!Number.isFinite(lengthSq) || lengthSq === 0) return null;
+
+  // Clip to this edge's ownership box before projecting. A simplified contour
+  // can cross the entire box while both of its stored endpoints lie outside it.
+  let lo = 0;
+  let hi = 1;
+  if (searchBox) {
+    for (const [start, delta, minimum, maximum] of [
+      [a.x, dx, searchBox.x1, searchBox.x2],
+      [a.y, dy, searchBox.y1, searchBox.y2],
+    ]) {
+      if (delta === 0) {
+        if (start < minimum || start > maximum) return null;
+      } else {
+        const first = (minimum - start) / delta;
+        const last = (maximum - start) / delta;
+        lo = Math.max(lo, Math.min(first, last));
+        hi = Math.min(hi, Math.max(first, last));
+        if (lo > hi) return null;
+      }
+    }
+  }
+
+  const projection = ((px - a.x) * dx + (py - a.y) * dy) / lengthSq;
+  const t = Math.max(lo, Math.min(hi, projection));
+  return { x: a.x + dx * t, y: a.y + dy * t };
+}
 
 function nearestOnContours(
   px: number,
@@ -218,17 +256,26 @@ function nearestOnContours(
 ): { x: number; y: number } | null {
   let bestDist = Infinity;
   let best: { x: number; y: number } | null = null;
+  const consider = (point: { x: number; y: number }) => {
+    const distance = Math.hypot(point.x - px, point.y - py);
+    if (distance < bestDist) { bestDist = distance; best = point; }
+  };
   for (const c of contours) {
-    for (const pt of c.points_nm) {
-      // If a search box is given, skip contour points that fall outside it.
-      // This prevents a sample on feature A from finding its nearest contour
-      // point on feature B's printed image when multiple shapes are present.
-      if (searchBox && (
-        pt.x < searchBox.x1 || pt.x > searchBox.x2 ||
-        pt.y < searchBox.y1 || pt.y > searchBox.y2
-      )) continue;
-      const d = Math.hypot(pt.x - px, pt.y - py);
-      if (d < bestDist) { bestDist = d; best = pt; }
+    for (let index = 0; index < c.points_nm.length; index++) {
+      const pt = c.points_nm[index];
+      if (!Number.isFinite(pt.x) || !Number.isFinite(pt.y)) continue;
+      if (!searchBox || (
+        pt.x >= searchBox.x1 && pt.x <= searchBox.x2 &&
+        pt.y >= searchBox.y1 && pt.y <= searchBox.y2
+      )) consider(pt);
+
+      // Only adjacent points within this polyline form a segment. The backend
+      // explicitly repeats the first point for closed loops; never add a bridge
+      // between distinct contours or close an open contour on its behalf.
+      const previous = c.points_nm[index - 1];
+      if (!previous || !Number.isFinite(previous.x) || !Number.isFinite(previous.y)) continue;
+      const nearest = nearestOnContourSegment(px, py, previous, pt, searchBox);
+      if (nearest) consider(nearest);
     }
   }
   return best;

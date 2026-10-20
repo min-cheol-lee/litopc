@@ -1,6 +1,22 @@
 from typing import Dict, List, Tuple
 
-from ..models import RectShape, TemplateID
+from ..models import PresetID, RectShape, TemplateID
+
+
+def template_params_for_preset(
+    template_id: TemplateID | None,
+    params: Dict[str, float],
+    preset_id: PresetID,
+) -> Dict[str, float]:
+    """Resolve omitted EUV dense-line dimensions without changing explicit inputs.
+
+    The same DENSE_LS template ID serves both optical families. The API resolves
+    its preset before applying these defaults; the geometry builder keeps its
+    existing two-argument contract and historical DUV fallbacks.
+    """
+    if template_id == "DENSE_LS" and preset_id in {"EUV_LNA", "EUV_HNA"}:
+        return {"cd_nm": 24.0, "pitch_nm": 48.0, "n_lines": 4.0, "length_nm": 320.0, **params}
+    return dict(params)
 
 
 def _normalize_template_id(template_id: TemplateID) -> TemplateID:
@@ -39,7 +55,7 @@ def _append_l_shape_raw(
 ) -> None:
     defaults = {
         "DUV": {"cd_nm": 100.0, "length_nm": 450.0, "arm_nm": 420.0, "elbow_x_offset_nm": 160.0, "elbow_y_offset_nm": 140.0},
-        "EUV": {"cd_nm": 96.0, "length_nm": 440.0, "arm_nm": 408.0, "elbow_x_offset_nm": 164.0, "elbow_y_offset_nm": 136.0},
+        "EUV": {"cd_nm": 24.0, "length_nm": 160.0, "arm_nm": 160.0, "elbow_x_offset_nm": 80.0, "elbow_y_offset_nm": 80.0},
     }[family]
     cd = float(p.get("cd_nm", defaults["cd_nm"]))
     horiz = float(p.get("length_nm", defaults["length_nm"]))

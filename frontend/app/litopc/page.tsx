@@ -67,6 +67,7 @@ import {
   getCompatibleTemplateIdForPreset,
   isLShapeOpcTemplate,
   normalizeTemplateId,
+  presetFamilyForPreset,
   templateEnabledForPreset,
   templateSupportsPresetFamily,
 } from "../../lib/template-variants";
@@ -74,6 +75,8 @@ import {
   enabledPresetOptionsForPlan,
   getCompatibleEnabledPresetId,
 } from "../../lib/preset-availability";
+
+import { templateParamDefaults } from "../../lib/template-defaults";
 
 const API_BASE = getApiBase();
 const FREE_TEMPLATES_BASE: Array<NonNullable<SimRequest["mask"]["template_id"]>> = [
@@ -235,6 +238,7 @@ export default function Page() {
   const [plan, setPlan] = useState<"FREE" | "PRO">("FREE");
   const [maskMode, setMaskMode] = useState<"TEMPLATE" | "CUSTOM">("TEMPLATE");
   const [presetId, setPresetId] = useState<SimRequest["preset_id"]>("DUV_193_DRY");
+  const templatePresetFamilyRef = useRef(presetFamilyForPreset(presetId));
   const [templateId, setTemplateId] = useState<SimRequest["mask"]["template_id"]>("ISO_LINE_DUV");
   const [maskSeedTemplateId, setMaskSeedTemplateId] = useState<SimRequest["mask"]["template_id"] | null>("ISO_LINE_DUV");
   const [presetEditShapes, setPresetEditShapes] = useState<Array<MaskShape>>([]);
@@ -617,12 +621,15 @@ export default function Page() {
     const nextTemplateId = preferredTemplateId && compatibleTemplateIds.includes(preferredTemplateId)
       ? preferredTemplateId
       : (compatibleTemplateIds[0] ?? "ISO_LINE_DUV");
+    const nextFamily = presetFamilyForPreset(presetId);
+    const presetFamilyChanged = templatePresetFamilyRef.current !== nextFamily;
     const currentCompatible = Boolean(normalizedTemplateId && compatibleTemplateIds.includes(normalizedTemplateId));
     const shouldCanonicalize = Boolean(templateId && templateId !== normalizedTemplateId);
-    if (currentCompatible && !shouldCanonicalize) return;
+    if (currentCompatible && !shouldCanonicalize && !presetFamilyChanged) return;
 
     if (maskMode === "TEMPLATE") {
-      const nextParams = { ...params, ...templateParamDefaults(nextTemplateId) };
+      templatePresetFamilyRef.current = nextFamily;
+      const nextParams = { ...params, ...templateParamDefaults(nextTemplateId, presetId) };
       const nextTargetParams = templateTargetParamDefaults(nextTemplateId, nextParams);
       const seededTargetShapes = cloneMaskShapes(getPresetTargetGuide(nextTemplateId, presetId, nextTargetParams).targetShapes);
       setTemplateId(nextTemplateId);
@@ -1153,7 +1160,7 @@ export default function Page() {
   function handleTemplateSelection(nextTemplateId: NonNullable<SimRequest["mask"]["template_id"]>) {
     discardOpcCorrection();
     const normalizedNextTemplateId = normalizeTemplateId(nextTemplateId) ?? "ISO_LINE_DUV";
-    const nextParams = { ...params, ...templateParamDefaults(normalizedNextTemplateId) };
+    const nextParams = { ...params, ...templateParamDefaults(normalizedNextTemplateId, presetId) };
     const nextTargetParams = templateTargetParamDefaults(normalizedNextTemplateId, nextParams);
     const seededTargetShapes = cloneMaskShapes(getPresetTargetGuide(normalizedNextTemplateId, presetId, nextTargetParams).targetShapes);
     setMaskMode("TEMPLATE");
@@ -2827,124 +2834,6 @@ function templateDefaultManualEdits(
   return edits;
 }
 
-function templateParamDefaults(id: NonNullable<SimRequest["mask"]["template_id"]>): Record<string, number> {
-  const normalizedId = normalizeTemplateId(id) ?? id;
-  switch (normalizedId) {
-    // Always include cd_nm / length_nm explicitly so that switching templates
-    // always resets these to scale-appropriate values.  Without this, a
-    // preceding LINE_END_RAW_EUV selection (cd_nm=24) would bleed into
-    // ISO_LINE_DUV, DENSE_LS, etc. via the `{ ...params, ...defaults }` merge.
-    case "ISO_LINE_DUV":
-      return { cd_nm: 100, length_nm: 900 };
-    case "ISO_LINE_EUV":
-      // EUV 13.5 nm LNA: cd=24 nm ≈ 2× Rayleigh floor (~12 nm).
-      // Shows real EUV proximity effects; 500 nm length fits well in the 1100 nm FOV.
-      return { cd_nm: 24, length_nm: 500 };
-    case "DENSE_LS":
-      return { cd_nm: 150, length_nm: 900, pitch_nm: 250 };
-    case "LINE_END_RAW_DUV":
-      return { cd_nm: 100, length_nm: 600 };
-    case "LINE_END_RAW_EUV":
-      return { cd_nm: 24, length_nm: 160 };
-    case "CONTACT_RAW":
-      return {
-        cd_nm: 200,
-        w_nm: 200,
-        serif_nm: 28,
-      };
-    case "CONTACT_OPC_SERIF":
-      return {
-        cd_nm: 170,
-        w_nm: 170,
-        serif_nm: 112,
-      };
-    case "L_CORNER_RAW_DUV":
-      return {
-        cd_nm: 100,
-        length_nm: 450,
-        arm_nm: 420,
-        elbow_x_offset_nm: 160,
-        elbow_y_offset_nm: 140,
-      };
-    case "L_CORNER_OPC_DUV":
-      return {
-        cd_nm: 120,
-        length_nm: 350,
-        arm_nm: 320,
-        serif_nm: 90,
-        m1_x_nm: 300,
-        m1_y_nm: 580,
-        m2_x_nm: 600,
-        m2_y_nm: 305,
-        r1_x_nm: 245,
-        r1_y_nm: 540,
-        left_hammer_w_nm: 55,
-        left_hammer_h_nm: 180,
-        r2_x_nm: 570,
-        r2_y_nm: 250,
-        bottom_hammer_w_nm: 180,
-        bottom_hammer_h_nm: 55,
-        r3_x_nm: 650,
-        r3_y_nm: 625,
-        r4_x_nm: 470,
-        r4_y_nm: 555,
-        r4_w_nm: 90,
-        r4_h_nm: 160,
-        r5_x_nm: 585,
-        r5_y_nm: 432,
-        r5_w_nm: 150,
-        r5_h_nm: 125,
-      };
-    case "L_CORNER_RAW_EUV":
-      return {
-        cd_nm: 96,
-        length_nm: 440,
-        arm_nm: 408,
-        elbow_x_offset_nm: 164,
-        elbow_y_offset_nm: 136,
-      };
-    case "L_CORNER_OPC_EUV":
-      return {
-        cd_nm: 110,
-        length_nm: 380,
-        arm_nm: 348,
-        serif_nm: 60,
-        m1_x_nm: 288,
-        m1_y_nm: 586,
-        m2_x_nm: 604,
-        m2_y_nm: 286,
-        r1_x_nm: 252,
-        r1_y_nm: 546,
-        left_hammer_w_nm: 40,
-        left_hammer_h_nm: 136,
-        r2_x_nm: 580,
-        r2_y_nm: 254,
-        bottom_hammer_w_nm: 150,
-        bottom_hammer_h_nm: 40,
-        r3_x_nm: 642,
-        r3_y_nm: 618,
-      };
-    case "STAIRCASE":
-      return {
-        cd_nm: 88,
-        thickness_nm: 88,
-        step_w_nm: 180,
-        step_h_nm: 110,
-      };
-    case "STAIRCASE_OPC":
-      return {
-        cd_nm: 88,
-        thickness_nm: 88,
-        step_w_nm: 180,
-        step_h_nm: 110,
-        serif_nm: 18,
-        opc_bias_nm: 12,
-        end_extension_nm: 24,
-      };
-    default:
-      return {};
-  }
-}
 
 function templateTargetParamDefaults(
   id: NonNullable<SimRequest["mask"]["template_id"]>,

@@ -78,6 +78,7 @@ from .store import (
 )
 from .sim.presets import PRESETS
 from .sim.pipeline import run_simulation
+from .sim.templates import template_params_for_preset
 
 app = FastAPI(title="litopc API", version="0.1.0")
 
@@ -113,7 +114,8 @@ ENABLED_TEMPLATES_BY_PRESET_FAMILY = {
         "ISO_LINE_EUV",
         "DENSE_LS",
         "LINE_END_RAW_EUV",
-        # Keep EUV-specific square, L-shape, and stepped presets disabled for now.
+        "L_CORNER_RAW_EUV",
+        # Keep EUV-specific square, OPC L-shape, and stepped presets disabled for now.
         # Re-enable later by adding their canonical IDs here.
     },
 }
@@ -396,6 +398,8 @@ def _apply_request_policy(req: SimRequest) -> SimRequest:
     _normalize_enabled_preset(out)
     _validate_template_access(out)
     _validate_custom_mode(out)
+    if out.mask.mode == "TEMPLATE":
+        out.mask.params_nm = template_params_for_preset(out.mask.template_id, out.mask.params_nm, out.preset_id)
     _enforce_plan(out)
     return out
 

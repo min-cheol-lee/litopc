@@ -26,13 +26,15 @@ export interface MaskRect {
   h: number;
 }
 
-export type ColormapType = "apple" | "plasma" | "viridis" | "hot" | "grayscale" | "ice";
+export type ColormapType = "silver" | "cobalt" | "amber" | "apple" | "plasma" | "viridis" | "hot" | "grayscale" | "ice";
 export type ContourStyle = "CLASSIC" | "NEON" | "GOLD" | "MINIMAL";
 export type QualityMode = "FAST" | "FULL";
 export type EpeMode = "COLOR" | "ARROWS" | "BOTH";
 export type MaskOpacityPreset = "BALANCED" | "REVEAL";
 
 export interface Surface3DProps {
+  // A regular prop survives next/dynamic's loadable wrapper, which does not forward refs.
+  rendererRef?: { current: Surface3DHandle | null };
   // Intensity data
   intensityW: number;
   intensityH: number;
@@ -53,6 +55,7 @@ export interface Surface3DProps {
 
   // Appearance
   colormapType: ColormapType;
+  colormapThreshold?: number;
   contourStyle: ContourStyle;
   showAerial: boolean;
   maskOpacityPreset: MaskOpacityPreset;
@@ -81,6 +84,7 @@ export interface Surface3DProps {
 
   // Light effect
   showLightEffect?: boolean;
+  wavelengthNm?: number;
 }
 
 export interface Surface3DHandle {

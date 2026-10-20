@@ -1,3 +1,4 @@
+import { L_SHAPE_RAW_DEFAULTS } from "./template-defaults";
 import type { MaskShape, RectMaskShape, ShapeOp, TemplateID } from "./types";
 import { normalizeTemplateId } from "./template-variants";
 
@@ -34,11 +35,12 @@ function appendLShapeRaw(
   cy: number,
   family: "DUV" | "EUV",
 ) {
-  const cd = p.cd_nm ?? (family === "DUV" ? 100 : 96);
-  const horiz = p.length_nm ?? (family === "DUV" ? 450 : 440);
-  const vert = p.arm_nm ?? (family === "DUV" ? 420 : 408);
-  const elbowX = cx + (p.elbow_x_offset_nm ?? (family === "DUV" ? 160 : 164));
-  const elbowY = cy + (p.elbow_y_offset_nm ?? (family === "DUV" ? 140 : 136));
+  const defaults = L_SHAPE_RAW_DEFAULTS[family];
+  const cd = p.cd_nm ?? defaults.cd_nm;
+  const horiz = p.length_nm ?? defaults.length_nm;
+  const vert = p.arm_nm ?? defaults.arm_nm;
+  const elbowX = cx + (p.elbow_x_offset_nm ?? defaults.elbow_x_offset_nm);
+  const elbowY = cy + (p.elbow_y_offset_nm ?? defaults.elbow_y_offset_nm);
   pushRect(rects, elbowX - horiz, elbowY - cd, horiz, cd);
   pushRect(rects, elbowX - cd, elbowY - vert, cd, vert);
 }

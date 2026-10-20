@@ -1,4 +1,5 @@
-﻿"use client";
+"use client";
+import { L_SHAPE_RAW_DEFAULTS } from "../lib/template-defaults";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { BatchSimResponse, MaskShape, RunRecord, SimRequest, SimResponse, SweepParam } from "../lib/types";
 import type { EditorLayer, EditorTool, TargetGuide, TargetScoreMetrics } from "../lib/opc-workspace";
@@ -8,10 +9,19 @@ import { consumeUsage } from "../lib/usage";
 import { trackProductEvent } from "../lib/telemetry";
 import { isLShapeOpcTemplate, isLShapeRawTemplate } from "../lib/template-variants";
 import dynamic from "next/dynamic";
-const Surface3DCanvas = dynamic(() => import("./Surface3DCanvas"), { ssr: false });
-import type { Surface3DHandle } from "../lib/surface3d-types";
+const Surface3DCanvas = dynamic(() => import("./Surface3DCanvas"), {
+  ssr: false,
+  loading: () => <div className="surface-render-loading" role="status">Preparing 3D…</div>,
+});
+const Surface3DReference = dynamic(() => import("./Surface3DReference"), { ssr: false });
+import type { ColormapType, Surface3DHandle } from "../lib/surface3d-types";
+import { getSurfacePaletteColor } from "../lib/surface3d-palettes";
+import { COLORMAP_THRESHOLD_DEFAULT, mapColormapIntensity } from "../lib/colormap-display";
+import { getEpeColor, nearestTargetPoint } from "../lib/epe-overlay";
+import { ViewportViewSettings } from "./ViewportViewSettings";
+import { SURFACE3D_PLANES, createSurface3dRotation, getSurface3dPivot } from "../lib/surface3d-view";
 
-// WebGL 3D flag — toggled via 3D Ctrl panel, persisted in localStorage
+// Rendering style is shared through View and persisted in localStorage.
 
 const DEFAULT_FOV = 1100;
 const COMPARE_A_COLOR = "#2f7dff";
@@ -129,6 +139,7 @@ export function Viewport(props: {
     | "contour-line";
   type SnapMode = "AUTO" | "OFF" | "MASK" | "CONTOUR";
   const [scale, setScale] = useState(1);
+  const [surfaceZoomScale, setSurfaceZoomScale] = useState(1);
   const [tx, setTx] = useState(0);
   const [ty, setTy] = useState(0);
   const [showLegend, setShowLegend] = useState(true);
@@ -138,24 +149,37 @@ export function Viewport(props: {
   const [showTargetOverlay, setShowTargetOverlay] = useState(true);
   const [showAerial, setShowAerial] = useState(true);
   const [aerialOpacity, setAerialOpacity] = useState(0.58);
-  const [colormapType, setColormapType] = useState<"apple" | "plasma" | "viridis" | "hot" | "grayscale" | "ice">("apple");
+  const [colormapType, setColormapType] = useState<ColormapType>("apple");
+  const [colormapThreshold, setColormapThreshold] = useState(COLORMAP_THRESHOLD_DEFAULT);
   const [bgTheme, setBgTheme] = useState<"DARK" | "LIGHT">("DARK");
-  const [contourStyle, setContourStyle] = useState<"CLASSIC" | "NEON" | "GOLD" | "MINIMAL">("CLASSIC");
+  const contourStyle = "MINIMAL" as "CLASSIC" | "NEON" | "GOLD" | "MINIMAL";
   const [epeOverlayMode, setEpeOverlayMode] = useState<"NONE" | "COLOR" | "ARROWS" | "BOTH">(initialEpeOverlayMode);
   const [exportResolution, setExportResolution] = useState<"WEB" | "HIGH_RES">(() => req.plan === "PRO" ? "HIGH_RES" : "WEB");
   const [showSurface3d, setShowSurface3d] = useState(true);
-  const [useWebGL, setUseWebGL] = useState<boolean>(() => {
-    try { return localStorage.getItem("litopc_webgl3d") === "1"; } catch { return false; }
-  });
+  const [useWebGL, setUseWebGL] = useState(false);
+  const [useCosmicReference, setUseCosmicReference] = useState(false);
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const reference = query.get("reference") === "cosmic";
+    setUseCosmicReference(reference);
+    if (reference) { setSurfElevation(34); setColormapType("apple"); }
+    try {
+      setUseWebGL(reference || query.get("webgl") === "1" || localStorage.getItem("litopc_webgl3d") === "1");
+    } catch {
+      setUseWebGL(reference || query.get("webgl") === "1");
+    }
+  }, []);
+  const SurfaceRenderer = useCosmicReference ? Surface3DReference : Surface3DCanvas;
   const [surfLightEffect, setSurfLightEffect] = useState(true);
-  const [showSurfaceControls, setShowSurfaceControls] = useState(false);
+  const [surfaceExporting, setSurfaceExporting] = useState(false);
+  const [surfaceExportError, setSurfaceExportError] = useState<string | null>(null);
   const [surfaceSwapMain, setSurfaceSwapMain] = useState(false);
   const [compareContourMode, setCompareContourMode] = useState<"MIXED" | "AB_ONLY">("AB_ONLY");
   const [showSweepOverlay, setShowSweepOverlay] = useState(true);
   const [sweepStackAll, setSweepStackAll] = useState(true);
   const [sweepPointIndex, setSweepPointIndex] = useState(0);
   const [surfAzimuth, setSurfAzimuth] = useState(34);
-  const [surfElevation, setSurfElevation] = useState(34);
+  const [surfElevation, setSurfElevation] = useState(52);
   const [surfRoll, setSurfRoll] = useState(0);
   const [surfOffsetX, setSurfOffsetX] = useState(0);
   const [surfOffsetY, setSurfOffsetY] = useState(0);
@@ -175,6 +199,7 @@ export function Viewport(props: {
   const surfaceCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const surface3dRef = useRef<Surface3DHandle | null>(null);
   const viewportFrameRef = useRef<HTMLDivElement | null>(null);
+  const viewMenuRef = useRef<HTMLDetailsElement | null>(null);
   const contourDebugKeyRef = useRef<string>("");
   const surfaceDragRef = useRef<
     | { mode: "rotate"; x: number; y: number; az: number; el: number }
@@ -314,40 +339,19 @@ export function Viewport(props: {
   const maskCdNm = useMemo(() => estimateMaskCdNm(req, resolvedMaskShapes), [templateId, paramsSignature, req.mask.mode, maskShapesSignature, resolvedMaskShapes]);
   const contourCdNm = sim?.metrics?.cd_nm ?? null;
   // ── EPE overlay helpers ──────────────────────────────────────────────────
-  function nearestOnSegment(p: {x:number;y:number}, a: {x:number;y:number}, b: {x:number;y:number}) {
-    const dx = b.x - a.x, dy = b.y - a.y;
-    const lenSq = dx * dx + dy * dy;
-    if (lenSq < 1e-12) return { x: a.x, y: a.y };
-    const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq));
-    return { x: a.x + t * dx, y: a.y + t * dy };
-  }
-  function nearestOnPolyline(p: {x:number;y:number}, poly: Array<{x:number;y:number}>) {
-    let bestDist = Infinity, bestPt = poly[0];
-    for (let i = 0; i < poly.length - 1; i++) {
-      const c = nearestOnSegment(p, poly[i], poly[i + 1]);
-      const d = Math.hypot(c.x - p.x, c.y - p.y);
-      if (d < bestDist) { bestDist = d; bestPt = c; }
-    }
-    return { point: bestPt, dist: bestDist };
-  }
   function epeColor(distNm: number) {
-    const t = Math.min(1, distNm / 10);
-    const r = Math.round(t < 0.5 ? t * 2 * 255 : 255);
-    const g = Math.round(t < 0.5 ? 210 : (1 - (t - 0.5) * 2) * 210);
-    return `rgba(${r},${g},40,0.92)`;
+    return `rgba(${getEpeColor(distNm).join(",")},0.96)`;
   }
 
   const epeSegments = useMemo(() => {
     if (epeOverlayMode === "NONE") return null;
     const contours = sim?.contours_nm;
     if (!contours?.length || !targetContours?.length) return null;
-    const flatTarget = targetContours.flatMap(c => c.points_nm);
-    if (flatTarget.length < 2) return null;
     return contours.map(c => {
       const pts = c.points_nm;
       return pts.map(p => {
-        const { point: nearest, dist } = nearestOnPolyline(p, flatTarget);
-        return { p, nearest, dist };
+        const nearest = nearestTargetPoint(p, targetContours);
+        return { p, nearest: nearest?.point ?? p, dist: nearest?.dist ?? 0 };
       });
     });
   }, [epeOverlayMode, sim?.contours_nm, targetContours]);
@@ -668,63 +672,83 @@ export function Viewport(props: {
 
   async function onExport3dPng(sizePx: number = 3200) {
     const intensity = sim?.intensity;
-    if (!intensity) return;
+    if (!intensity || surfaceExporting) return;
+    if (useWebGL && !useCosmicReference && !surface3dRef.current) return;
     if (!(await guardExportQuota("figure_png"))) return;
+    setSurfaceExportError(null);
+    setSurfaceExporting(true);
+    try {
+      const save = (blob: Blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `litopc-3d-${useWebGL && !useCosmicReference ? "rendered" : "surface"}-${sizePx}px.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      };
+      if (useWebGL && !useCosmicReference) {
+        const blob = await surface3dRef.current!.exportPng(sizePx);
+        if (!blob) throw new Error("The 3D image could not be saved. Please try again.");
+        save(blob);
+        trackProductEvent("export_completed", { kind: "figure_png", plan: req.plan, variant: "3d_rendered" });
+        return;
+      }
+      const offscreen = document.createElement("canvas");
+      offscreen.width = sizePx;
+      offscreen.height = sizePx;
+      const ctx = offscreen.getContext("2d");
+      if (!ctx) return;
 
-    const offscreen = document.createElement("canvas");
-    offscreen.width = sizePx;
-    offscreen.height = sizePx;
-    const ctx = offscreen.getContext("2d");
-    if (!ctx) return;
+      // Scale line widths proportionally to output resolution.
+      // Reference display size is ~420px; at 3200px that's ~7.6x.
+      const displayW = surfaceCanvasRef.current?.getBoundingClientRect().width ?? 420;
+      const lineScale = sizePx / Math.max(1, displayW);
 
-    // Scale line widths proportionally to output resolution.
-    // Reference display size is ~420px; at 3200px that's ~7.6x.
-    const displayW = surfaceCanvasRef.current?.getBoundingClientRect().width ?? 420;
-    const lineScale = sizePx / Math.max(1, displayW);
+      drawSurface3D(ctx, sizePx, sizePx, intensity.w, intensity.h, intensity.data, {
+        azimuthDeg: surfAzimuth,
+        elevationDeg: surfElevation,
+        rollDeg: surfRoll,
+        offsetX: surfOffsetX,
+        offsetY: surfOffsetY,
+        offsetZ: surfOffsetZ,
+        depthScale: surfDepth,
+        zoomScale: surfaceZoomScale,
+        qualityMode: "FULL",
+        fovNm,
+        maskAddRects,
+        maskSubtractRects,
+        overlayAddRects,
+        finalMaskContours,
+        contours: sim?.contours_nm ?? [],
+        targetContours,
+        showTargetOverlay,
+        compareActive,
+        compareAContours: compareAContours ?? [],
+        compareBContours: compareBContours ?? [],
+        sweepContourSets: sweepContourSets3d,
+        showMainContour: effectiveShowMainContour,
+        showAerial,
+        maskOpacityPreset,
+        nmPerPixel: sim?.nm_per_pixel ?? (fovNm / Math.max(1, intensity.w)),
+        lineScale,
+        colormapType: colormapType,
+        colormapThreshold: useCosmicReference ? 1 : colormapThreshold,
+        contourStyle,
+        epeContours: epeOverlayMode !== "NONE" ? epeSegments : null,
+        epeMode: epeOverlayMode !== "NONE" ? epeOverlayMode : undefined,
+      });
 
-    drawSurface3D(ctx, sizePx, sizePx, intensity.w, intensity.h, intensity.data, {
-      azimuthDeg: surfAzimuth,
-      elevationDeg: surfElevation,
-      rollDeg: surfRoll,
-      offsetX: surfOffsetX,
-      offsetY: surfOffsetY,
-      offsetZ: surfOffsetZ,
-      depthScale: surfDepth,
-      zoomScale: scale,
-      qualityMode: "FULL",
-      fovNm,
-      maskAddRects,
-      maskSubtractRects,
-      overlayAddRects,
-      finalMaskContours,
-      contours: sim?.contours_nm ?? [],
-      targetContours,
-      showTargetOverlay,
-      compareActive,
-      compareAContours: compareAContours ?? [],
-      compareBContours: compareBContours ?? [],
-      sweepContourSets: sweepContourSets3d,
-      showMainContour: effectiveShowMainContour,
-      showAerial,
-      maskOpacityPreset,
-      nmPerPixel: sim?.nm_per_pixel ?? (fovNm / Math.max(1, intensity.w)),
-      lineScale,
-      colormapType,
-      epeContours: epeOverlayMode !== "NONE" ? epeSegments : null,
-      epeMode: epeOverlayMode !== "NONE" ? epeOverlayMode : undefined,
-    });
-
-    offscreen.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `litopc-3d-surface-${sizePx}px.png`;
-      a.click();
-      URL.revokeObjectURL(url);
-    }, "image/png");
-
-    trackProductEvent("export_completed", { kind: "figure_png", plan: req.plan, variant: "3d_surface" });
+      const blob = await new Promise<Blob | null>((resolve) => offscreen.toBlob(resolve, "image/png"));
+      if (!blob) throw new Error("The 3D image could not be saved. Please try again.");
+      save(blob);
+      trackProductEvent("export_completed", { kind: "figure_png", plan: req.plan, variant: "3d_surface" });
+    } catch (error) {
+      setSurfaceExportError(error instanceof Error ? error.message : "The 3D image could not be saved. Please try again.");
+    } finally {
+      setSurfaceExporting(false);
+    }
   }
 
   function setSurfaceFastMode() {
@@ -779,7 +803,7 @@ export function Viewport(props: {
     for (let i = 0; i < data.length; i++) {
       const tRaw = (data[i] - vmin) / span;
       const t = Math.max(0, Math.min(1, tRaw));
-      const { r, g, b } = getColorMap(colormapType, t);
+      const { r, g, b } = getColorMap(colormapType, t, colormapThreshold);
       const j = i * 4;
       img.data[j] = r;
       img.data[j + 1] = g;
@@ -791,54 +815,61 @@ export function Viewport(props: {
 
     ctx.putImageData(img, 0, 0);
     setHeatmapUrl(canvas.toDataURL("image/png"));
-  }, [sim?.intensity, colormapType]);
+  }, [sim?.intensity, colormapType, colormapThreshold]);
 
   useEffect(() => {
     const canvas = surfaceCanvasRef.current;
     const intensity = sim?.intensity;
     if (!canvas || !intensity || !showSurface3d) return;
 
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    const cssW = Math.max(1, rect.width);
-    const cssH = Math.max(1, rect.height);
-    canvas.width = Math.round(cssW * dpr);
-    canvas.height = Math.round(cssH * dpr);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawSurface3D(ctx, cssW, cssH, intensity.w, intensity.h, intensity.data, {
-      azimuthDeg: surfAzimuth,
-      elevationDeg: surfElevation,
-      rollDeg: surfRoll,
-      offsetX: surfOffsetX,
-      offsetY: surfOffsetY,
-      offsetZ: surfOffsetZ,
-      depthScale: surfDepth,
-      zoomScale: scale,
-      qualityMode: surfaceQuality,
-      fovNm,
-      maskAddRects,
-      maskSubtractRects,
-      overlayAddRects,
-      finalMaskContours,
-      contours: sim?.contours_nm ?? [],
-      targetContours,
-      showTargetOverlay,
-      compareActive,
-      compareAContours: compareAContours ?? [],
-      compareBContours: compareBContours ?? [],
-      sweepContourSets: sweepContourSets3d,
-      showMainContour: effectiveShowMainContour,
-      showAerial,
-      maskOpacityPreset,
-      nmPerPixel: sim?.nm_per_pixel ?? (fovNm / Math.max(1, intensity.w)),
-      colormapType,
-      contourStyle,
-      epeContours: epeOverlayMode !== "NONE" ? epeSegments : null,
-      epeMode: epeOverlayMode !== "NONE" ? epeOverlayMode : undefined,
-    });
-  }, [sim?.intensity, sim?.contours_nm, surfAzimuth, surfElevation, surfRoll, surfOffsetX, surfOffsetY, surfOffsetZ, surfDepth, scale, surfaceQuality, req.plan, showSurface3d, fovNm, compareActive, compareAContours, compareBContours, sweepContourSets3d, effectiveShowMainContour, showAerial, maskOpacityPreset, maskAddRects, maskSubtractRects, overlayAddRects, finalMaskContours, targetContours, showTargetOverlay, colormapType, contourStyle, epeOverlayMode, epeSegments]);
+    const draw = () => {
+      const dpr = Math.max(2, Math.min(3, window.devicePixelRatio || 1));
+      const rect = canvas.getBoundingClientRect();
+      const cssW = Math.max(1, rect.width);
+      const cssH = Math.max(1, rect.height);
+      canvas.width = Math.round(cssW * dpr);
+      canvas.height = Math.round(cssH * dpr);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawSurface3D(ctx, cssW, cssH, intensity.w, intensity.h, intensity.data, {
+        azimuthDeg: surfAzimuth,
+        elevationDeg: surfElevation,
+        rollDeg: surfRoll,
+        offsetX: surfOffsetX,
+        offsetY: surfOffsetY,
+        offsetZ: surfOffsetZ,
+        depthScale: surfDepth,
+        zoomScale: surfaceZoomScale,
+        qualityMode: surfaceQuality,
+        fovNm,
+        maskAddRects,
+        maskSubtractRects,
+        overlayAddRects,
+        finalMaskContours,
+        contours: sim?.contours_nm ?? [],
+        targetContours,
+        showTargetOverlay,
+        compareActive,
+        compareAContours: compareAContours ?? [],
+        compareBContours: compareBContours ?? [],
+        sweepContourSets: sweepContourSets3d,
+        showMainContour: effectiveShowMainContour,
+        showAerial,
+        maskOpacityPreset,
+        nmPerPixel: sim?.nm_per_pixel ?? (fovNm / Math.max(1, intensity.w)),
+        colormapType: colormapType,
+        colormapThreshold: useCosmicReference ? 1 : colormapThreshold,
+        contourStyle,
+        epeContours: epeOverlayMode !== "NONE" ? epeSegments : null,
+        epeMode: epeOverlayMode !== "NONE" ? epeOverlayMode : undefined,
+      });
+    };
+    draw();
+    const resize = new ResizeObserver(draw);
+    resize.observe(canvas);
+    return () => resize.disconnect();
+  }, [sim?.intensity, sim?.contours_nm, surfAzimuth, surfElevation, surfRoll, surfOffsetX, surfOffsetY, surfOffsetZ, surfDepth, surfaceZoomScale, surfaceQuality, req.plan, showSurface3d, useWebGL, useCosmicReference, surfaceSwapMain, fovNm, compareActive, compareAContours, compareBContours, sweepContourSets3d, effectiveShowMainContour, showAerial, maskOpacityPreset, maskAddRects, maskSubtractRects, overlayAddRects, finalMaskContours, targetContours, showTargetOverlay, colormapType, colormapThreshold, contourStyle, epeOverlayMode, epeSegments]);
 
   useEffect(() => {
     const contours = sim?.contours_nm;
@@ -874,6 +905,7 @@ export function Viewport(props: {
     const cy = (maskBounds.minY + maskBounds.maxY) * 0.5;
     const nextScale = clampScale(calcFitScale(maskBounds, fovNm));
     setScale(nextScale);
+    setSurfaceZoomScale(1);
     setTx(fovNm * 0.5 - cx * nextScale);
     setTy(fovNm * 0.5 - cy * nextScale);
   }, [fovNm, templateId, paramsSignature, maskBounds?.minX, maskBounds?.minY, maskBounds?.maxX, maskBounds?.maxY]);
@@ -1293,10 +1325,6 @@ export function Viewport(props: {
   }, [canSwapSurfaceMain, surfaceSwapMain]);
 
   useEffect(() => {
-    if (!surfacePanelVisible && showSurfaceControls) setShowSurfaceControls(false);
-  }, [surfacePanelVisible, showSurfaceControls]);
-
-  useEffect(() => {
     if (!isCanvasLayout) return;
     const node = canvasCommandRef.current;
     if (!node) return;
@@ -1317,6 +1345,24 @@ export function Viewport(props: {
     window.addEventListener("resize", syncHeight);
     return () => window.removeEventListener("resize", syncHeight);
   }, [isCanvasLayout]);
+
+  const openViewMenu = () => { if (viewMenuRef.current) viewMenuRef.current.open = true; };
+  const handleViewMenuToggle = (event: React.SyntheticEvent<HTMLDetailsElement>) => {
+    const current = event.currentTarget;
+    if (!current.open) return;
+    viewportFrameRef.current?.querySelectorAll<HTMLDetailsElement>("details.view-menu").forEach(menu => { if (menu !== current) menu.open = false; });
+  };
+  useEffect(() => {
+    const closeMenus = (event: PointerEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent && event.key !== "Escape") return;
+      viewportFrameRef.current?.querySelectorAll<HTMLDetailsElement>("details.view-menu[open]").forEach(menu => {
+        if (event instanceof KeyboardEvent || !menu.contains(event.target as Node)) menu.open = false;
+      });
+    };
+    document.addEventListener("pointerdown", closeMenus);
+    document.addEventListener("keydown", closeMenus);
+    return () => { document.removeEventListener("pointerdown", closeMenus); document.removeEventListener("keydown", closeMenus); };
+  }, []);
 
   const renderSurfacePanel = (slot: "rail" | "main") => {
     const isMainSurface = slot === "main";
@@ -1371,49 +1417,9 @@ export function Viewport(props: {
           </div>
         )}
         {!isMainSurface && surfacePanelVisible && (
-          <div
-            className="panel-corner-actions panel-corner-actions-bottom-left"
-            style={{ top: "auto", right: "auto", bottom: 12, left: 12, zIndex: 9, display: "flex", gap: 4 }}
-          >
-            <button
-              type="button"
-              className={`panel-mini-control ${showSurfaceControls ? "is-active" : ""}`}
-              onClick={() => setShowSurfaceControls((v) => !v)}
-              title={showSurfaceControls ? "Hide 3D control" : "Show 3D control"}
-              aria-label={showSurfaceControls ? "Hide 3D control" : "Show 3D control"}
-            >
-              <ToolbarIcon kind="cube" />
-              3D Ctrl
-            </button>
-            <button
-              type="button"
-              className={`panel-mini-control ${!useWebGL ? "is-active" : ""}`}
-              onClick={() => { setUseWebGL(false); try { localStorage.setItem("litopc_webgl3d", "0"); } catch {} }}
-              title="Classic 3D"
-              aria-label="Switch to Classic 3D"
-            >
-              + Classic
-            </button>
-            <button
-              type="button"
-              className={`panel-mini-control ${useWebGL ? "is-active" : ""}`}
-              onClick={() => { setUseWebGL(true); try { localStorage.setItem("litopc_webgl3d", "1"); } catch {} }}
-              title="Cosmic 3D"
-              aria-label="Switch to Cosmic 3D"
-            >
-              ✦ Cosmic
-            </button>
-            {useWebGL && (
-              <button
-                type="button"
-                className={`panel-mini-control ${surfLightEffect ? "is-active" : ""}`}
-                onClick={() => setSurfLightEffect((v) => !v)}
-                title={surfLightEffect ? "Turn off light effect" : "Turn on light effect"}
-                aria-label={surfLightEffect ? "Turn off light effect" : "Turn on light effect"}
-              >
-                ☀ Light
-              </button>
-            )}
+          <div className="panel-corner-actions panel-corner-actions-bottom-left" style={{ top: "auto", right: "auto", bottom: 12, left: 12, zIndex: 9, display: "flex", gap: 4 }}>
+            <button type="button" className="panel-mini-control" onClick={openViewMenu} aria-label="Open shared view settings" title="View settings for 2D and 3D"><ToolbarIcon kind="view" /> View</button>
+            {useWebGL && <button type="button" className={`panel-mini-control ${surfLightEffect ? "is-active" : ""}`} onClick={() => setSurfLightEffect(v => !v)} aria-label={surfLightEffect ? "Turn off light effect" : "Turn on light effect"}>Light</button>}
           </div>
         )}
         {!isMainSurface && renderSweepStatusLine("3d")}
@@ -1445,8 +1451,8 @@ export function Viewport(props: {
           onMouseLeave={() => { surfaceDragRef.current = null; scheduleSurfaceFullMode(120); }}
         >
           {useWebGL ? (
-            <Surface3DCanvas
-              ref={surface3dRef}
+            <SurfaceRenderer
+              rendererRef={surface3dRef}
               intensityW={sim?.intensity?.w ?? 0}
               intensityH={sim?.intensity?.h ?? 0}
               intensityData={sim?.intensity?.data ?? []}
@@ -1458,11 +1464,12 @@ export function Viewport(props: {
               offsetY={surfOffsetY}
               offsetZ={surfOffsetZ}
               depthScale={surfDepth}
-              zoomScale={scale}
+              zoomScale={useCosmicReference ? scale : surfaceZoomScale}
               qualityMode={surfaceQuality}
               fovNm={fovNm}
-              colormapType={colormapType}
-              contourStyle={contourStyle}
+              colormapType={useCosmicReference ? "apple" : colormapType}
+              colormapThreshold={useCosmicReference ? 1 : colormapThreshold}
+              contourStyle={useCosmicReference ? "CLASSIC" : contourStyle}
               showAerial={showAerial}
               maskOpacityPreset={maskOpacityPreset}
               contours={sim?.contours_nm ?? []}
@@ -1480,6 +1487,7 @@ export function Viewport(props: {
               epeContours={epeOverlayMode !== "NONE" ? epeSegments : null}
               epeMode={epeOverlayMode !== "NONE" ? epeOverlayMode : undefined}
               showLightEffect={surfLightEffect}
+              wavelengthNm={TRUST_PRESET_INFO[req.preset_id].wavelengthNm}
               style={{
                 width: isMainSurface && isCanvasLayout ? "calc(100% + 2px)" : "100%",
                 height: isMainSurface && isCanvasLayout ? "calc(100% + 2px)" : "100%",
@@ -1511,6 +1519,14 @@ export function Viewport(props: {
               Run simulation to generate 3D aerial surface.
             </div>
           )}
+          {useCosmicReference && (
+            <span className="surface-reference-badge">Original Cosmic · 04b5086</span>
+          )}
+          {(surfaceExporting || surfaceExportError) && (
+            <div className="surface-export-status" role={surfaceExportError ? "alert" : "status"}>
+              {surfaceExportError ?? "Rendering high-resolution image…"}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1530,82 +1546,7 @@ export function Viewport(props: {
           {editDock}
         </div>
       )}
-      {!surfaceAsBackground && showSurfaceControls && surfacePanelVisible && (
-        <div className="surface-controls-overlay-rail">
-          <div className="surface-controls surface-controls-compact">
-            <div className="surface-controls-title surface-controls-title-compact">
-              <span className="surface-controls-title-icon"><ToolbarIcon kind="cube" /></span>
-              3D Control
-            </div>
-            <label className="surface-inline-item">
-              <span className="surface-inline-label"><ToolbarIcon kind="azimuth" /> Az</span>
-              <input
-                type="range"
-                min={-180}
-                max={180}
-                step={1}
-                value={surfAzimuth}
-                onChange={(e) => setSurfAzimuth(Number(e.target.value))}
-              />
-            </label>
-            <label className="surface-inline-item">
-              <span className="surface-inline-label"><ToolbarIcon kind="elevation" /> El</span>
-              <input
-                type="range"
-                min={-89}
-                max={89}
-                step={1}
-                value={surfElevation}
-                onChange={(e) => setSurfElevation(Number(e.target.value))}
-              />
-            </label>
-            <label className="surface-inline-item">
-              <span className="surface-inline-label"><ToolbarIcon kind="roll" /> Roll</span>
-              <input
-                type="range"
-                min={-140}
-                max={140}
-                step={1}
-                value={surfRoll}
-                onChange={(e) => setSurfRoll(Number(e.target.value))}
-              />
-            </label>
-            <label className="surface-inline-item">
-              <span className="surface-inline-label"><ToolbarIcon kind="axisx" /> X</span>
-              <input
-                type="range"
-                min={-1}
-                max={1}
-                step={0.01}
-                value={surfOffsetX}
-                onChange={(e) => setSurfOffsetX(Number(e.target.value))}
-              />
-            </label>
-            <label className="surface-inline-item">
-              <span className="surface-inline-label"><ToolbarIcon kind="axisy" /> Y</span>
-              <input
-                type="range"
-                min={-1}
-                max={1}
-                step={0.01}
-                value={surfOffsetY}
-                onChange={(e) => setSurfOffsetY(Number(e.target.value))}
-              />
-            </label>
-            <label className="surface-inline-item">
-              <span className="surface-inline-label"><ToolbarIcon kind="axisz" /> Z</span>
-              <input
-                type="range"
-                min={-1}
-                max={1}
-                step={0.01}
-                value={surfOffsetZ}
-                onChange={(e) => setSurfOffsetZ(Number(e.target.value))}
-              />
-            </label>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 
@@ -1701,6 +1642,11 @@ export function Viewport(props: {
     </div>
   ) : null;
 
+  const legendPalette = surfaceAsBackground ? (useCosmicReference ? "apple" : colormapType) : colormapType;
+  const aerialLegendGradient = `linear-gradient(90deg, ${[0, 0.25, 0.5, 0.75, 1].map((t) => {
+    const c = getColorMap(legendPalette, t, useCosmicReference ? 1 : colormapThreshold);
+    return `rgb(${c.r},${c.g},${c.b})`;
+  }).join(", ")})`;
   const mainBottomRightStack = (showLegend || !surfaceAsBackground) ? (
     <div
       className="canvas-bottom-right-stack"
@@ -1781,7 +1727,7 @@ export function Viewport(props: {
             <span style={{ transform: "translateY(-0.5px)", opacity: effectiveShowMainContour ? 1 : 0.45 }}>Contour</span>
           </span>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 560, opacity: showAerial ? 1 : 0.45 }}>
-            <span style={{ width: 16, height: 8, borderRadius: 2, background: "linear-gradient(90deg, rgba(92,225,230,0.65), rgba(255,69,58,0.62))" }} />
+            <span style={{ width: 16, height: 8, borderRadius: 2, background: aerialLegendGradient }} />
             Aerial
           </span>
           {targetGuide && (
@@ -1789,6 +1735,9 @@ export function Viewport(props: {
               <span style={{ width: 16, borderTop: "1.6px dashed rgba(98,242,214,0.95)" }} />
               Target
             </span>
+          )}
+          {epeOverlayMode !== "NONE" && epeSegments && (
+            <span className="viewport-epe-legend"><i /> EPE 0–12+ nm</span>
           )}
           {compareActive && (
             <>
@@ -1815,7 +1764,9 @@ export function Viewport(props: {
           className="toolbar-pill canvas-icon-pill"
           title="Zoom In"
           aria-label="Zoom In"
-          onClick={() => zoomAt(scale * 1.2, fovNm / 2, fovNm / 2)}
+          onClick={() => surfaceAsBackground && !useCosmicReference
+            ? setSurfaceZoomScale((value) => clampScale(value * 1.2))
+            : zoomAt(scale * 1.2, fovNm / 2, fovNm / 2)}
         >
           <ToolbarIcon kind="zoomin" />
         </button>
@@ -1824,7 +1775,9 @@ export function Viewport(props: {
           className="toolbar-pill canvas-icon-pill"
           title="Zoom Out"
           aria-label="Zoom Out"
-          onClick={() => zoomAt(scale / 1.2, fovNm / 2, fovNm / 2)}
+          onClick={() => surfaceAsBackground && !useCosmicReference
+            ? setSurfaceZoomScale((value) => clampScale(value / 1.2))
+            : zoomAt(scale / 1.2, fovNm / 2, fovNm / 2)}
         >
           <ToolbarIcon kind="zoomout" />
         </button>
@@ -1834,206 +1787,50 @@ export function Viewport(props: {
           title="Reset View"
           aria-label="Reset View"
           onClick={() => {
-            centerViewToMask();
+            if (surfaceAsBackground && !useCosmicReference) {
+              setSurfaceZoomScale(1);
+              setSurfAzimuth(34);
+              setSurfElevation(52);
+              setSurfRoll(0);
+              setSurfOffsetX(0);
+              setSurfOffsetY(0);
+              setSurfOffsetZ(0);
+            } else {
+              centerViewToMask();
+            }
           }}
         >
           <ToolbarIcon kind="reset" />
         </button>
       </div>
       <div className="canvas-toolbar-group">
-        <details className="view-menu view-menu-align-right">
-          <summary className="toolbar-pill">
-            <ToolbarIcon kind="view" /> View
-          </summary>
-          <div className="view-menu-panel view-menu-panel-minimal">
-            {/* Section: Layers */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-              <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "rgba(30,50,80,0.38)", paddingLeft: 1 }}>Layers</span>
-              <div className="view-chip-grid">
-                <button type="button" className={`view-chip ${showLegend ? "on" : ""}`} onClick={() => setShowLegend((v) => !v)}>
-                  Legend
-                </button>
-                <button
-                  type="button"
-                  className={`view-chip ${(contourLockedByCompare ? false : showMainContour) ? "on" : ""}`}
-                  onClick={() => setShowMainContour((v) => !v)}
-                  disabled={contourLockedByCompare}
-                >
-                  Contour
-                </button>
-                <button
-                  type="button"
-                  className={`view-chip ${targetGuide && showTargetOverlay ? "on" : ""}`}
-                  onClick={() => setShowTargetOverlay((v) => !v)}
-                  disabled={!targetGuide}
-                >
-                  Target
-                </button>
-                <button type="button" className={`view-chip ${showAerial ? "on" : ""}`} onClick={() => setShowAerial((v) => !v)}>
-                  Aerial
-                </button>
-                <button type="button" className={`view-chip ${showRulers ? "on" : ""}`} onClick={toggleRulerVisibilityFromView}>
-                  Ruler
-                </button>
-                {allowSurfacePanel && (
-                  <button type="button" className={`view-chip ${showSurface3d ? "on" : ""}`} onClick={() => setShowSurface3d((v) => !v)}>
-                    3D
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Divider */}
-            <div style={{ height: 1, background: "rgba(30,50,80,0.07)", margin: "0 -2px" }} />
-
-            {/* Section: Background */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-              <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "rgba(30,50,80,0.38)", paddingLeft: 1 }}>Background</span>
-              <div style={{ display: "flex", gap: 5, background: "rgba(30,50,80,0.06)", borderRadius: 10, padding: 3 }}>
-                {(["DARK", "LIGHT"] as const).map((theme) => (
-                  <button
-                    key={theme}
-                    type="button"
-                    onClick={() => setBgTheme(theme)}
-                    style={{
-                      flex: 1,
-                      padding: "5px 0",
-                      fontSize: 12,
-                      fontWeight: bgTheme === theme ? 600 : 400,
-                      border: "none",
-                      borderRadius: 7,
-                      cursor: "pointer",
-                      background: bgTheme === theme ? "white" : "transparent",
-                      color: bgTheme === theme ? "rgba(10,84,166,1)" : "rgba(30,50,80,0.55)",
-                      boxShadow: bgTheme === theme ? "0 1px 4px rgba(14,26,50,0.13)" : "none",
-                      transition: "all 0.15s",
-                    }}
-                  >
-                    {theme === "DARK" ? "Dark" : "Light"}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Section: Aerial (conditional) */}
-            {showAerial && (
-              <>
-                <div style={{ height: 1, background: "rgba(30,50,80,0.07)", margin: "0 -2px" }} />
-                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "rgba(30,50,80,0.38)", paddingLeft: 1 }}>Aerial</span>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ fontSize: 12, fontWeight: 500, color: "rgba(20,40,70,0.7)", whiteSpace: "nowrap", width: 56 }}>Opacity</span>
-                      <input
-                        type="range"
-                        min={0.1}
-                        max={1}
-                        step={0.05}
-                        value={aerialOpacity}
-                        onChange={(e) => setAerialOpacity(Number(e.target.value))}
-                        style={{ flex: 1, minWidth: 60 }}
-                      />
-                      <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(20,40,70,0.85)", width: 30, textAlign: "right" }}>{Math.round(aerialOpacity * 100)}%</span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ fontSize: 12, fontWeight: 500, color: "rgba(20,40,70,0.7)", whiteSpace: "nowrap", width: 56 }}>Colormap</span>
-                      <select
-                        value={colormapType}
-                        onChange={(e) => setColormapType(e.target.value as typeof colormapType)}
-                        style={{ flex: 1, fontSize: 12, fontWeight: 500, background: "rgba(255,255,255,0.7)", color: "rgba(20,40,70,0.9)", border: "1px solid rgba(30,50,80,0.15)", borderRadius: 7, padding: "4px 6px", cursor: "pointer" }}
-                      >
-                        <option value="apple">Apple (default)</option>
-                        <option value="plasma">Plasma</option>
-                        <option value="viridis">Viridis</option>
-                        <option value="hot">Hot</option>
-                        <option value="grayscale">Grayscale</option>
-                        <option value="ice">Ice</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-            {/* Section: Contour style (conditional) */}
-            {effectiveShowMainContour && !contourLockedByCompare && (
-              <>
-                <div style={{ height: 1, background: "rgba(30,50,80,0.07)", margin: "0 -2px" }} />
-                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "rgba(30,50,80,0.38)", paddingLeft: 1 }}>Contour</span>
-                  <div style={{ display: "flex", gap: 4, background: "rgba(30,50,80,0.06)", borderRadius: 10, padding: 3 }}>
-                    {(["CLASSIC", "NEON", "GOLD", "MINIMAL"] as const).map((style) => (
-                      <button
-                        key={style}
-                        type="button"
-                        onClick={() => setContourStyle(style)}
-                        style={{
-                          flex: 1,
-                          padding: "5px 0",
-                          fontSize: 11,
-                          fontWeight: contourStyle === style ? 600 : 400,
-                          border: "none",
-                          borderRadius: 7,
-                          cursor: "pointer",
-                          background: contourStyle === style ? "white" : "transparent",
-                          color: contourStyle === style ? "rgba(10,84,166,1)" : "rgba(30,50,80,0.55)",
-                          boxShadow: contourStyle === style ? "0 1px 4px rgba(14,26,50,0.13)" : "none",
-                          transition: "all 0.15s",
-                        }}
-                      >
-                        {style.charAt(0) + style.slice(1).toLowerCase()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-            {contourLockedByCompare && (
-              <div className="view-inline-note">Contour is locked by compare clean mode.</div>
-            )}
-            {/* Section: EPE overlay (only when target exists) */}
-            {effectiveShowMainContour && targetContours.length > 0 && (
-              <>
-                <div style={{ height: 1, background: "rgba(30,50,80,0.07)", margin: "0 -2px" }} />
-                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "rgba(30,50,80,0.38)", paddingLeft: 1 }}>EPE Overlay</span>
-                  <div style={{ display: "flex", gap: 4, background: "rgba(30,50,80,0.06)", borderRadius: 10, padding: 3 }}>
-                    {(["NONE", "COLOR", "ARROWS", "BOTH"] as const).map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setEpeOverlayMode(mode)}
-                        style={{
-                          flex: 1, padding: "5px 0", fontSize: 10,
-                          fontWeight: epeOverlayMode === mode ? 600 : 400,
-                          border: "none", borderRadius: 7, cursor: "pointer",
-                          background: epeOverlayMode === mode ? "white" : "transparent",
-                          color: epeOverlayMode === mode ? "rgba(10,84,166,1)" : "rgba(30,50,80,0.55)",
-                          boxShadow: epeOverlayMode === mode ? "0 1px 4px rgba(14,26,50,0.13)" : "none",
-                          transition: "all 0.15s",
-                        }}
-                      >
-                        {mode === "NONE" ? "Off" : mode.charAt(0) + mode.slice(1).toLowerCase()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-            {compareActive && (
-              <div className="view-compare-mode">
-                <button
-                  type="button"
-                  className={`view-chip view-chip-wide ${compareContourMode === "AB_ONLY" ? "on" : ""}`}
-                  onClick={() => setCompareContourMode((m) => (m === "AB_ONLY" ? "MIXED" : "AB_ONLY"))}
-                >
-                  Compare Clean Mode
-                </button>
-                <div className="view-compare-note">Hide main contour during A/B overlay.</div>
-              </div>
-            )}
+        <details ref={viewMenuRef} className="view-menu view-menu-align-right view-settings-menu" onToggle={handleViewMenuToggle}>
+          <summary className="toolbar-pill"><ToolbarIcon kind="view" /> View</summary>
+          <div className="view-menu-panel view-settings-panel">
+            <ViewportViewSettings
+              palette={colormapType} onPalette={setColormapType} reference={useCosmicReference}
+              colorRange={colormapThreshold} onColorRange={setColormapThreshold}
+              intensity={{ value: showAerial, toggle: () => setShowAerial(v => !v) }}
+              contour={{ value: effectiveShowMainContour, toggle: () => setShowMainContour(v => !v), disabled: contourLockedByCompare }}
+              target={{ value: showTargetOverlay, toggle: () => setShowTargetOverlay(v => !v), disabled: !targetContours.length }}
+              legend={{ value: showLegend, toggle: () => setShowLegend(v => !v) }}
+              rulers={{ value: showRulers, toggle: toggleRulerVisibilityFromView }}
+              surface={{ value: showSurface3d, toggle: () => setShowSurface3d(v => !v), disabled: !allowSurfacePanel }}
+              hasTarget={Boolean(sim?.contours_nm?.length && targetContours.length)} epe={epeOverlayMode} onEpe={setEpeOverlayMode}
+              rendered={useWebGL} onRendered={value => { setUseWebGL(value); try { localStorage.setItem("litopc_webgl3d", value ? "1" : "0"); } catch {} }}
+              light={{ value: surfLightEffect, toggle: () => setSurfLightEffect(v => !v) }}
+              camera={{ azimuth: surfAzimuth, elevation: surfElevation, roll: surfRoll }}
+              onCamera={(axis, value) => { if (axis === "azimuth") setSurfAzimuth(value); else if (axis === "elevation") setSurfElevation(value); else setSurfRoll(value); }}
+              onCameraPreset={preset => {
+                setSurfAzimuth(preset === "ISO" ? 34 : 0); setSurfElevation(preset === "ISO" ? 52 : preset === "FRONT" ? 78 : 0);
+                setSurfRoll(0); setSurfOffsetX(0); setSurfOffsetY(0); setSurfOffsetZ(0); setSurfaceZoomScale(1);
+              }}
+              background={bgTheme} onBackground={setBgTheme} opacity={aerialOpacity} onOpacity={setAerialOpacity}
+              compareClean={compareActive ? { value: compareContourMode === "AB_ONLY", toggle: () => setCompareContourMode(m => m === "AB_ONLY" ? "MIXED" : "AB_ONLY") } : undefined}
+            />
           </div>
         </details>
-        <details className="view-menu view-menu-align-right">
+        <details className="view-menu view-menu-align-right" onToggle={handleViewMenuToggle}>
           <summary className="toolbar-pill">
             <ToolbarIcon kind="export" /> Export
           </summary>
@@ -2099,7 +1896,7 @@ export function Viewport(props: {
               <button
                 type="button"
                 className="view-chip view-chip-wide"
-                disabled={!sim || !showSurface3d}
+                disabled={!sim || !showSurface3d || surfaceExporting}
                 title={showSurface3d ? `Export 3D surface PNG (${exportResolution === "HIGH_RES" ? "4200" : "1800"}px)` : "Enable 3D view first"}
                 onClick={(e) => {
                   e.preventDefault();
@@ -2159,7 +1956,7 @@ export function Viewport(props: {
         </details>
       </div>
       {sweepResult && sweepPoints.length > 0 && (
-        <details className="view-menu view-menu-align-right">
+        <details className="view-menu view-menu-align-right" onToggle={handleViewMenuToggle}>
           <summary className="toolbar-pill">
             <ToolbarIcon kind="contour" /> Sweep
           </summary>
@@ -2233,7 +2030,7 @@ export function Viewport(props: {
               borderRadius: surfaceAsBackground ? 16 : (isCanvasLayout ? 0 : 16),
               background: bgTheme === "LIGHT"
                 ? "radial-gradient(160% 150% at 18% 4%, #f0f4fa 0%, #e8edf5 45%, #dce4f0 100%)"
-                : "radial-gradient(160% 150% at 18% 4%, #23344d 0%, #16263c 45%, #0b1626 100%)",
+                : "radial-gradient(160% 150% at 18% 4%, #1c2b39 0%, #101c29 45%, #09131e 100%)",
               boxShadow: surfaceAsBackground
                 ? "inset 0 1px 0 rgba(238,246,255,0.28), inset 0 -30px 66px rgba(2,10,22,0.46), 0 10px 20px rgba(20,30,46,0.22)"
                 : (isCanvasLayout
@@ -2271,49 +2068,8 @@ export function Viewport(props: {
                   </button>
                 </div>
                 {surfacePanelVisible && (
-                  <div
-                    className="panel-corner-actions panel-corner-actions-bottom-left"
-                    style={{ top: "auto", right: "auto", bottom: 12, left: 12, zIndex: 9, display: "flex", gap: 4 }}
-                  >
-                    <button
-                      type="button"
-                      className={`panel-mini-control ${showSurfaceControls ? "is-active" : ""}`}
-                      onClick={() => setShowSurfaceControls((v) => !v)}
-                      title={showSurfaceControls ? "Hide 3D control" : "Show 3D control"}
-                      aria-label={showSurfaceControls ? "Hide 3D control" : "Show 3D control"}
-                    >
-                      <ToolbarIcon kind="cube" />
-                      3D Ctrl
-                    </button>
-                    <button
-                      type="button"
-                      className={`panel-mini-control ${!useWebGL ? "is-active" : ""}`}
-                      onClick={() => { setUseWebGL(false); try { localStorage.setItem("litopc_webgl3d", "0"); } catch {} }}
-                      title="Classic 3D"
-                      aria-label="Switch to Classic 3D"
-                    >
-                      + Classic
-                    </button>
-                    <button
-                      type="button"
-                      className={`panel-mini-control ${useWebGL ? "is-active" : ""}`}
-                      onClick={() => { setUseWebGL(true); try { localStorage.setItem("litopc_webgl3d", "1"); } catch {} }}
-                      title="Cosmic 3D"
-                      aria-label="Switch to Cosmic 3D"
-                    >
-                      ✦ Cosmic
-                    </button>
-                    {useWebGL && (
-                      <button
-                        type="button"
-                        className={`panel-mini-control ${surfLightEffect ? "is-active" : ""}`}
-                        onClick={() => setSurfLightEffect((v) => !v)}
-                        title={surfLightEffect ? "Turn off light effect" : "Turn on light effect"}
-                        aria-label={surfLightEffect ? "Turn off light effect" : "Turn on light effect"}
-                      >
-                        ☀ Light
-                      </button>
-                    )}
+                  <div className="panel-corner-actions panel-corner-actions-bottom-left" style={{ top: "auto", right: "auto", bottom: 12, left: 12, zIndex: 9 }}>
+                    <button type="button" className="panel-mini-control" onClick={openViewMenu} aria-label="Open shared view settings" title="View settings for 2D and 3D"><ToolbarIcon kind="view" /> View</button>
                   </div>
                 )}
               </>
@@ -3041,108 +2797,7 @@ export function Viewport(props: {
           )}
           {mainBottomRightStack}
           {rulerFloatingControl}
-          {showSurfaceControls && surfacePanelVisible && surfaceAsBackground && (
-            <div
-              className={`surface-controls-overlay-main ${overlayPanelsVisible ? "has-overlay-rail" : ""}`}
-              style={{ top: 14, right: overlayRailInset }}
-            >
-              <div className="surface-controls surface-controls-compact">
-                <div className="surface-controls-title surface-controls-title-compact">
-                  <span className="surface-controls-title-icon"><ToolbarIcon kind="cube" /></span>
-                  3D Control
-                </div>
-                <label className="surface-inline-item">
-                  <span className="surface-inline-label"><ToolbarIcon kind="azimuth" /> Az</span>
-                  <input
-                    type="range"
-                    min={-180}
-                    max={180}
-                    step={1}
-                    value={surfAzimuth}
-                    onChange={(e) => setSurfAzimuth(Number(e.target.value))}
-                  />
-                </label>
-                <label className="surface-inline-item">
-                  <span className="surface-inline-label"><ToolbarIcon kind="elevation" /> El</span>
-                  <input
-                    type="range"
-                    min={-89}
-                    max={89}
-                    step={1}
-                    value={surfElevation}
-                    onChange={(e) => setSurfElevation(Number(e.target.value))}
-                  />
-                </label>
-                <label className="surface-inline-item">
-                  <span className="surface-inline-label"><ToolbarIcon kind="roll" /> Roll</span>
-                  <input
-                    type="range"
-                    min={-140}
-                    max={140}
-                    step={1}
-                    value={surfRoll}
-                    onChange={(e) => setSurfRoll(Number(e.target.value))}
-                  />
-                </label>
-                <label className="surface-inline-item">
-                  <span className="surface-inline-label"><ToolbarIcon kind="axisx" /> X</span>
-                  <input
-                    type="range"
-                    min={-1}
-                    max={1}
-                    step={0.01}
-                    value={surfOffsetX}
-                    onChange={(e) => setSurfOffsetX(Number(e.target.value))}
-                  />
-                </label>
-                <label className="surface-inline-item">
-                  <span className="surface-inline-label"><ToolbarIcon kind="axisy" /> Y</span>
-                  <input
-                    type="range"
-                    min={-1}
-                    max={1}
-                    step={0.01}
-                    value={surfOffsetY}
-                    onChange={(e) => setSurfOffsetY(Number(e.target.value))}
-                  />
-                </label>
-                <label className="surface-inline-item">
-                  <span className="surface-inline-label"><ToolbarIcon kind="axisz" /> Z</span>
-                  <input
-                    type="range"
-                    min={-1}
-                    max={1}
-                    step={0.01}
-                    value={surfOffsetZ}
-                    onChange={(e) => setSurfOffsetZ(Number(e.target.value))}
-                  />
-                </label>
-                <label className="surface-inline-item">
-                  <span className="surface-inline-label">✦ Cosmic</span>
-                  <input
-                    type="checkbox"
-                    checked={useWebGL}
-                    onChange={(e) => {
-                      setUseWebGL(e.target.checked);
-                      try { localStorage.setItem("litopc_webgl3d", e.target.checked ? "1" : "0"); } catch {}
-                    }}
-                    style={{ width: 14, height: 14, cursor: "pointer", accentColor: "#60a8e8" }}
-                  />
-                </label>
-                {useWebGL && (
-                  <label className="surface-inline-item">
-                    <span className="surface-inline-label">✦ Light</span>
-                    <input
-                      type="checkbox"
-                      checked={surfLightEffect}
-                      onChange={(e) => setSurfLightEffect(e.target.checked)}
-                      style={{ width: 14, height: 14, cursor: "pointer", accentColor: "#60a8e8" }}
-                    />
-                  </label>
-                )}
-              </div>
-            </div>
-          )}
+
         </div>
         {workspaceHasRightRail && renderRightRailPanels()}
       </div>
@@ -3404,15 +3059,7 @@ function createSurfaceProjector(view: {
   const safeWPx = Math.max(1, safe(view.wPx, 1));
   const safeHPx = Math.max(1, safe(view.hPx, 1));
   const safeFeatureBoost = safe(view.featureBoost ?? 1, 1);
-  const az = (safeAzimuthDeg * Math.PI) / 180;
-  const el = (safeElevationDeg * Math.PI) / 180;
-  const roll = (safeRollDeg * Math.PI) / 180;
-  const cosA = Math.cos(az);
-  const sinA = Math.sin(az);
-  const cosE = Math.cos(el);
-  const sinE = Math.sin(el);
-  const cosR = Math.cos(roll);
-  const sinR = Math.sin(roll);
+  const rotate = createSurface3dRotation(safeAzimuthDeg, safeElevationDeg, safeRollDeg);
   const zoomIn = Math.max(0.15, Math.min(16, safeZoomScale));
   // Compromise mapping: less aggressive than linear, but more responsive than sqrt-only.
   const zoomBoost = 0.52 + 0.48 * Math.pow(zoomIn, 0.9);
@@ -3422,37 +3069,28 @@ function createSurfaceProjector(view: {
   const featureBoost = 1 + (featureBoostRaw - 1) * featureDampen;
   const scale = Math.min(safeWPx, safeHPx) * 0.63 * zoomBoost * featureBoost;
   const cx = safeWPx * 0.5;
-  const cy = safeHPx * 0.64;
-  const shiftX = safeOffsetX * 0.36;
-  const shiftY = safeOffsetY * 0.36;
-  const shiftZ = safeOffsetZ * 0.36;
-  const perspectiveFocal = 2.9;
-  const perspectiveStrength = 0.9;
+  const cy = safeHPx * 0.5;
+  const pivotZ = getSurface3dPivot("classic");
+  const shiftX = safeOffsetX * 0.5;
+  const shiftY = safeOffsetY * 0.5;
+  const shiftZ = safeOffsetZ * 0.35;
+  const perspectiveFocal = 3.5;
   const perspectiveMin = 0.72;
   const perspectiveMax = 1.58;
 
   return (xN: number, yN: number, zN: number) => {
-    const xIn = safe(xN, 0) + shiftX;
-    const yIn = safe(yN, 0) + shiftY;
-    const zIn = safe(zN, 0) + shiftZ;
-    const x1 = xIn * cosA - yIn * sinA;
-    const y1 = xIn * sinA + yIn * cosA;
-    const z1 = zIn;
-    const x2 = x1;
-    const y2 = y1 * cosE - z1 * sinE;
-    const z2 = y1 * sinE + z1 * cosE;
-    const x3 = x2 * cosR + z2 * sinR;
-    const y3 = y2;
-    const z3 = -x2 * sinR + z2 * cosR;
-    const depth = y3 + z3 * 0.35;
-    const perspectiveDen = Math.max(0.42, perspectiveFocal - depth * perspectiveStrength);
+    const point = rotate(safe(xN, 0), safe(yN, 0), safe(zN, 0) - pivotZ);
+    const x3 = point.x + shiftX;
+    const y3 = point.y + shiftY;
+    const depth = point.z + pivotZ + shiftZ;
+    const perspectiveDen = Math.max(0.42, perspectiveFocal - depth);
     const perspective = Math.max(
       perspectiveMin,
       Math.min(perspectiveMax, perspectiveFocal / perspectiveDen)
     );
     return {
       sx: cx + x3 * scale * perspective,
-      sy: cy + y3 * scale * 0.9 * perspective,
+      sy: cy - y3 * scale * perspective,
       depth,
     };
   };
@@ -3501,6 +3139,7 @@ function drawSurface3D(
     nmPerPixel: number;
     lineScale?: number;
     colormapType?: string;
+    colormapThreshold?: number;
     contourStyle?: "CLASSIC" | "NEON" | "GOLD" | "MINIMAL";
     epeContours?: Array<Array<{ p: { x: number; y: number }; dist: number; nearest: { x: number; y: number } }>> | null;
     epeMode?: "COLOR" | "ARROWS" | "BOTH" | "NONE";
@@ -3518,7 +3157,8 @@ function drawSurface3D(
     if (v > vmax) vmax = v;
   }
   const span = Math.max(1e-9, vmax - vmin);
-  const surfaceFeatureBoost = calcSurfaceFeatureBoost(opts.maskAddRects, opts.fovNm);
+  // The 3D camera frames the physical stack, independently of a tiny 2D feature's auto-fit.
+  const surfaceFeatureBoost = 1;
   // Keep 3D contour thickness/glow independent from feature size (CD).
   const contourUnder3d = 5.0 * ls;
   const contourMain3d = 2.8 * ls;
@@ -3545,8 +3185,8 @@ function drawSurface3D(
     opts.qualityMode === "FAST" ? 3 : 2,
     Math.floor(Math.max(w, h) / detailTarget)
   );
-  const maskZTop = 0.44;
-  const siliconZ = -0.02;
+  const maskZTop = SURFACE3D_PLANES.classic.maskTopZ;
+  const siliconZ = SURFACE3D_PLANES.classic.siliconCenterZ;
   const isRevealMask = opts.maskOpacityPreset === "REVEAL";
   const maskPlateAlpha = isRevealMask ? 0.09 : 0.16;
   const apertureAlpha = isRevealMask ? 0.22 : 0.3;
@@ -3568,9 +3208,9 @@ function drawSurface3D(
   };
 
   const bgGrad = ctx.createLinearGradient(0, 0, 0, hPx);
-  bgGrad.addColorStop(0, "#091422");
-  bgGrad.addColorStop(0.5, "#0e1a2c");
-  bgGrad.addColorStop(1, "#111f33");
+  bgGrad.addColorStop(0, "#070e17");
+  bgGrad.addColorStop(0.5, "#0c1725");
+  bgGrad.addColorStop(1, "#0b1421");
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, wPx, hPx);
   const backBloom = ctx.createRadialGradient(wPx * 0.52, hPx * 0.44, hPx * 0.08, wPx * 0.52, hPx * 0.44, hPx * 0.82);
@@ -3809,7 +3449,7 @@ function drawSurface3D(
 
     for (const q of quads) {
       const t = Math.max(0, Math.min(1, q.t));
-      const c = getColorMap(opts.colormapType ?? "apple", t);
+      const c = getColorMap(opts.colormapType ?? "silver", t, opts.colormapThreshold);
       const tCut = Math.max(0, (t - 0.08) / 0.92);
       const baseAlpha = isRevealMask ? 0.9 : 0.84;
       const alpha = Math.pow(tCut, 1.8) * baseAlpha;
@@ -3887,7 +3527,7 @@ function drawSurface3D(
     });
   }
 
-  if (opts.showMainContour) {
+  if (opts.showMainContour || opts.epeContours?.length) {
     const cs = opts.contourStyle ?? "CLASSIC";
     const contourStyleMap = {
       CLASSIC: { underStroke: "rgba(24,36,62,0.82)",    underWidth: contourUnder3d, mainStroke: "rgba(245,250,255,0.99)", mainWidth: contourMain3d, glowColor: "rgba(200,220,255,0.45)", glowBlur: 6.0 * ls },
@@ -3912,6 +3552,7 @@ function drawSurface3D(
       }, {
         ...contourStyleMap,
         nmPerPixel: opts.nmPerPixel,
+        showBaseContour: opts.showMainContour,
       }, opts.epeContours?.[ci] ?? null, opts.epeMode);
     });
   }
@@ -4060,6 +3701,7 @@ function drawContourOnSurface(
     glowColor?: string;
     glowBlur?: number;
     nmPerPixel?: number;
+    showBaseContour?: boolean;
   },
   epeData?: Array<{ p: { x: number; y: number }; dist: number; nearest: { x: number; y: number } }> | null,
   epeMode?: "COLOR" | "ARROWS" | "BOTH" | "NONE"
@@ -4086,10 +3728,7 @@ function drawContourOnSurface(
   }
 
   function epeSegColor(distNm: number): string {
-    const t = Math.min(1, distNm / 10);
-    const r = Math.round(t < 0.5 ? t * 2 * 255 : 255);
-    const g = Math.round(t < 0.5 ? 210 : (1 - (t - 0.5) * 2) * 210);
-    return `rgba(${r},${g},40,0.96)`;
+    return `rgba(${getEpeColor(distNm).join(",")},0.96)`;
   }
 
   ctx.save();
@@ -4115,14 +3754,16 @@ function drawContourOnSurface(
       if (closePath) ctx.closePath();
     };
 
-    // Always draw under-stroke (shadow/depth)
-    drawEdgesPath(isClosed);
-    ctx.strokeStyle = style?.underStroke ?? "rgba(36,50,76,0.72)";
-    ctx.lineWidth = style?.underWidth ?? 3.35;
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
-    ctx.setLineDash(style?.dash?.length ? style.dash : []);
-    ctx.stroke();
+    const measurementLine = epeData?.length && epeMode !== "ARROWS" && epeMode !== "NONE";
+    if ((style?.showBaseContour !== false || measurementLine) && (style?.underWidth ?? 3.35) > 0) {
+      drawEdgesPath(isClosed);
+      ctx.strokeStyle = style?.underStroke ?? "rgba(36,50,76,0.72)";
+      ctx.lineWidth = style?.underWidth ?? 3.35;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.setLineDash(style?.dash?.length ? style.dash : []);
+      ctx.stroke();
+    }
 
     if (epeData && epeData.length > 0) {
       const mode = epeMode ?? "COLOR";
@@ -4135,19 +3776,17 @@ function drawContourOnSurface(
         ctx.lineJoin = "round";
         ctx.lineCap = "round";
         ctx.setLineDash([]);
-        for (let i = 0; i < pts.length - 1; i++) {
-          const a = projNm(pts[i].x, pts[i].y);
-          const b = projNm(pts[i + 1].x, pts[i + 1].y);
-          const dA = epeData[Math.min(i, n - 1)].dist;
-          const dB = epeData[Math.min(i + 1, n - 1)].dist;
+        for (let i = 0; i < n; i++) {
+          const current = epeData[i], next = epeData[(i + 1) % n];
+          const a = projNm(current.p.x, current.p.y);
+          const b = projNm(next.p.x, next.p.y);
           ctx.beginPath();
           ctx.moveTo(a.sx, a.sy);
           ctx.lineTo(b.sx, b.sy);
-          ctx.strokeStyle = epeSegColor((dA + dB) * 0.5);
+          ctx.strokeStyle = epeSegColor((current.dist + next.dist) * 0.5);
           ctx.stroke();
         }
-      } else {
-        // ARROWS only: draw base contour in white
+      } else if (style?.showBaseContour !== false) {
         drawEdgesPath(isClosed);
         ctx.strokeStyle = style?.mainStroke ?? "rgba(236,243,255,0.96)";
         ctx.lineWidth = mainWidth;
@@ -4209,7 +3848,7 @@ function drawContourOnSurface(
           ctx.fill();
         }
       }
-    } else {
+    } else if (style?.showBaseContour !== false) {
       drawEdgesPath(isClosed);
       ctx.shadowColor = style?.glowColor ?? "rgba(0,0,0,0)";
       ctx.shadowBlur = style?.glowBlur ?? 0;
@@ -4397,11 +4036,12 @@ function appendLShapeRaw(
   cy: number,
   family: "DUV" | "EUV",
 ) {
-  const cd = p.cd_nm ?? (family === "DUV" ? 100 : 96);
-  const horiz = p.length_nm ?? (family === "DUV" ? 450 : 440);
-  const vert = p.arm_nm ?? (family === "DUV" ? 420 : 408);
-  const elbowX = cx + (p.elbow_x_offset_nm ?? (family === "DUV" ? 160 : 164));
-  const elbowY = cy + (p.elbow_y_offset_nm ?? (family === "DUV" ? 140 : 136));
+  const defaults = L_SHAPE_RAW_DEFAULTS[family];
+  const cd = p.cd_nm ?? defaults.cd_nm;
+  const horiz = p.length_nm ?? defaults.length_nm;
+  const vert = p.arm_nm ?? defaults.arm_nm;
+  const elbowX = cx + (p.elbow_x_offset_nm ?? defaults.elbow_x_offset_nm);
+  const elbowY = cy + (p.elbow_y_offset_nm ?? defaults.elbow_y_offset_nm);
   pushRect(rects, elbowX - horiz, elbowY - cd, horiz, cd);
   pushRect(rects, elbowX - cd, elbowY - vert, cd, vert);
 }
@@ -5434,33 +5074,29 @@ function buildJumpHistogram(jumps: number[], bins: number): Array<{ range_nm: st
   return out;
 }
 
-function getColorMap(type: string, tRaw: number): { r: number; g: number; b: number } {
-  const t = Math.max(0, Math.min(1, tRaw));
-  function lerp(stops: Array<{ t: number; c: number[] }>, v: number) {
-    for (let i = 0; i < stops.length - 1; i++) {
-      const a = stops[i], b = stops[i + 1];
-      if (v >= a.t && v <= b.t) {
-        const u = (v - a.t) / Math.max(1e-9, b.t - a.t);
-        return { r: Math.round(a.c[0] + (b.c[0] - a.c[0]) * u), g: Math.round(a.c[1] + (b.c[1] - a.c[1]) * u), b: Math.round(a.c[2] + (b.c[2] - a.c[2]) * u) };
-      }
+const VIEW_COLORMAP_STOPS: Record<string, Array<{ t: number; c: number[] }>> = {
+  plasma: [{ t: 0.0, c: [13, 8, 135] }, { t: 0.25, c: [126, 3, 168] }, { t: 0.5, c: [203, 71, 120] }, { t: 0.75, c: [248, 149, 64] }, { t: 1.0, c: [240, 249, 33] }],
+  viridis: [{ t: 0.0, c: [68, 1, 84] }, { t: 0.25, c: [59, 82, 139] }, { t: 0.5, c: [33, 145, 140] }, { t: 0.75, c: [94, 201, 98] }, { t: 1.0, c: [253, 231, 37] }],
+  hot: [{ t: 0.0, c: [0, 0, 0] }, { t: 0.33, c: [255, 0, 0] }, { t: 0.67, c: [255, 255, 0] }, { t: 1.0, c: [255, 255, 255] }],
+  grayscale: [{ t: 0.0, c: [0, 0, 0] }, { t: 1.0, c: [255, 255, 255] }],
+  ice: [{ t: 0.0, c: [4, 35, 51] }, { t: 0.33, c: [23, 93, 122] }, { t: 0.67, c: [50, 184, 190] }, { t: 1.0, c: [232, 251, 255] }],
+  apple: [{ t: 0.0, c: [14, 20, 30] }, { t: 0.22, c: [39, 67, 108] }, { t: 0.45, c: [94, 92, 230] }, { t: 0.68, c: [191, 90, 242] }, { t: 0.86, c: [255, 69, 58] }, { t: 1.0, c: [255, 214, 10] }],
+};
+
+function getColorMap(type: string, tRaw: number, threshold = COLORMAP_THRESHOLD_DEFAULT): { r: number; g: number; b: number } {
+  const t = mapColormapIntensity(tRaw, threshold);
+  const modern = getSurfacePaletteColor(type, t);
+  if (modern) return { r: modern[0], g: modern[1], b: modern[2] };
+  const stops = VIEW_COLORMAP_STOPS[type] ?? VIEW_COLORMAP_STOPS.apple;
+  for (let i = 0; i < stops.length - 1; i++) {
+    const a = stops[i], b = stops[i + 1];
+    if (t >= a.t && t <= b.t) {
+      const u = (t - a.t) / Math.max(1e-9, b.t - a.t);
+      return { r: Math.round(a.c[0] + (b.c[0] - a.c[0]) * u), g: Math.round(a.c[1] + (b.c[1] - a.c[1]) * u), b: Math.round(a.c[2] + (b.c[2] - a.c[2]) * u) };
     }
-    const last = stops[stops.length - 1].c;
-    return { r: last[0], g: last[1], b: last[2] };
   }
-  switch (type) {
-    case "plasma":
-      return lerp([{ t: 0.0, c: [13, 8, 135] }, { t: 0.25, c: [126, 3, 168] }, { t: 0.5, c: [203, 71, 120] }, { t: 0.75, c: [248, 149, 64] }, { t: 1.0, c: [240, 249, 33] }], t);
-    case "viridis":
-      return lerp([{ t: 0.0, c: [68, 1, 84] }, { t: 0.25, c: [59, 82, 139] }, { t: 0.5, c: [33, 145, 140] }, { t: 0.75, c: [94, 201, 98] }, { t: 1.0, c: [253, 231, 37] }], t);
-    case "hot":
-      return lerp([{ t: 0.0, c: [0, 0, 0] }, { t: 0.33, c: [255, 0, 0] }, { t: 0.67, c: [255, 255, 0] }, { t: 1.0, c: [255, 255, 255] }], t);
-    case "grayscale":
-      return lerp([{ t: 0.0, c: [0, 0, 0] }, { t: 1.0, c: [255, 255, 255] }], t);
-    case "ice":
-      return lerp([{ t: 0.0, c: [4, 35, 51] }, { t: 0.33, c: [23, 93, 122] }, { t: 0.67, c: [50, 184, 190] }, { t: 1.0, c: [232, 251, 255] }], t);
-    default: // apple
-      return lerp([{ t: 0.0, c: [14, 20, 30] }, { t: 0.22, c: [39, 67, 108] }, { t: 0.45, c: [94, 92, 230] }, { t: 0.68, c: [191, 90, 242] }, { t: 0.86, c: [255, 69, 58] }, { t: 1.0, c: [255, 214, 10] }], t);
-  }
+  const last = stops[stops.length - 1].c;
+  return { r: last[0], g: last[1], b: last[2] };
 }
 
 

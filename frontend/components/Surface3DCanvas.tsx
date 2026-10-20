@@ -1,897 +1,685 @@
 "use client";
 
-/**
- * Surface3DCanvas — Three.js WebGL 3D surface renderer (React Three Fiber)
- * Enable via: ?webgl=1 in URL
- *
- * Visual target: Intel 18A-style clean dark metallic semiconductor aesthetic
- * – ACES filmic tone mapping + Bloom post-processing
- * – MeshPhysicalMaterial chrome mask plate
- * – Billboard sprite glow column (no visible geometry lines)
- * – PointLight per aperture for real silicon illumination
- * – Drei MeshReflectorMaterial replaces manual mirror camera
- */
-
-import React, { forwardRef, useImperativeHandle, useRef, useEffect, useMemo } from "react";
+/** Data-driven rendering with local, single-bounce planar reflections. */
+import React, { useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { Canvas, useThree, useFrame } from "@react-three/fiber";
-import { Environment } from "@react-three/drei";
-import type { Surface3DProps, Surface3DHandle, ColormapType, ContourSet, EpePoint } from "../lib/surface3d-types";
+import { Canvas, useFrame, useThree, type ThreeElements } from "@react-three/fiber";
+import { Environment, Lightformer } from "@react-three/drei";
+import { Reflector } from "three/examples/jsm/objects/Reflector.js";
+import { RectAreaLightUniformsLib } from "three/examples/jsm/lights/RectAreaLightUniformsLib.js";
+import type { Surface3DProps, Surface3DHandle, ContourSet, EpePoint, MaskRect } from "../lib/surface3d-types";
+import { getSurfacePaletteColor } from "../lib/surface3d-palettes";
+import { getSurface3dPivot, SURFACE3D_PLANES } from "../lib/surface3d-view";
+import { getCachedIlluminationField, getSurfacePixelRatio, getSurfaceRenderBudget } from "../lib/surface3d-performance";
+import { getEpeColor } from "../lib/epe-overlay";
+import { mapColormapIntensity } from "../lib/colormap-display";
 
-// ── Colormap ──────────────────────────────────────────────────────────────────
-function evalColorMap(type: ColormapType | string, tRaw: number): [number, number, number] {
-  const t = Math.max(0, Math.min(1, tRaw));
-  const lerp = (stops: Array<{ t: number; c: number[] }>, v: number): [number, number, number] => {
-    for (let i = 0; i < stops.length - 1; i++) {
-      const a = stops[i], b = stops[i + 1];
-      if (v >= a.t && v <= b.t) {
-        const u = (v - a.t) / Math.max(1e-9, b.t - a.t);
-        return [Math.round(a.c[0]+(b.c[0]-a.c[0])*u), Math.round(a.c[1]+(b.c[1]-a.c[1])*u), Math.round(a.c[2]+(b.c[2]-a.c[2])*u)];
+// Fiber 8 augments global JSX; React 19's types use React.JSX instead.
+declare module "react" { namespace JSX { interface IntrinsicElements extends ThreeElements {} } }
+
+const MASK_Z = 0.69;
+const MASK_DEPTH = 0.015;
+const SURFACE_Z = 0.0015;
+const HEIGHT_PER_DEPTH = 0.021;
+const FLOOR_Z = -0.115;
+let areaLightInitialized = false;
+
+const LEGACY_COLORS: Record<string, number[][]> = {
+  plasma: [[13,8,135],[126,3,168],[203,71,120],[248,149,64],[240,249,33]],
+  viridis: [[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]],
+  hot: [[0,0,0],[255,0,0],[255,255,0],[255,255,255]], grayscale: [[0,0,0],[255,255,255]],
+  ice: [[4,35,51],[23,93,122],[50,184,190],[232,251,255]],
+  apple: [[14,20,30],[39,67,108],[94,92,230],[191,90,242],[255,69,58],[255,214,10]],
+};
+const LEGACY_BREAKPOINTS = Object.fromEntries(Object.entries(LEGACY_COLORS).map(([name, colors]) => [
+  name, name === "apple" ? [0,.22,.45,.68,.86,1] : name === "hot" ? [0,.33,.67,1] : colors.map((_, i) => i / (colors.length - 1)),
+]));
+
+function colorMap(type: string, value: number, threshold = 1): [number, number, number] {
+  const t = mapColormapIntensity(value, threshold);
+  const modern = getSurfacePaletteColor(type, t);
+  if (modern) return modern;
+  const name = LEGACY_COLORS[type] ? type : "ice";
+  const stops = LEGACY_COLORS[name], breakpoints = LEGACY_BREAKPOINTS[name];
+  let a = 0;
+  while (a < stops.length - 2 && t > breakpoints[a + 1]) a++;
+  const u = (t - breakpoints[a]) / (breakpoints[a + 1] - breakpoints[a]);
+  const lo = stops[a], hi = stops[a + 1];
+  return [lo[0]+(hi[0]-lo[0])*u,lo[1]+(hi[1]-lo[1])*u,lo[2]+(hi[2]-lo[2])*u];
+}
+
+function sample(data: number[], w: number, h: number, fx: number, fy: number): number {
+  const x = THREE.MathUtils.clamp(fx, 0, w - 1), y = THREE.MathUtils.clamp(fy, 0, h - 1);
+  const x0 = Math.floor(x), y0 = Math.floor(y), x1 = Math.min(w - 1, x0 + 1), y1 = Math.min(h - 1, y0 + 1);
+  const u = x - x0, v = y - y0;
+  return data[y0*w+x0]*(1-u)*(1-v) + data[y0*w+x1]*u*(1-v) + data[y1*w+x0]*(1-u)*v + data[y1*w+x1]*u*v;
+}
+interface IntensityCache { data: number[]; w: number; h: number; min: number; span: number; height: number; }
+function sampleHeight(iv: IntensityCache, x: number, y: number, fov: number): number {
+  return THREE.MathUtils.clamp((sample(iv.data, iv.w, iv.h, x/fov*(iv.w-1), y/fov*(iv.h-1))-iv.min)/iv.span, 0, 1) * iv.height;
+}
+
+function disposeGroup(group: THREE.Group) {
+  const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>(), textures = new Set<THREE.Texture>();
+  group.traverse((child) => {
+    if (child instanceof Reflector) child.dispose();
+    const item = child as THREE.Mesh;
+    if (item.geometry) geometries.add(item.geometry);
+    if (item.material) for (const m of Array.isArray(item.material) ? item.material : [item.material]) {
+      materials.add(m);
+      for (const value of Object.values(m)) if (value instanceof THREE.Texture) textures.add(value);
+      if (m instanceof THREE.ShaderMaterial) for (const uniform of Object.values(m.uniforms)) {
+        if (uniform.value instanceof THREE.Texture) textures.add(uniform.value);
       }
     }
-    const last = stops[stops.length - 1].c; return [last[0], last[1], last[2]];
-  };
-  switch (type) {
-    case "plasma":   return lerp([{t:0,c:[13,8,135]},{t:.25,c:[126,3,168]},{t:.5,c:[203,71,120]},{t:.75,c:[248,149,64]},{t:1,c:[240,249,33]}], t);
-    case "viridis":  return lerp([{t:0,c:[68,1,84]},{t:.25,c:[59,82,139]},{t:.5,c:[33,145,140]},{t:.75,c:[94,201,98]},{t:1,c:[253,231,37]}], t);
-    case "hot":      return lerp([{t:0,c:[0,0,0]},{t:.33,c:[255,0,0]},{t:.67,c:[255,255,0]},{t:1,c:[255,255,255]}], t);
-    case "grayscale":return lerp([{t:0,c:[0,0,0]},{t:1,c:[255,255,255]}], t);
-    case "ice":      return lerp([{t:0,c:[4,35,51]},{t:.33,c:[23,93,122]},{t:.67,c:[50,184,190]},{t:1,c:[232,251,255]}], t);
-    default:         return lerp([{t:0,c:[14,20,30]},{t:.22,c:[39,67,108]},{t:.45,c:[94,92,230]},{t:.68,c:[191,90,242]},{t:.86,c:[255,69,58]},{t:1,c:[255,214,10]}], t);
-  }
-}
-
-// ── EPE color ─────────────────────────────────────────────────────────────────
-function epeColor(dist: number): THREE.Color {
-  const t = Math.min(1, dist / 12);
-  if (t < 0.5) return new THREE.Color(0, 1 - t, t * 0.5 + 0.3).lerp(new THREE.Color(1, 0.8, 0), t * 2);
-  return new THREE.Color(1, 0.8, 0).lerp(new THREE.Color(1, 0.1, 0.05), (t - 0.5) * 2);
-}
-
-// ── Bilinear sample ───────────────────────────────────────────────────────────
-function bilinearSample(data: number[], w: number, h: number, fx: number, fy: number): number {
-  const x0 = Math.max(0, Math.min(w-1, Math.floor(fx))), y0 = Math.max(0, Math.min(h-1, Math.floor(fy)));
-  const x1 = Math.min(x0+1, w-1), y1 = Math.min(y0+1, h-1);
-  const ux = fx - Math.floor(fx), uy = fy - Math.floor(fy);
-  return data[y0*w+x0]*(1-ux)*(1-uy) + data[y0*w+x1]*ux*(1-uy) + data[y1*w+x0]*(1-ux)*uy + data[y1*w+x1]*ux*uy;
-}
-
-function sampleZ(xNm: number, yNm: number, fovNm: number, data: number[], dw: number, dh: number, vmin: number, span: number, heightMax: number): number {
-  const v = bilinearSample(data, dw, dh, (xNm / fovNm) * (dw-1), (yNm / fovNm) * (dh-1));
-  return Math.max(0, Math.min(1, (v - vmin) / span)) * heightMax;
-}
-
-// ── DataTexture colormap ──────────────────────────────────────────────────────
-function buildColorTexture(data: number[], w: number, h: number, vmin: number, span: number, colormapType: string): THREE.DataTexture {
-  const pixels = new Uint8ClampedArray(w * h * 4);
-  for (let j = 0; j < h; j++) {
-    for (let i = 0; i < w; i++) {
-      const di = j*w+i;
-      const t  = Math.max(0, Math.min(1, (data[di]-vmin)/span));
-      const [r, g, b] = evalColorMap(colormapType, t);
-      // Alpha = pow(t, 0.55): low-intensity regions are transparent, matching 2D colormap style.
-      // Eliminates the "black background rectangle" artifact — only hot-spots show color.
-      const pi = di*4;
-      pixels[pi]=r; pixels[pi+1]=g; pixels[pi+2]=b;
-      pixels[pi+3] = Math.round(Math.pow(t, 0.55) * 255);
-    }
-  }
-  const tex = new THREE.DataTexture(pixels, w, h, THREE.RGBAFormat, THREE.UnsignedByteType);
-  tex.flipY = true; tex.needsUpdate = true;
-  return tex;
-}
-
-// ── Height-displaced PlaneGeometry ───────────────────────────────────────────
-function buildSurfaceGeometry(data: number[], w: number, h: number, vmin: number, span: number, depthScale: number, wSegs: number, hSegs: number): THREE.BufferGeometry {
-  const geom = new THREE.PlaneGeometry(1, 1, wSegs, hSegs);
-  const pos  = geom.attributes.position as THREE.BufferAttribute;
-  const numV = (wSegs+1)*(hSegs+1);
-  const heightMax = depthScale * 0.04;
-  for (let vi = 0; vi < numV; vi++) {
-    const px = pos.getX(vi), py = pos.getY(vi);
-    const v  = bilinearSample(data, w, h, (px+0.5)*(w-1), (0.5-py)*(h-1));
-    pos.setZ(vi, Math.max(0, Math.min(1, (v-vmin)/span)) * heightMax);
-  }
-  pos.needsUpdate = true;
-  geom.computeVertexNormals();
-  return geom;
-}
-
-const MASK_Z_TOP = 0.69;   // raised 25% more for wider mask-silicon gap
-const BASE_Z     = -0.022;
-
-// ── Contour line builder ──────────────────────────────────────────────────────
-function buildContourLine(
-  contour: ContourSet, fovNm: number,
-  data: number[], dw: number, dh: number, vmin: number, span: number, heightMax: number,
-  color: number | THREE.Color, lineWidth: number, zOffset: number,
-  dashed: boolean, epeData?: EpePoint[], fixedZ?: number,
-): THREE.Line {
-  const pts = contour.points_nm;
-  if (pts.length < 2) return new THREE.Line();
-  const positions: number[] = [], colors: number[] = [];
-  const useEpe = !!epeData && epeData.length === pts.length;
-  for (let i = 0; i <= pts.length; i++) {
-    const p = pts[i % pts.length];
-    const xN = p.x / fovNm - 0.5, yN = 0.5 - p.y / fovNm;
-    const z = fixedZ !== undefined ? fixedZ : sampleZ(p.x, p.y, fovNm, data, dw, dh, vmin, span, heightMax) + zOffset;
-    positions.push(xN, yN, z);
-    if (useEpe) { const c = epeColor(epeData![i % pts.length].dist); colors.push(c.r, c.g, c.b); }
-  }
-  const geom = new THREE.BufferGeometry();
-  geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  if (useEpe) geom.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
-  if (dashed) {
-    const mat = new THREE.LineDashedMaterial({ color, dashSize: 0.018, gapSize: 0.010 });
-    const line = new THREE.Line(geom, mat); line.computeLineDistances(); return line;
-  }
-  return new THREE.Line(geom, new THREE.LineBasicMaterial({ color: useEpe ? 0xffffff : color, linewidth: lineWidth, vertexColors: useEpe }));
-}
-
-// ── Dispose group (recursive) ─────────────────────────────────────────────────
-function disposeGroup(group: THREE.Group) {
-  group.traverse((child) => {
-    const obj = child as THREE.Mesh & THREE.Line;
-    if (obj.geometry) obj.geometry.dispose();
-    if (obj.material) {
-      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-      mats.forEach((m) => {
-        const mat = m as THREE.MeshPhysicalMaterial;
-        mat.map?.dispose();
-        mat.alphaMap?.dispose();
-        m.dispose();
-      });
-    }
   });
+  geometries.forEach((g) => g.dispose()); materials.forEach((m) => m.dispose()); textures.forEach((t) => t.dispose());
   group.clear();
 }
 
-
-// ── Directional beam DataTexture ──────────────────────────────────────────────
-// For vertical column planes (rotation.x = π/2): V direction → +Z world (silicon→mask).
-// V=0 (j=0) = silicon level → transparent. V=1 (j=H-1) = mask level → bright.
-// This makes the beam look like it flows DOWN from the aperture.
-function makeBeamTex(): THREE.DataTexture {
-  const W = 32, H = 64;
-  const px = new Uint8ClampedArray(W * H * 4);
-  for (let j = 0; j < H; j++) {
-    for (let i = 0; i < W; i++) {
-      const u = (i / (W - 1)) * 2 - 1;  // -1..1 horizontal soft falloff
-      const v = j / (H - 1);             // 0=silicon(dim), 1=mask(bright)
-      const horiz = Math.exp(-u * u * 3.0);
-      const vert  = Math.pow(v, 0.4);    // sqrt-ish: gradual fade from mask down to silicon
-      const pi = (j * W + i) * 4;
-      px[pi] = px[pi+1] = px[pi+2] = 255;
-      px[pi+3] = Math.round(horiz * vert * 255);
+/** Union texture keeps overlapping OPC segments from producing internal seams. */
+function maskTextures(rects: MaskRect[], subtract: MaskRect[], fov: number, size: number) {
+  const pixels = new Uint8Array(size * size * 4); pixels.fill(255);
+  const paint = (r: MaskRect, value: number) => {
+    const x0 = Math.max(0, Math.floor((r.x/fov + 0.05)/1.1*size));
+    const x1 = Math.min(size, Math.ceil(((r.x+r.w)/fov + 0.05)/1.1*size));
+    const y0 = Math.max(0, Math.floor((1.05-(r.y+r.h)/fov)/1.1*size));
+    const y1 = Math.min(size, Math.ceil((1.05-r.y/fov)/1.1*size));
+    for (let y=y0; y<y1; y++) for (let x=x0; x<x1; x++) {
+      const i = (y*size+x)*4; pixels[i]=pixels[i+1]=pixels[i+2]=value;
+    }
+  };
+  rects.forEach((r) => paint(r, 0)); subtract.forEach((r) => paint(r, 255));
+  const alpha = new THREE.DataTexture(pixels, size, size, THREE.RGBAFormat);
+  alpha.name = "RenderedMaskAlpha";
+  alpha.generateMipmaps = true; alpha.minFilter = THREE.LinearMipmapLinearFilter; alpha.magFilter = THREE.LinearFilter; alpha.needsUpdate = true;
+  const rimPixels = new Uint8Array(size*size*4);
+  for (let y=1; y<size-1; y++) for (let x=1; x<size-1; x++) {
+    const i=(y*size+x)*4;
+    if (pixels[i] && (!pixels[i-4] || !pixels[i+4] || !pixels[i-size*4] || !pixels[i+size*4])) {
+      rimPixels[i]=rimPixels[i+1]=rimPixels[i+2]=255; rimPixels[i+3]=220;
     }
   }
-  const t = new THREE.DataTexture(px, W, H, THREE.RGBAFormat);
-  t.needsUpdate = true; return t;
+  const rim = new THREE.DataTexture(rimPixels, size, size, THREE.RGBAFormat);
+  rim.name = "RenderedMaskRim";
+  rim.generateMipmaps=true; rim.minFilter=THREE.LinearMipmapLinearFilter; rim.needsUpdate=true;
+  return { alpha, rim };
 }
 
-// ── Radial gradient DataTexture ───────────────────────────────────────────────
-function makeRadialTex(size = 64): THREE.DataTexture {
-  const px = new Uint8ClampedArray(size * size * 4);
-  for (let j = 0; j < size; j++) {
-    for (let i = 0; i < size; i++) {
-      const dx = (i/(size-1))*2-1, dy = (j/(size-1))*2-1;
-      const a = Math.max(0, Math.exp(-(dx*dx+dy*dy)*3.5));
-      const pi = (j*size+i)*4;
-      px[pi]=255; px[pi+1]=255; px[pi+2]=255; px[pi+3]=Math.round(a*255);
+const reflectionShader = {
+  name: "RestrainedPlanarReflection",
+  uniforms: {
+    color: { value: new THREE.Color(0xffffff) }, tDiffuse: { value: null }, textureMatrix: { value: new THREE.Matrix4() },
+    strength: { value: 0.2 }, alphaMask: { value: null }, hasMask: { value: 0 }, isFloor: { value: 0 },
+    texel: { value: new THREE.Vector2(1/1024, 1/1024) },
+  },
+  vertexShader: `
+    uniform mat4 textureMatrix;
+    varying vec4 reflectedUv;
+    varying vec2 surfaceUv;
+    varying float grazing;
+    void main() {
+      reflectedUv = textureMatrix * vec4(position, 1.0);
+      surfaceUv = uv;
+      vec3 viewPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
+      grazing = 1.0 - abs(dot(normalize(normalMatrix * normal), normalize(-viewPosition)));
+      gl_Position = projectionMatrix * vec4(viewPosition, 1.0);
+    }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform sampler2D alphaMask;
+    uniform vec3 color;
+    uniform float strength;
+    uniform float hasMask;
+    uniform float isFloor;
+    uniform vec2 texel;
+    varying vec4 reflectedUv;
+    varying vec2 surfaceUv;
+    varying float grazing;
+    void main() {
+      if (hasMask > 0.5 && texture2D(alphaMask, surfaceUv).g < 0.5) discard;
+      vec2 p = reflectedUv.xy / reflectedUv.w;
+      vec3 reflection = texture2D(tDiffuse, p).rgb * 0.44;
+      reflection += texture2D(tDiffuse, p + vec2(texel.x, 0.0)).rgb * 0.14;
+      reflection += texture2D(tDiffuse, p - vec2(texel.x, 0.0)).rgb * 0.14;
+      reflection += texture2D(tDiffuse, p + vec2(0.0, texel.y)).rgb * 0.14;
+      reflection += texture2D(tDiffuse, p - vec2(0.0, texel.y)).rgb * 0.14;
+      float fade = mix(1.0, 1.0-smoothstep(0.2,0.5,length(surfaceUv-0.5)), isFloor);
+      float opacity = strength * (0.72 + 0.28 * pow(grazing, 2.0)) * fade;
+      gl_FragColor = vec4(reflection * color, opacity);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`,
+};
+
+/** Other mirrors are hidden during each capture, leaving their physical bases.
+ * This gives first-bounce scene reflections without recursive rendering. */
+function makeReflection(width: number, height: number, resolution: number, strength: number, reflections: Set<Reflector>, alpha?: THREE.Texture, floor = false, excluded: THREE.Object3D[] = []) {
+  const reflector = new Reflector(new THREE.PlaneGeometry(width, height), {
+    textureWidth: resolution, textureHeight: resolution, clipBias: 0.0004, multisample: 2, shader: reflectionShader,
+  });
+  const mat = reflector.material as THREE.ShaderMaterial;
+  reflector.camera.userData.renderedReflection = true;
+  mat.transparent = true; mat.depthWrite = false;
+  mat.uniforms.strength.value = strength;
+  mat.uniforms.alphaMask.value = alpha || null; mat.uniforms.hasMask.value = alpha ? 1 : 0;
+  mat.uniforms.isFloor.value = floor ? 1 : 0; mat.uniforms.texel.value.set(1/resolution, 1/resolution);
+  const capture = reflector.onBeforeRender;
+  reflector.onBeforeRender = function (renderer, scene, camera, geometry, material, group) {
+    const hidden: Reflector[] = [];
+    const excludedVisibility = excluded.map((object) => object.visible);
+    excluded.forEach((object) => { object.visible = false; });
+    reflections.forEach((other) => { if (other !== reflector && other.visible) { other.visible=false; hidden.push(other); } });
+    try { capture.call(this, renderer, scene, camera, geometry, material, group); }
+    finally {
+      hidden.forEach((other) => { other.visible = true; });
+      excluded.forEach((object, i) => { object.visible = excludedVisibility[i]; });
     }
-  }
-  const t = new THREE.DataTexture(px, size, size, THREE.RGBAFormat);
-  t.needsUpdate = true; return t;
+  };
+  reflections.add(reflector);
+  return reflector;
 }
 
-
-const MASK_DEPTH = 0.015; // chrome plate thickness
-
-// ── Mask alpha texture — paint aperture union into a DataTexture ──────────────
-// Three.js alphaMap reads the GREEN channel (.g in GLSL).
-// flipY=false (DataTexture default): row 0 = UV y=0 = world y=-B (bottom).
-// Row formula: row = (worldY + B) / (2B) * size  [y increases upward]
-function buildMaskAlphaTex(rects: import("../lib/surface3d-types").MaskRect[], fovNm: number, size = 512): THREE.DataTexture {
-  const pixels = new Uint8ClampedArray(size * size * 4);
-  const B = 0.55;
-  pixels.fill(255); // R=G=B=A=255 everywhere — plate fully opaque initially
-  for (const r of rects) {
-    const cx = (r.x + r.w * 0.5) / fovNm - 0.5;
-    const cy = 0.5 - (r.y + r.h * 0.5) / fovNm;
-    const hw = r.w / (2 * fovNm), hh = r.h / (2 * fovNm);
-    const col0 = Math.max(0, Math.floor((cx - hw + B) / (2 * B) * size));
-    const col1 = Math.min(size, Math.ceil( (cx + hw + B) / (2 * B) * size));
-    // flipY=false: row 0=bottom (world y=-B), row increases with world y
-    const row0 = Math.max(0, Math.floor((cy - hh + B) / (2 * B) * size));
-    const row1 = Math.min(size, Math.ceil( (cy + hh + B) / (2 * B) * size));
-    for (let row = row0; row < row1; row++) {
-      for (let col = col0; col < col1; col++) {
-        const idx = (row * size + col) * 4;
-        // Zero ALL channels including green (.g) which alphaMap reads
-        pixels[idx] = pixels[idx+1] = pixels[idx+2] = pixels[idx+3] = 0;
-      }
-    }
+function buildMask(props: Surface3DProps, reflections: Set<Reflector>, resolution: number, textureSize: number) {
+  const group = new THREE.Group();
+  const { alpha, rim } = maskTextures(props.maskAddRects, props.maskSubtractRects, props.fovNm, textureSize);
+  const reveal = props.maskOpacityPreset === "REVEAL";
+  const euv = (props.wavelengthNm || 193) < 100;
+  const material = (underside: boolean) => new THREE.MeshPhysicalMaterial({
+    color: 0x8ab0c8, roughness: 0.08, metalness: 0.85,
+    clearcoat: 0.70, clearcoatRoughness: 0.08, iridescence: 0.085, iridescenceIOR: 1.55,
+    emissive: 0x08111a, emissiveIntensity: 0.12,
+    alphaMap: euv ? null : alpha, alphaTest: euv ? 0 : 0.025, transparent: !euv,
+    opacity: euv ? 1 : reveal ? (underside ? 0.35 : 0.45) : (underside ? 0.52 : 0.76),
+    depthWrite: euv || !reveal, side: underside ? THREE.BackSide : THREE.FrontSide, envMapIntensity: 2.0,
+  });
+  const top = new THREE.Mesh(new THREE.PlaneGeometry(1.1,1.1), material(false));
+  top.name = euv ? "RenderedEuvReflectiveSubstrate" : "RenderedDuvMask";
+  top.position.z = euv ? MASK_Z - 0.0005 : MASK_Z;
+  group.add(top);
+  const bottom = new THREE.Mesh(new THREE.PlaneGeometry(1.1,1.1), material(true));
+  bottom.name = "RenderedMaskUnderside";
+  bottom.position.z = MASK_Z - MASK_DEPTH;
+  group.add(bottom);
+  if (euv) {
+    // An EUV reticle is a continuous reflective substrate. The dark absorber
+    // leaves active regions reflective; it never opens a transmission hole.
+    const absorber = new THREE.Mesh(new THREE.PlaneGeometry(1.1,1.1), new THREE.MeshPhysicalMaterial({
+      color: 0x27313e, roughness: 0.25, metalness: 0.6, opacity: 1,
+      alphaMap: alpha, alphaTest: 0.5, transparent: false, depthWrite: true,
+      side: THREE.FrontSide, envMapIntensity: 0.7,
+    }));
+    absorber.name = "RenderedEuvAbsorber";
+    absorber.position.z = MASK_Z;
+    group.add(absorber);
   }
-  // Soft outer boundary fade — eliminates hard-edge line artifacts when plate is tilted.
-  // Chrome pixels near the plate boundary fade to transparent over a ~5% transition zone,
-  // replacing the abrupt geometry cutoff with a smooth feathered edge.
-  const borderPx = Math.round(size * 0.02); // reduced from 5%→2%: sharper aperture edge
-  for (let row = 0; row < size; row++) {
-    for (let col = 0; col < size; col++) {
-      const idx = (row * size + col) * 4;
-      if (pixels[idx + 1] === 0) continue; // aperture hole — leave transparent
-      const dist = Math.min(row, size - 1 - row, col, size - 1 - col);
-      if (dist < borderPx) {
-        const fade = dist / borderPx;
-        pixels[idx] = pixels[idx+1] = pixels[idx+2] = pixels[idx+3] = Math.round(255 * fade);
-      }
-    }
+  const edgeMaterial = new THREE.MeshPhysicalMaterial({color:0xaec7d7, roughness:0.12,metalness:0.88,clearcoat:0.7,clearcoatRoughness:0.08,envMapIntensity:1.2});
+  for (const [x,y,w,h,rx,ry] of [
+    [0,-0.55,1.1,MASK_DEPTH,Math.PI/2,0],[0,0.55,1.1,MASK_DEPTH,-Math.PI/2,0],
+    [-0.55,0,MASK_DEPTH,1.1,0,-Math.PI/2],[0.55,0,MASK_DEPTH,1.1,0,Math.PI/2],
+  ]) {
+    const side=new THREE.Mesh(new THREE.PlaneGeometry(w,h),edgeMaterial); side.position.set(x,y,MASK_Z-MASK_DEPTH/2); side.rotation.set(rx,ry,0); group.add(side);
   }
-  const tex = new THREE.DataTexture(pixels, size, size, THREE.RGBAFormat);
-  // flipY=false (default for DataTexture) — row 0 at bottom
-  tex.needsUpdate = true;
-  return tex;
+  for (const underside of [false,true]) {
+    if (euv && underside) continue;
+    const edge=new THREE.Mesh(new THREE.PlaneGeometry(1.1,1.1),new THREE.MeshBasicMaterial({map:rim,color:0xc0d8e8,transparent:true,opacity:underside?0.18:0.32,side:underside?THREE.BackSide:THREE.FrontSide,depthWrite:false}));
+    edge.position.z=underside?MASK_Z-MASK_DEPTH-0.0003:MASK_Z+0.0003; group.add(edge);
+  }
+  const mirror=makeReflection(1.1,1.1,resolution,reveal&&!euv?0.06:0.19,reflections,euv?undefined:alpha);
+  mirror.rotation.x=Math.PI; mirror.position.z=MASK_Z-MASK_DEPTH-0.0005;
+  (mirror.material as THREE.ShaderMaterial).vertexShader=reflectionShader.vertexShader.replace("surfaceUv = uv;", "surfaceUv = vec2(uv.x, 1.0 - uv.y);");
+  mirror.renderOrder=2; group.add(mirror);
+  return group;
 }
 
-// ── Aperture border glow texture ──────────────────────────────────────────────
-// Bright pixels only where chrome meets aperture hole (edge band, ~1.5% of size wide).
-// Used as an additive-blend overlay on a PlaneGeometry centered at (0,0) — no bounding
-// sphere offset, no LineSegments depth-sort issues.
-function buildMaskBorderTex(
-  rects: import("../lib/surface3d-types").MaskRect[], fovNm: number, size = 512,
-): THREE.DataTexture {
-  const B = 0.55;
-  const pixels = new Uint8ClampedArray(size * size * 4); // all zero (transparent)
-  // 1. Build hole grid (1 = aperture, 0 = chrome)
-  const isHole = new Uint8Array(size * size);
-  for (const r of rects) {
-    const cx = (r.x + r.w * 0.5) / fovNm - 0.5;
-    const cy = 0.5 - (r.y + r.h * 0.5) / fovNm;
-    const hw = r.w / (2 * fovNm), hh = r.h / (2 * fovNm);
-    const c0 = Math.max(0, Math.floor((cx - hw + B) / (2 * B) * size));
-    const c1 = Math.min(size, Math.ceil( (cx + hw + B) / (2 * B) * size));
-    const r0 = Math.max(0, Math.floor((cy - hh + B) / (2 * B) * size));
-    const r1 = Math.min(size, Math.ceil( (cy + hh + B) / (2 * B) * size));
-    for (let row = r0; row < r1; row++)
-      for (let col = c0; col < c1; col++)
-        isHole[row * size + col] = 1;
-  }
-  // 2. For each chrome pixel within edgeW of a hole, write bright edge pixel
-  // edgeW ~2px at 512: thin crisp aperture rim
-  const edgeW = Math.max(1, Math.round(size * 0.004));
-  for (let row = 0; row < size; row++) {
-    for (let col = 0; col < size; col++) {
-      if (isHole[row * size + col]) continue;
-      let minDist = edgeW + 1;
-      for (let dr = -edgeW; dr <= edgeW; dr++) {
-        for (let dc = -edgeW; dc <= edgeW; dc++) {
-          const nr = row + dr, nc = col + dc;
-          if (nr < 0 || nr >= size || nc < 0 || nc >= size) continue;
-          if (isHole[nr * size + nc]) {
-            const d = Math.sqrt(dr * dr + dc * dc);
-            if (d < minDist) minDist = d;
+/** Continuous illumination: one volume per optical path, never per OPC segment. */
+function buildBeams(props: Surface3DProps) {
+  const group = new THREE.Group();
+  const field = getCachedIlluminationField(props.maskAddRects, props.maskSubtractRects, props.fovNm);
+  if (!field) return group;
+  const density = new THREE.DataTexture(field.data, field.size, field.size, THREE.RedFormat);
+  density.minFilter = density.magFilter = THREE.LinearFilter;
+  density.needsUpdate = true;
+  const euv=(props.wavelengthNm || 193)<100;
+  const slope=euv?Math.tan(6*Math.PI/180):0;
+  const volume = (name: string, z0: number, z1: number, incident: boolean, direction = 0) => {
+    const halfSize = new THREE.Vector3(field.width / 2, field.height / 2, (z1 - z0) / 2);
+    const material = new THREE.ShaderMaterial({
+      uniforms: {
+        densityMap: { value: density }, halfSize: { value: halfSize }, eyePosition: { value: new THREE.Vector3() },
+        incident: { value: incident ? 1 : 0 }, scattering: { value: incident ? .20 : .32 }, sampleSteps: { value: 40 },
+        beamColor: { value: new THREE.Color(euv ? 0xc4d7f0 : 0xbdcce5) },
+      },
+      vertexShader: `varying vec3 localPosition;
+        void main(){localPosition=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+      fragmentShader: `
+        uniform sampler2D densityMap;
+        uniform vec3 halfSize, eyePosition, beamColor;
+        uniform float incident, scattering, sampleSteps;
+        varying vec3 localPosition;
+        void main(){
+          bool inside=all(lessThan(abs(eyePosition),halfSize));
+          if(inside==gl_FrontFacing) discard;
+          vec3 direction=normalize(localPosition-eyePosition);
+          vec3 inverseRay=1.0/(mix(vec3(-1.0),vec3(1.0),step(vec3(0.0),direction))*max(abs(direction),vec3(1e-6)));
+          vec3 a=(-halfSize-eyePosition)*inverseRay,b=(halfSize-eyePosition)*inverseRay;
+          vec3 entry=min(a,b),exit=max(a,b);
+          float start=max(0.0,max(entry.x,max(entry.y,entry.z)));
+          float end=min(exit.x,min(exit.y,exit.z));
+          if(end<=start) discard;
+          float stepSize=(end-start)/sampleSteps,opticalDepth=0.0;
+          for(int i=0;i<48;i++){
+            if(float(i)>=sampleSteps) break;
+            vec3 p=eyePosition+direction*(start+(float(i)+.5)*stepSize);
+            vec3 uv=p/(2.0*halfSize)+.5;
+            vec2 edge=smoothstep(vec2(0.0),vec2(.22),uv.xy)*(1.0-smoothstep(vec2(.78),vec2(1.0),uv.xy));
+            float footprint=mix(texture2D(densityMap,uv.xy).r,edge.x*edge.y,incident);
+            float ends=smoothstep(0.0,.07,uv.z)*(1.0-smoothstep(.78,1.0,uv.z));
+            opticalDepth+=footprint*ends*stepSize*scattering;
           }
+          gl_FragColor=vec4(beamColor,1.0-exp(-opticalDepth));
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`,
+      transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+    });
+    material.forceSinglePass = true;
+    material.userData.liveSteps = 40;
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(field.width, field.height, z1 - z0), material);
+    const centerZ = (z0 + z1) / 2;
+    mesh.name = name;
+    mesh.matrixAutoUpdate = false;
+    mesh.matrix.set(1, 0, direction * slope, field.centerX + direction * slope * (centerZ - MASK_Z),
+      0, 1, 0, field.centerY, 0, 0, 1, centerZ, 0, 0, 0, 1);
+    // Planar reflections render with their own cameras; every capture needs
+    // its actual eye position in the (possibly sheared) volume's coordinates.
+    mesh.onBeforeRender = (_renderer, _scene, camera) => {
+      camera.getWorldPosition(material.uniforms.eyePosition.value);
+      mesh.worldToLocal(material.uniforms.eyePosition.value);
+      const steps = material.userData.liveSteps as number;
+      material.uniforms.sampleSteps.value = camera.userData.renderedReflection ? Math.max(12, Math.ceil(steps * .65)) : steps;
+      material.uniformsNeedUpdate = true;
+    };
+    mesh.renderOrder = 3;
+    group.add(mesh);
+  };
+  if (euv) {
+    // The incident and reflected paths remain above a reflective EUV mask.
+    volume("RenderedIncidentLight", MASK_Z + .003, MASK_Z + .68, true, -1);
+    volume("RenderedReflectedLight", MASK_Z + .003, MASK_Z + .68, false, 1);
+  } else {
+    volume("RenderedIncidentLight", MASK_Z + .003, MASK_Z + .68, true);
+    volume("RenderedTransmittedLight", Math.max(.012, SURFACE_Z + props.depthScale * HEIGHT_PER_DEPTH + .005), MASK_Z - MASK_DEPTH - .001, false);
+  }
+  // One broad emitter avoids the bright specular dots of per-segment lights.
+  if (!areaLightInitialized) { RectAreaLightUniformsLib.init(); areaLightInitialized = true; }
+  const light = new THREE.RectAreaLight(0xb7cce5, .22, Math.max(.3, field.width), Math.max(.3, field.height));
+  light.name = "RenderedIlluminationFill";
+  light.position.set(field.centerX, field.centerY, MASK_Z - .04);
+  group.add(light);
+  return group;
+}
+
+function epeColor(dist:number) {
+  const rgb = getEpeColor(dist);
+  return new THREE.Color().setRGB(rgb[0]/255, rgb[1]/255, rgb[2]/255, THREE.SRGBColorSpace);
+}
+
+const geometryIntensity = new WeakMap<THREE.BufferGeometry, Float32Array>();
+const geometryColorSettings = new WeakMap<THREE.BufferGeometry, { palette: string; threshold: number }>();
+
+/** Recolor the scalar display without changing its positions, normals or alpha. */
+function updateIntensityColors(geometry: THREE.BufferGeometry, palette: string, threshold = 1) {
+  const previous = geometryColorSettings.get(geometry);
+  if (previous?.palette === palette && previous.threshold === threshold) return;
+  const normalized = geometryIntensity.get(geometry);
+  if (!normalized) return;
+  let colors = geometry.getAttribute("color") as THREE.BufferAttribute | undefined;
+  if (!colors) {
+    colors = new THREE.Float32BufferAttribute(new Float32Array(normalized.length * 3), 3);
+    colors.setUsage(THREE.DynamicDrawUsage);
+    geometry.setAttribute("color", colors);
+  }
+  const color = new THREE.Color();
+  for (let i = 0; i < normalized.length; i++) {
+    const rgb = colorMap(palette, normalized[i], threshold);
+    color.setRGB(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, THREE.SRGBColorSpace);
+    colors.setXYZ(i, color.r, color.g, color.b);
+  }
+  colors.needsUpdate = true;
+  geometryColorSettings.set(geometry, { palette, threshold });
+}
+
+function buildIntensityGeometry(iv: IntensityCache, palette: string, limit: number, threshold = 1) {
+  const { data, w, h, min, span, height } = iv;
+  const geometry = new THREE.PlaneGeometry(1, 1, Math.min(limit, Math.max(1, w - 1)), Math.min(limit, Math.max(1, h - 1)));
+  const positions = geometry.attributes.position as THREE.BufferAttribute;
+  const normalized = new Float32Array(positions.count);
+  for (let i = 0; i < positions.count; i++) {
+    const t = THREE.MathUtils.clamp((sample(data, w, h, (positions.getX(i) + .5) * (w - 1), (.5 - positions.getY(i)) * (h - 1)) - min) / span, 0, 1);
+    positions.setZ(i, t * height);
+    normalized[i] = t;
+  }
+  geometryIntensity.set(geometry, normalized);
+  updateIntensityColors(geometry, palette, threshold);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+function contourLine(contour:ContourSet, props:Surface3DProps, iv:IntensityCache|null, color:number|THREE.Color, dashed=false, epe?:EpePoint[], fixedZ?:number, opacity=1) {
+  const positions:number[]=[], colors:number[]=[];
+  const points=contour.points_nm, useEpe=epe?.length===points.length;
+  if (points.length<2) return new THREE.Line();
+  for (let i=0;i<=points.length;i++) {
+    const p=points[i%points.length];
+    const z=fixedZ ?? (SURFACE_Z+(props.showAerial&&iv?sampleHeight(iv,p.x,p.y,props.fovNm):0)+0.0025);
+    positions.push(p.x/props.fovNm-.5,.5-p.y/props.fovNm,z);
+    if(useEpe){const c=epeColor(epe![i%points.length].dist);colors.push(c.r,c.g,c.b);}
+  }
+  const geom=new THREE.BufferGeometry();geom.setAttribute("position",new THREE.Float32BufferAttribute(positions,3));
+  if(useEpe)geom.setAttribute("color",new THREE.Float32BufferAttribute(colors,3));
+  const material=dashed?new THREE.LineDashedMaterial({color,dashSize:.012,gapSize:.008,transparent:opacity<1,opacity}):new THREE.LineBasicMaterial({color:useEpe?0xffffff:color,vertexColors:useEpe,transparent:opacity<1,opacity});
+  material.toneMapped = !useEpe;
+  const line=new THREE.Line(geom,material);if(dashed)line.computeLineDistances();return line;
+}
+
+const SceneInner=React.forwardRef<Surface3DHandle,Surface3DProps & { onDprChange: (ratio: number) => void }>((props,ref)=>{
+  const {gl,camera,scene,invalidate,size}=useThree();
+  const outer=useRef<THREE.Group>(null);
+  const chip=useMemo(()=>new THREE.Group(),[]), surface=useMemo(()=>new THREE.Group(),[]), contours=useMemo(()=>new THREE.Group(),[]), mask=useMemo(()=>new THREE.Group(),[]), beams=useMemo(()=>new THREE.Group(),[]), ground=useMemo(()=>new THREE.Group(),[]);
+  const reflections=useMemo(()=>new Set<Reflector>(),[]);
+  const intensity=useRef<IntensityCache|null>(null);
+  const desiredDpr = getSurfacePixelRatio(size.width, size.height, typeof window === "undefined" ? 1 : window.devicePixelRatio || 1, props.qualityMode);
+  const budget = getSurfaceRenderBudget(size.width, size.height, desiredDpr, props.qualityMode);
+  const resolution = budget.maskTextureSize === 1024 ? 512 : 1024;
+
+  useEffect(() => {
+    props.onDprChange(desiredDpr);
+  }, [desiredDpr, props.onDprChange]);
+
+  useEffect(()=>{
+    gl.toneMapping=THREE.ACESFilmicToneMapping; gl.toneMappingExposure=1.02;gl.outputColorSpace=THREE.SRGBColorSpace;
+    scene.background=new THREE.Color(0x03070c);
+    const backdrop=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.ShaderMaterial({
+      vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+      fragmentShader:`varying vec2 vUv;
+        void main(){vec2 p=(vUv-.5)*32.0;float g=exp(-dot(p-vec2(.1,-.1),p-vec2(.1,-.1))*.8);float shoulder=exp(-dot(p-vec2(-.5,.25),p-vec2(-.5,.25))*2.0);float grain=(fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453)-.5)/1100.0;vec3 col=vec3(.0022,.004,.007)+vec3(.004,.010,.020)*g+vec3(.002,.005,.007)*shoulder;gl_FragColor=vec4(col+grain,1.0);
+        #include <colorspace_fragment>
+        }`, depthWrite:false,toneMapped:false,
+    }));
+    backdrop.position.z=-6;backdrop.renderOrder=-100;scene.add(backdrop);
+    return()=>{scene.remove(backdrop);backdrop.geometry.dispose();(backdrop.material as THREE.Material).dispose();};
+  },[gl,scene]);
+
+  useEffect(()=>{
+    if(!outer.current)return;
+    outer.current.rotation.order="ZXY";
+    outer.current.rotation.set(-props.elevationDeg*Math.PI/180,props.rollDeg*Math.PI/180,props.azimuthDeg*Math.PI/180,"ZXY");
+    const pivot=getSurface3dPivot("rendered");
+    outer.current.position.set(props.offsetX*.5,props.offsetY*.5,props.offsetZ*.35+pivot);
+    chip.position.z=-pivot;invalidate();
+  },[props.azimuthDeg,props.elevationDeg,props.rollDeg,props.offsetX,props.offsetY,props.offsetZ,chip,invalidate]);
+  useEffect(()=>{
+    const zb=.52+.48*Math.pow(THREE.MathUtils.clamp(props.zoomScale,.15,16),.9);
+    camera.position.z=3.5/zb;camera.updateProjectionMatrix();invalidate();
+  },[props.zoomScale,camera,invalidate]);
+
+  useEffect(()=>{
+    disposeGroup(surface);
+    const {intensityData:data,intensityW:w,intensityH:h}=props;
+    if(!w||!h||data.length<w*h){intensity.current=null;return;}
+    let min=Infinity,max=-Infinity;for(const value of data){if(Number.isFinite(value)){min=Math.min(min,value);max=Math.max(max,value);}}
+    if(!Number.isFinite(min)){intensity.current=null;return;}
+    const span=Math.max(1e-9,max-min),height=Math.max(0,props.depthScale)*HEIGHT_PER_DEPTH;
+    intensity.current={data,w,h,min,span,height};
+    const geo = buildIntensityGeometry(intensity.current, props.colormapType, budget.geometrySegments, props.colormapThreshold ?? 1);
+    const rgba=new Uint8Array(w*h*4);
+    for(let i=0;i<w*h;i++){
+      const t=THREE.MathUtils.clamp((data[i]-min)/span,0,1),a=Math.round(THREE.MathUtils.smoothstep(t,.012,.2)*255);
+      rgba[i*4]=rgba[i*4+1]=rgba[i*4+2]=a;rgba[i*4+3]=255;
+    }
+    const alpha=new THREE.DataTexture(rgba,w,h,THREE.RGBAFormat);alpha.flipY=true;alpha.minFilter=THREE.LinearFilter;alpha.magFilter=THREE.LinearFilter;alpha.needsUpdate=true;
+    const mat=new THREE.MeshPhysicalMaterial({color:0xc0cbd6,vertexColors:true,specularIntensity:0,roughness:.65,metalness:0,clearcoat:0,emissive:0x45515d,emissiveIntensity:.015,alphaMap:alpha,transparent:true,depthWrite:true,alphaTest:.035,envMapIntensity:.1,side:THREE.DoubleSide});
+    const mesh=new THREE.Mesh(geo,mat);mesh.name="RenderedIntensitySurface";mesh.position.z=SURFACE_Z;surface.add(mesh);surface.visible=props.showAerial;invalidate();
+  },[props.intensityData,props.intensityW,props.intensityH,props.depthScale,budget.geometrySegments,surface,invalidate]);
+  useEffect(() => {
+    const mesh = surface.children.find((object) => object instanceof THREE.Mesh) as THREE.Mesh | undefined;
+    if (mesh) updateIntensityColors(mesh.geometry, props.colormapType, props.colormapThreshold ?? 1);
+    invalidate();
+  }, [props.colormapType, props.colormapThreshold, props.intensityData, props.intensityW, props.intensityH, props.depthScale, budget.geometrySegments, surface, invalidate]);
+  useEffect(()=>{surface.visible=props.showAerial;invalidate();},[props.showAerial,surface,invalidate]);
+
+  useEffect(()=>{
+    disposeGroup(contours);const iv=intensity.current;
+    const color=props.contourStyle==="GOLD"?0xd8bd87:props.contourStyle==="NEON"?0xa7e2df:props.contourStyle==="MINIMAL"?0xc3ced8:0xe8edf2;
+    const opacity=props.contourStyle==="MINIMAL"?.62:.95;
+    const add=(sets:ContourSet[],c:number|THREE.Color,dashed=false,epe?:EpePoint[][]|null,fixedZ?:number,alpha=opacity)=>sets.forEach((set,i)=>contours.add(contourLine(set,props,iv,c,dashed,epe?.[i],fixedZ,alpha)));
+    const colorEpe = !!props.epeContours && (props.epeMode === "COLOR" || props.epeMode === "BOTH");
+    if(props.showMainContour || colorEpe)add(props.contours,color,false,colorEpe?props.epeContours:null,undefined,colorEpe ? 1 : opacity);
+    if(props.showTargetOverlay)add(props.targetContours,0x8dbebc,true,null,undefined,.75);
+    if(props.compareActive){add(props.compareAContours,0x91b6dc,true);add(props.compareBContours,0xc9abc9,true);}
+    for (const set of props.sweepContourSets) {
+      let fixedZ: number | undefined;
+      if (set.plane === "mask") {
+        fixedZ = MASK_Z + (set.baseZ === undefined ? 0.002 : set.baseZ - SURFACE3D_PLANES.classic.maskTopZ);
+      } else if (set.plane === "silicon") {
+        fixedZ = set.baseZ === undefined ? 0.002 : set.baseZ - SURFACE3D_PLANES.classic.siliconCenterZ;
+      }
+      add(set.contours, new THREE.Color(set.color), !!set.dash, null, fixedZ, set.opacity);
+    }
+    if(props.epeContours&&(props.epeMode==="ARROWS"||props.epeMode==="BOTH")) {
+      const positions: number[] = [], colors: number[] = [];
+      const worldPerPixel = 2 * camera.position.z * Math.tan((camera as THREE.PerspectiveCamera).fov * Math.PI / 360) / Math.max(1, size.height);
+      const headLength = Math.min(.025, worldPerPixel * 3.2);
+      const point = (x: number, y: number) => new THREE.Vector3(x, y, SURFACE_Z + (props.showAerial && iv ? sampleHeight(iv, (x + .5) * props.fovNm, (.5 - y) * props.fovNm, props.fovNm) : 0) + .0045);
+      const addSegment = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Color) => {
+        positions.push(a.x,a.y,a.z,b.x,b.y,b.z);
+        colors.push(c.r,c.g,c.b,c.r,c.g,c.b);
+      };
+      for(const segments of props.epeContours) {
+        const stride=Math.max(1,Math.floor(segments.length/24));
+        for(let i=0;i<segments.length;i+=stride) {
+          const s=segments[i]; if(s.dist < .05) continue;
+          const ax=s.p.x/props.fovNm-.5, ay=.5-s.p.y/props.fovNm;
+          const bx=s.nearest.x/props.fovNm-.5, by=.5-s.nearest.y/props.fovNm;
+          const length=Math.hypot(bx-ax,by-ay); if(length < 1e-9) continue;
+          const dx=(bx-ax)/length, dy=(by-ay)/length, c=epeColor(s.dist);
+          const markerHead = Math.min(headLength, length * .45);
+          const tip=point(bx,by), start=point(ax,ay);
+          addSegment(start,tip,c);
+          addSegment(tip,point(bx-dx*markerHead-dy*markerHead*.48,by-dy*markerHead+dx*markerHead*.48),c);
+          addSegment(tip,point(bx-dx*markerHead+dy*markerHead*.48,by-dy*markerHead-dx*markerHead*.48),c);
         }
       }
-      if (minDist <= edgeW) {
-        const idx = (row * size + col) * 4;
-        const t = 1.0 - minDist / edgeW;
-        // pow(0.35) → sharp bright peak at edge, quick falloff
-        const v = Math.round(Math.pow(t, 0.35) * 255);
-        pixels[idx] = v; pixels[idx + 1] = v; pixels[idx + 2] = v; pixels[idx + 3] = v;
-      }
+      const geometry=new THREE.BufferGeometry();
+      geometry.setAttribute("position",new THREE.Float32BufferAttribute(positions,3));
+      geometry.setAttribute("color",new THREE.Float32BufferAttribute(colors,3));
+      const vectors=new THREE.LineSegments(geometry,new THREE.LineBasicMaterial({vertexColors:true,transparent:true,opacity:.95,toneMapped:false}));
+      vectors.name="RenderedEpeVectors";
+      vectors.userData.arrowCount = positions.length / 18;
+      contours.add(vectors);
     }
-  }
-  const tex = new THREE.DataTexture(pixels, size, size, THREE.RGBAFormat);
-  // LinearFilter: GPU bilinear interpolation smooths the hard pixel grid → no jagged edges
-  tex.minFilter = THREE.LinearFilter;
-  tex.magFilter = THREE.LinearFilter;
-  tex.needsUpdate = true;
-  return tex;
-}
+    invalidate();
+  },[props.contours,props.targetContours,props.finalMaskContours,props.showMainContour,props.showTargetOverlay,props.compareActive,props.compareAContours,props.compareBContours,props.sweepContourSets,props.epeContours,props.epeMode,props.fovNm,props.intensityData,props.depthScale,props.showAerial,props.contourStyle,props.zoomScale,size.height,camera,contours,invalidate]);
 
-// ── Chrome mask plate — texture-based cutouts (no ShapeGeometry holes) ────────
-// Uses alphaTest on PlaneGeometry so overlapping apertures merge automatically.
-function buildMaskPlate(
-  rects: import("../lib/surface3d-types").MaskRect[], fovNm: number,
-): THREE.Group {
-  const group = new THREE.Group();
-  const B = 0.55;
-
-  const alphaTex = buildMaskAlphaTex(rects, fovNm);
-
-  // Top face — polished photomask chrome plate.
-  // Very high metalness + low roughness = mirror-like silver with directional hotspots.
-  // Iridescence adds a subtle thin-film interference shimmer (EUV-grade optic aesthetic).
-  const topMat = new THREE.MeshPhysicalMaterial({
-    color: 0x8ab0c8,           // same teal-chrome base as bottom face
-    emissive: new THREE.Color(0x0c1a28),
-    emissiveIntensity: 0.35,
-    roughness: 0.08,           // match bottom face roughness
-    metalness: 0.85,
-    clearcoat: 0.7,
-    clearcoatRoughness: 0.08,
-    iridescence: 0.20,
-    iridescenceIOR: 1.6,
-    transparent: true,
-    opacity: 0.76,
-    alphaMap: alphaTex,
-    side: THREE.FrontSide,
-    depthWrite: false,
-    envMapIntensity: 2.0,
-  });
-  const topMesh = new THREE.Mesh(new THREE.PlaneGeometry(2 * B, 2 * B), topMat);
-  topMesh.position.z = MASK_Z_TOP;
-  group.add(topMesh);
-
-  // Bottom face — slightly darker chrome underside with subtle teal tone
-  const botMat = new THREE.MeshPhysicalMaterial({
-    color: 0x8ab0c8,
-    emissive: new THREE.Color(0x0c1a28),
-    emissiveIntensity: 0.35,
-    roughness: 0.08,
-    metalness: 0.85,
-    clearcoat: 0.7,
-    clearcoatRoughness: 0.08,
-    iridescence: 0.20,
-    iridescenceIOR: 1.6,
-    transparent: true,
-    opacity: 0.52,
-    alphaMap: alphaTex,
-    side: THREE.BackSide,   // BackSide: visible from below (mirror cam + user tilt)
-    depthWrite: false,
-    envMapIntensity: 2.0,
-  });
-  const botMesh = new THREE.Mesh(new THREE.PlaneGeometry(2 * B, 2 * B), botMat);
-  botMesh.position.z = MASK_Z_TOP - MASK_DEPTH;
-  group.add(botMesh);
-
-  // Outer frame LineLoop removed — a 1.1×1.1 rectangle viewed at elevation/azimuth tilt
-  // projects its far corners toward the silicon layer in screen space, creating a "floating
-  // frame" artifact between the layers. No line geometry is used for the mask boundary.
-
-  // Aperture border glow (top face) — crisp bright rim around each aperture opening.
-  // PlaneGeometry centered at (0,0) → no bounding sphere offset → always correct depth.
-  const borderTex = buildMaskBorderTex(rects, fovNm);
-  const borderTopMesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(2 * B, 2 * B),
-    new THREE.MeshBasicMaterial({
-      map: borderTex,
-      color: new THREE.Color(0.88, 0.96, 1.0),
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      opacity: 0.70,
-      depthWrite: false,
-    }),
-  );
-  borderTopMesh.position.z = MASK_Z_TOP + 0.001;
-  borderTopMesh.renderOrder = 0;
-  group.add(borderTopMesh);
-
-  // Aperture border glow (bottom face)
-  const borderBotMesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(2 * B, 2 * B),
-    new THREE.MeshBasicMaterial({
-      map: borderTex,
-      color: new THREE.Color(0.55, 0.75, 0.90),
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      opacity: 0.45,
-      depthWrite: false,
-    }),
-  );
-  borderBotMesh.position.z = MASK_Z_TOP - MASK_DEPTH - 0.001;
-  borderBotMesh.renderOrder = 0;
-  group.add(borderBotMesh);
-
-  // Outer box frame — 12 edges (top rect + bottom rect + 4 vertical pillars).
-  // Gives the mask plate a "one-body" 3D slab look.
-  // frustumCulled=false: prevents incorrect frustum rejection when plate is tilted.
-  const topZ = MASK_Z_TOP, botZ = MASK_Z_TOP - MASK_DEPTH;
-  const frameVerts = new Float32Array([
-    // Top rectangle
-    -B, -B, topZ,  B, -B, topZ,
-     B, -B, topZ,  B,  B, topZ,
-     B,  B, topZ, -B,  B, topZ,
-    -B,  B, topZ, -B, -B, topZ,
-    // Bottom rectangle
-    -B, -B, botZ,  B, -B, botZ,
-     B, -B, botZ,  B,  B, botZ,
-     B,  B, botZ, -B,  B, botZ,
-    -B,  B, botZ, -B, -B, botZ,
-    // 4 vertical pillars
-    -B, -B, topZ, -B, -B, botZ,
-     B, -B, topZ,  B, -B, botZ,
-     B,  B, topZ,  B,  B, botZ,
-    -B,  B, topZ, -B,  B, botZ,
-  ]);
-  const frameGeo = new THREE.BufferGeometry();
-  frameGeo.setAttribute('position', new THREE.Float32BufferAttribute(frameVerts, 3));
-  const frameLine = new THREE.LineSegments(frameGeo, new THREE.LineBasicMaterial({
-    color: 0x9bbcd4,
-    transparent: true,
-    opacity: 0.45,
-    depthWrite: false,
-  }));
-  frameLine.frustumCulled = false;
-  frameLine.renderOrder = 0;
-  group.add(frameLine);
-
-  // ── 4 side wall panels — solid opaque chrome, visible at any side-view angle ──
-  // Solid (transparent:false, depthWrite:true) so they render before transparent faces
-  // and establish proper depth for the transparent top/bottom to composite over them.
-  const sideMat = new THREE.MeshPhysicalMaterial({
-    color: 0xd0e4f0,
-    emissive: new THREE.Color(0x0c1a28),
-    emissiveIntensity: 0.45,
-    roughness: 0.04,
-    metalness: 0.95,
-    clearcoat: 1.0,
-    clearcoatRoughness: 0.03,
-    iridescence: 0.32,
-    iridescenceIOR: 1.75,
-    transparent: true,
-    opacity: 0.80,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    envMapIntensity: 2.0,
-  });
-  const midZ = MASK_Z_TOP - MASK_DEPTH / 2;
-  // Front (-Y): PlaneGeometry(2B width=X, MASK_DEPTH height→Z after rot)
-  // renderOrder default (0) — solid panels render before transparent faces
-  const frontP = new THREE.Mesh(new THREE.PlaneGeometry(2 * B, MASK_DEPTH), sideMat);
-  frontP.rotation.x = Math.PI / 2; frontP.position.set(0, -B, midZ);
-  group.add(frontP);
-  const backP = new THREE.Mesh(new THREE.PlaneGeometry(2 * B, MASK_DEPTH), sideMat);
-  backP.rotation.x = -Math.PI / 2; backP.position.set(0, B, midZ);
-  group.add(backP);
-  const leftP = new THREE.Mesh(new THREE.PlaneGeometry(MASK_DEPTH, 2 * B), sideMat);
-  leftP.rotation.y = -Math.PI / 2; leftP.position.set(-B, 0, midZ);
-  group.add(leftP);
-  const rightP = new THREE.Mesh(new THREE.PlaneGeometry(MASK_DEPTH, 2 * B), sideMat);
-  rightP.rotation.y = Math.PI / 2; rightP.position.set(B, 0, midZ);
-  group.add(rightP);
-
-  return group;
-}
-
-// ── Aperture light effect: horizontal disc + 6-plane cylinder glow ────────────
-function buildApertureEffect(cx: number, cy: number, hw: number, hh: number, numRects = 1): THREE.Group {
-  const group = new THREE.Group();
-  const spotTex = makeRadialTex(128);
-  const sz = Math.max(hw, hh);
-  const B = 0.55;
-  const sourceZ = 4.5;
-  const pSz = Math.min(sz, 0.008);
-  let seed = ((Math.round(cx * 73856093) ^ Math.round(cy * 19349663)) >>> 0) | 1;
-  const rnd = () => {
-    seed = Math.imul(seed ^ (seed >>> 15), seed | 1);
-    seed ^= seed + Math.imul(seed ^ (seed >>> 7), seed | 61);
-    return ((seed ^ (seed >>> 14)) >>> 0) / 0x100000000;
-  };
-  const STREAK_BASE = 0.035;
-  const STREAK_PROB = 0.12;
-  const buildPts = (count: number, sizeMul: number, opacity: number, aboveFrac: number, addStreaks: boolean) => {
-    const pos = new Float32Array(count * 3);
-    const col = new Float32Array(count * 3);
-    const sPos: number[] = [], sCol: number[] = [];
-    for (let i = 0; i < count; i++) {
-      const above = rnd() < aboveFrac;
-      let px: number, py: number, pz: number, brightness: number;
-      if (above) {
-        const u = rnd();
-        pz = MASK_Z_TOP + u * (sourceZ - MASK_Z_TOP);
-        px = (rnd() * 2 - 1) * B; py = (rnd() * 2 - 1) * B;
-        brightness = 0.38 + u * 0.55;
-      } else {
-        const u = rnd();
-        pz = Math.min(MASK_Z_TOP - MASK_DEPTH - 0.005, u * (MASK_Z_TOP - MASK_DEPTH));
-        px = Math.max(-B, Math.min(B, cx + (rnd() * 2 - 1) * hw * (1.0 + (1 - u) * 0.6)));
-        py = Math.max(-B, Math.min(B, cy + (rnd() * 2 - 1) * hh * (1.0 + (1 - u) * 0.6)));
-        brightness = 0.38 + rnd() * 0.40;
-      }
-      pos[i*3]=px; pos[i*3+1]=py; pos[i*3+2]=pz;
-      const r=brightness*0.58, g=brightness*0.74, b=brightness;
-      col[i*3]=r; col[i*3+1]=g; col[i*3+2]=b;
-      if (addStreaks && rnd() < STREAK_PROB) {
-        const sl = STREAK_BASE * (0.4 + rnd() * 1.6);
-        sPos.push(px,py,pz, px,py,pz+sl); sCol.push(r,g,b, 0,0,0);
-      }
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    geo.setAttribute('color',    new THREE.Float32BufferAttribute(col, 3));
-    group.add(new THREE.Points(geo, new THREE.PointsMaterial({
-      size: pSz*sizeMul, map: spotTex, vertexColors: true, transparent: true,
-      blending: THREE.AdditiveBlending, depthWrite: false, opacity, sizeAttenuation: true,
-    })));
-    if (addStreaks && sPos.length > 0) {
-      const sg = new THREE.BufferGeometry();
-      sg.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(sPos), 3));
-      sg.setAttribute('color',    new THREE.Float32BufferAttribute(new Float32Array(sCol), 3));
-      group.add(new THREE.LineSegments(sg, new THREE.LineBasicMaterial({
-        vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: opacity*0.60,
-      })));
-    }
-  };
-  const aboveLarge = Math.max(2,  Math.round(750  / numRects));
-  const aboveSmall = Math.max(10, Math.round(3600 / numRects));
-  const areaFrac   = Math.min(0.15, Math.max(0.005, (hw * hh) / (B * B)));
-  const belowLarge = Math.max(2,  Math.round(750  * areaFrac * 0.38));
-  const belowSmall = Math.max(5,  Math.round(3600 * areaFrac * 0.38));
-  buildPts(aboveLarge, 1.10, 0.15, 1.00, false);
-  buildPts(belowLarge, 1.00, 0.11, 0.00, false);
-  buildPts(aboveSmall, 0.32, 0.32, 1.00, true);
-  buildPts(belowSmall, 0.32, 0.24, 0.00, true);
-  const footDisc = new THREE.Mesh(
-    new THREE.PlaneGeometry(sz * 1.5, sz * 1.5),
-    new THREE.MeshBasicMaterial({ map: spotTex, color: 0x4477cc, transparent: true,
-      blending: THREE.AdditiveBlending, opacity: 0.12, depthWrite: false }),
-  );
-  footDisc.position.set(cx, cy, 0.002);
-  group.add(footDisc);
-  return group;
-}
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-const FLOOR_Z = -1.6;
-
-interface IntensityCache { data: number[]; w: number; h: number; vmin: number; span: number; heightMax: number; }
-
-// ── SceneInner — R3F inner component ─────────────────────────────────────────
-const SceneInner = React.forwardRef<Surface3DHandle, Surface3DProps & { className?: string; style?: React.CSSProperties }>((props, ref) => {
-  const { gl, camera, scene } = useThree();
-
-  // Setup renderer once
+  useEffect(()=>{
+    mask.traverse((child)=>{if(child instanceof Reflector)reflections.delete(child);});disposeGroup(mask);
+    if(props.maskAddRects.length)mask.add(buildMask(props,reflections,resolution,budget.maskTextureSize));invalidate();
+    return()=>{mask.traverse((child)=>{if(child instanceof Reflector)reflections.delete(child);});disposeGroup(mask);};
+  },[props.maskAddRects,props.maskSubtractRects,props.fovNm,props.maskOpacityPreset,budget.maskTextureSize,props.wavelengthNm,mask,reflections,resolution,invalidate]);
   useEffect(() => {
-    gl.toneMapping = THREE.ACESFilmicToneMapping;
-    gl.toneMappingExposure = 1.1;
-    gl.outputColorSpace = THREE.SRGBColorSpace;
-    scene.background = new THREE.Color(0x000307);
-  }, [gl, scene]);  // scene kept for background init
-
-  // Background: subtle nebula dust + radial glow backdrop + atmosphere sphere
-  useEffect(() => {
-    scene.fog = new THREE.FogExp2(0x000307, 0.09);
-
-    // Radial blue-glow backdrop — ShaderMaterial computes gradient analytically in GLSL,
-    // eliminating all integer-quantization banding (Uint8 textures only have ~52 steps for blue).
-    const bgMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(9, 9),
-      new THREE.ShaderMaterial({
-        vertexShader: `
-          varying vec2 vUv;
-          void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
-        `,
-        fragmentShader: `
-          varying vec2 vUv;
-          void main() {
-            vec2 d = vUv * 2.0 - 1.0;
-            float r2 = dot(d, d);
-            // Wide ambient glow + tight center highlight — all floating-point, zero banding
-            float wide = exp(-r2 * 0.85) * 0.36;
-            float core = exp(-r2 * 4.0) * 0.20;
-            gl_FragColor = vec4(
-              wide * 0.014 + core * 0.06,
-              wide * 0.042 + core * 0.14,
-              wide * 0.21  + core * 0.55,
-              1.0
-            );
-          }
-        `,
-        transparent: true,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      }),
-    );
-    bgMesh.position.z = -2.5;
-    scene.add(bgMesh);
-
-    // Static nebula dust — tiny circular points, very faint
-    const dotTex = makeRadialTex(32);
-    const N = 520;
-    const nPos = new Float32Array(N * 3);
-    const nCol = new Float32Array(N * 3);
-    let sd = 31337;
-    const rn = () => { sd = Math.imul(sd ^ (sd>>>15), sd|1); sd ^= sd + Math.imul(sd^(sd>>>7), sd|61); return ((sd^(sd>>>14))>>>0)/0x100000000; };
-    for (let i = 0; i < N; i++) {
-      nPos[i*3]   = (rn()*2-1)*3.5;
-      nPos[i*3+1] = (rn()*2-1)*3.5;
-      nPos[i*3+2] = (rn()*2-1)*2.0 - 0.8;
-      const b = 0.03 + rn()*0.09;
-      nCol[i*3]=b*0.3; nCol[i*3+1]=b*0.5; nCol[i*3+2]=b;
+    disposeGroup(beams);
+    if (props.showLightEffect !== false && props.maskAddRects.length) {
+      beams.add(buildBeams(props));
     }
-    const nebulaGeo = new THREE.BufferGeometry();
-    nebulaGeo.setAttribute('position', new THREE.Float32BufferAttribute(nPos, 3));
-    nebulaGeo.setAttribute('color',    new THREE.Float32BufferAttribute(nCol, 3));
-    const nebulaPts = new THREE.Points(nebulaGeo, new THREE.PointsMaterial({
-      size: 0.014, map: dotTex, vertexColors: true, transparent: true, opacity: 0.28,
-      blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
-    }));
-    scene.add(nebulaPts);
+    invalidate();
+    return () => disposeGroup(beams);
+  }, [props.maskAddRects, props.maskSubtractRects, props.fovNm, props.showLightEffect, props.wavelengthNm, props.depthScale, beams, invalidate]);
+  useEffect(() => {
+    beams.traverse((object) => {
+      const material = (object as THREE.Mesh).material;
+      if (material instanceof THREE.ShaderMaterial && material.uniforms.sampleSteps) material.userData.liveSteps = budget.lightSteps;
+    });
+    invalidate();
+  }, [budget.lightSteps, props.maskAddRects, props.maskSubtractRects, props.fovNm, props.showLightEffect, props.wavelengthNm, props.depthScale, beams, invalidate]);
+  useEffect(()=>{
+    ground.traverse((child)=>{if(child instanceof Reflector)reflections.delete(child);});disposeGroup(ground);
+    const silicon=new THREE.Mesh(new THREE.BoxGeometry(1.05,1.05,MASK_DEPTH),new THREE.MeshPhysicalMaterial({color:0x1e2f42,emissive:0x030911,emissiveIntensity:.22,roughness:.09,metalness:.72,clearcoat:.55,clearcoatRoughness:.07,envMapIntensity:.5}));
+    silicon.name="RenderedSilicon";silicon.position.z=-MASK_DEPTH/2;ground.add(silicon);
+    // The aerial surface and its labels are data overlays, not solid wafer
+    // geometry. Reflect the mask and lights without duplicating that field.
+    const siliconMirror=makeReflection(1.049,1.049,resolution,.24,reflections,undefined,false,[surface,contours]);siliconMirror.name="RenderedSiliconReflection";siliconMirror.position.z=.0004;siliconMirror.renderOrder=-1;ground.add(siliconMirror);
+    const floor=makeReflection(5.4,5.4,resolution,.17,reflections,undefined,true);floor.name="RenderedFloorReflection";floor.position.z=FLOOR_Z;floor.renderOrder=0;ground.add(floor);invalidate();
+    return()=>{ground.traverse((child)=>{if(child instanceof Reflector)reflections.delete(child);});disposeGroup(ground);};
+  },[ground,reflections,resolution,invalidate]);
+  useEffect(() => {
+    reflections.forEach((reflector) => {
+      const target = reflector.getRenderTarget();
+      if (target.width !== budget.reflectionSize) target.setSize(budget.reflectionSize, budget.reflectionSize);
+      (reflector.material as THREE.ShaderMaterial).uniforms.texel.value.set(1 / budget.reflectionSize, 1 / budget.reflectionSize);
+    });
+    invalidate();
+  }, [budget.reflectionSize, props.maskAddRects, props.maskSubtractRects, props.maskOpacityPreset, props.wavelengthNm, props.fovNm, reflections, invalidate]);
+  useEffect(()=>()=>{disposeGroup(surface);disposeGroup(contours);},[surface,contours]);
 
-    // Atmospheric glow — single large sphere (radius >> viewport) so the rim falls
-    // completely off-screen. Camera is INSIDE looking outward: center of screen sees the
-    // forward-facing surface (rim≈0, dark) while screen edges see oblique angles (rim→1,
-    // bright). Result: seamless vignette glow with zero visible boundary.
-    const atmoVert = `
-      varying vec3 vNormal;
-      varying vec3 vViewDir;
-      void main() {
-        vNormal = normalize(normalMatrix * normal);
-        vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-        vViewDir = normalize(-mvPos.xyz);
-        gl_Position = projectionMatrix * mvPos;
-      }
-    `;
-    const atmoSphere = new THREE.Mesh(
-      new THREE.SphereGeometry(6.0, 64, 64),
-      new THREE.ShaderMaterial({
-        vertexShader: atmoVert,
-        fragmentShader: `
-          varying vec3 vNormal;
-          varying vec3 vViewDir;
-          void main() {
-            float rim = 1.0 - abs(dot(vNormal, vViewDir));
-            float glow = pow(rim, 1.8);
-            gl_FragColor = vec4(glow * 0.008, glow * 0.028, glow * 0.14, 1.0);
-          }
-        `,
-        transparent: true, blending: THREE.AdditiveBlending,
-        side: THREE.BackSide, depthWrite: false,
-      }),
-    );
-    atmoSphere.position.set(0, 0, 0);
-    scene.add(atmoSphere);
-
-    return () => {
-      scene.fog = null;
-      scene.remove(bgMesh);
-      bgMesh.geometry.dispose(); (bgMesh.material as THREE.Material).dispose();
-      scene.remove(nebulaPts);
-      nebulaGeo.dispose(); dotTex.dispose(); (nebulaPts.material as THREE.Material).dispose();
-      scene.remove(atmoSphere);
-      atmoSphere.geometry.dispose(); (atmoSphere.material as THREE.Material).dispose();
-    };
-  }, [scene]);
-
-  // Export handle
   useImperativeHandle(ref, () => ({
     async exportPng(sizePx: number): Promise<Blob | null> {
-      return new Promise((resolve) => {
-        gl.domElement.toBlob((blob) => resolve(blob), "image/png");
-      });
-    },
-  }));
+      const context = gl.getContext();
+      const maximum = context.getParameter(context.MAX_RENDERBUFFER_SIZE) as number;
+      const size = Math.floor(Math.max(1, sizePx));
+      if (size > maximum) throw new Error(`This GPU supports PNG sizes up to ${maximum} px.`);
 
-  const groupRef = useRef<THREE.Group>(null);
-  const intensityRef = useRef<IntensityCache | null>(null);
-
-  // Stable group objects (not recreated on re-render)
-  const contourGroup = useMemo(() => new THREE.Group(), []);
-  const maskGroup = useMemo(() => new THREE.Group(), []);
-  const surfaceHolder = useMemo(() => new THREE.Group(), []);
-  const surfaceRef = useRef<THREE.Mesh | null>(null);
-
-  // Camera rotation/position from props
-  useEffect(() => {
-    if (!groupRef.current) return;
-    groupRef.current.rotation.order = "ZXY";
-    groupRef.current.rotation.z = (props.azimuthDeg   * Math.PI) / 180;
-    groupRef.current.rotation.x = -(props.elevationDeg * Math.PI) / 180;
-    groupRef.current.rotation.y = (props.rollDeg       * Math.PI) / 180;
-    groupRef.current.position.x =  props.offsetX * 0.50;
-    groupRef.current.position.y =  props.offsetY * 0.50;
-    groupRef.current.position.z =  props.offsetZ * 0.35;
-  }, [props.azimuthDeg, props.elevationDeg, props.rollDeg, props.offsetX, props.offsetY, props.offsetZ]);
-
-  // Zoom
-  useEffect(() => {
-    // Base distance 3.5 (was 2.8): compensates for MASK_Z_TOP 0.55→0.69 which made the chip
-    // stack taller. Chip now appears ~80% of previous size at same zoomScale, so the zoom level
-    // where 3D looks good is closer to where 2D also looks good (no need to zoom out as far).
-    const zb = 0.52 + 0.48 * Math.pow(Math.max(0.15, Math.min(16, props.zoomScale)), 0.9);
-    (camera as THREE.PerspectiveCamera).position.z = 3.5 / zb;
-    (camera as THREE.PerspectiveCamera).updateProjectionMatrix();
-  }, [props.zoomScale, camera]);
-
-  // Surface
-  useEffect(() => {
-    if (surfaceRef.current) {
-      surfaceHolder.remove(surfaceRef.current);
-      (surfaceRef.current.geometry as THREE.BufferGeometry).dispose();
-      const m = surfaceRef.current.material as THREE.MeshStandardMaterial;
-      m.map?.dispose(); m.emissiveMap?.dispose(); m.dispose();
-      surfaceRef.current = null;
-    }
-    const { intensityData: data, intensityW: w, intensityH: h, depthScale, qualityMode, colormapType } = props;
-    if (!data.length || !w || !h) { intensityRef.current = null; return; }
-    let vmin = Infinity, vmax = -Infinity;
-    for (const v of data) { if (v < vmin) vmin = v; if (v > vmax) vmax = v; }
-    const span = Math.max(1e-9, vmax - vmin);
-    const quality = qualityMode === "FULL" ? 96 : 48;
-    const wSegs = Math.min(quality, Math.max(1, w - 1));
-    const hSegs = Math.min(quality, Math.max(1, h - 1));
-    const heightMax = depthScale * 0.04;
-    // Store actual heightMax so contour lines follow the displaced surface
-    intensityRef.current = { data, w, h, vmin, span, heightMax };
-    const geom = buildSurfaceGeometry(data, w, h, vmin, span, depthScale, wSegs, hSegs);
-    // Build emissive map: brighter pixels at peaks so they glow more
-    const emPx = new Uint8ClampedArray(w * h * 4);
-    for (let j = 0; j < h; j++) {
-      for (let i = 0; i < w; i++) {
-        const t = Math.max(0, Math.min(1, (data[j*w+i]-vmin)/span));
-        const v = Math.round(Math.pow(t, 0.55) * 255);
-        const pi = (j*w+i)*4;
-        emPx[pi]=v; emPx[pi+1]=v; emPx[pi+2]=v; emPx[pi+3]=255;
-      }
-    }
-    const emissiveTex = new THREE.DataTexture(emPx, w, h, THREE.RGBAFormat);
-    emissiveTex.flipY = true; emissiveTex.needsUpdate = true;
-    // Vertex colors from selected colormap — peaks use colormap top color as emissive
-    const posAttr = geom.attributes.position as THREE.BufferAttribute;
-    const numV = posAttr.count;
-    const colArr = new Float32Array(numV * 3);
-    for (let vi = 0; vi < numV; vi++) {
-      const t = heightMax > 0 ? Math.max(0, Math.min(1, posAttr.getZ(vi) / heightMax)) : 0;
-      const [r255, g255, b255] = evalColorMap(colormapType, t);
-      colArr[vi*3] = r255/255; colArr[vi*3+1] = g255/255; colArr[vi*3+2] = b255/255;
-    }
-    geom.setAttribute('color', new THREE.Float32BufferAttribute(colArr, 3));
-    // Use colormap peak color as emissive so peaks glow in the right hue
-    const [er, eg, eb] = evalColorMap(colormapType, 1.0);
-    const mat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(0xffffff),
-      emissive: new THREE.Color(er/255, eg/255, eb/255),
-      emissiveIntensity: 0.22,  // start value; useFrame pulses this
-      emissiveMap: emissiveTex,
-      roughness: 0.12,
-      metalness: 0.60,
-      vertexColors: true,
-      transparent: true,
-      depthWrite: false,
-    });
-    const mesh = new THREE.Mesh(geom, mat);
-    mesh.position.z = 0.002;
-    surfaceHolder.add(mesh);
-    surfaceRef.current = mesh;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.intensityData, props.intensityW, props.intensityH, props.depthScale, props.qualityMode, props.colormapType]);
-
-  // Contours
-  useEffect(() => {
-    disposeGroup(contourGroup);
-    const iv = intensityRef.current;
-    if (!iv) return;
-    const { data, w: dw, h: dh, vmin, span, heightMax } = iv;
-    const { fovNm } = props;
-    const zOff = 0.005;
-    const addContours = (contours: ContourSet[], color: number, dashed = false, epe?: EpePoint[][] | null) => {
-      contours.forEach((c, ci) =>
-        contourGroup.add(buildContourLine(c, fovNm, data, dw, dh, vmin, span, heightMax, color, 1, zOff, dashed, epe?.[ci]))
-      );
-    };
-    if (props.showMainContour && props.contours.length) {
-      const useEpe = props.epeContours && (props.epeMode === "COLOR" || props.epeMode === "BOTH");
-      addContours(props.contours, 0xffffff, false, useEpe ? props.epeContours : null);
-    }
-    if (props.showTargetOverlay && props.targetContours.length) addContours(props.targetContours, 0x00eedd, true);
-    if (props.compareActive) {
-      addContours(props.compareAContours, 0x55aaff, true);
-      addContours(props.compareBContours, 0xee55ff, true);
-    }
-    for (const set of props.sweepContourSets)
-      addContours(set.contours, new THREE.Color(set.color).getHex(), !!set.dash);
-    if (props.epeContours && (props.epeMode === "ARROWS" || props.epeMode === "BOTH")) {
-      for (const segs of props.epeContours) {
-        const step = Math.max(1, Math.floor(segs.length / 20));
-        for (let i = 0; i < segs.length; i += step) {
-          const seg = segs[i];
-          if (seg.dist < 0.5) continue;
-          const ax = seg.p.x/fovNm-0.5, ay = 0.5-seg.p.y/fovNm;
-          const bx = seg.nearest.x/fovNm-0.5, by = 0.5-seg.nearest.y/fovNm;
-          const az2 = sampleZ(seg.p.x, seg.p.y, fovNm, data, dw, dh, vmin, span, heightMax) + zOff;
-          const bz  = sampleZ(seg.nearest.x, seg.nearest.y, fovNm, data, dw, dh, vmin, span, heightMax) + zOff;
-          const g   = new THREE.BufferGeometry();
-          g.setAttribute("position", new THREE.Float32BufferAttribute([ax,ay,az2,bx,by,bz], 3));
-          contourGroup.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color: epeColor(seg.dist) })));
+      const oldSize = gl.getSize(new THREE.Vector2());
+      const oldRatio = gl.getPixelRatio();
+      const perspective = camera as THREE.PerspectiveCamera;
+      const oldAspect = perspective.aspect;
+      const reflectionSizes = new Map<Reflector, THREE.Vector2>();
+      const lightSteps = new Map<THREE.ShaderMaterial, number>();
+      const restoreTextures: Array<() => void> = [];
+      const surfaceMesh = surface.children.find((object) => object instanceof THREE.Mesh) as THREE.Mesh | undefined;
+      const liveGeometry = surfaceMesh?.geometry;
+      let exportGeometry: THREE.BufferGeometry | null = null;
+      let exportMask: ReturnType<typeof maskTextures> | null = null;
+      try {
+        // A mini preview has a lighter live mesh; exported pixels always use
+        // the full data geometry and full-size aperture textures.
+        if (surfaceMesh && intensity.current) {
+          exportGeometry = buildIntensityGeometry(intensity.current, props.colormapType, 384, props.colormapThreshold ?? 1);
+          surfaceMesh.geometry = exportGeometry;
         }
+        if (budget.maskTextureSize < 2048 && props.maskAddRects.length) {
+          exportMask = maskTextures(props.maskAddRects, props.maskSubtractRects, props.fovNm, 2048);
+          const replacement = (texture: THREE.Texture) => texture.name === "RenderedMaskAlpha" ? exportMask!.alpha : texture.name === "RenderedMaskRim" ? exportMask!.rim : null;
+          mask.traverse((object) => {
+            const entry = (object as THREE.Mesh).material;
+            if (!entry) return;
+            for (const material of Array.isArray(entry) ? entry : [entry]) {
+              const physical = material as THREE.MeshPhysicalMaterial;
+              for (const key of ["map", "alphaMap"] as const) {
+                const old = physical[key], next = old && replacement(old);
+                if (next) { physical[key] = next; restoreTextures.push(() => { physical[key] = old; }); }
+              }
+              if (material instanceof THREE.ShaderMaterial) for (const uniform of Object.values(material.uniforms)) {
+                const old = uniform.value;
+                if (!(old instanceof THREE.Texture)) continue;
+                const next = replacement(old);
+                if (next) { uniform.value = next; material.uniformsNeedUpdate = true; restoreTextures.push(() => { uniform.value = old; material.uniformsNeedUpdate = true; }); }
+              }
+            }
+          });
+        }
+        beams.traverse((object) => {
+          const material = (object as THREE.Mesh).material;
+          if (!(material instanceof THREE.ShaderMaterial) || !material.uniforms.sampleSteps) return;
+          lightSteps.set(material, material.userData.liveSteps);
+          material.userData.liveSteps = 48;
+        });
+        reflections.forEach((reflector) => {
+          const target = reflector.getRenderTarget();
+          reflectionSizes.set(reflector, new THREE.Vector2(target.width, target.height));
+          const reflectionSize = Math.min(2048, size);
+          target.setSize(reflectionSize, reflectionSize);
+          (reflector.material as THREE.ShaderMaterial).uniforms.texel.value.set(1 / reflectionSize, 1 / reflectionSize);
+        });
+        gl.setPixelRatio(1);
+        gl.setSize(size, size, false);
+        perspective.aspect = 1;
+        perspective.updateProjectionMatrix();
+        scene.updateMatrixWorld(true);
+        gl.render(scene, camera);
+        // Snapshot immediately; the live renderer need not preserve its buffer.
+        return await new Promise<Blob | null>((resolve) => gl.domElement.toBlob(resolve, "image/png"));
+      } finally {
+        restoreTextures.forEach((restore) => restore());
+        exportMask?.alpha.dispose(); exportMask?.rim.dispose();
+        if (surfaceMesh && liveGeometry) surfaceMesh.geometry = liveGeometry;
+        exportGeometry?.dispose();
+        lightSteps.forEach((steps, material) => { material.userData.liveSteps = steps; });
+        gl.setPixelRatio(oldRatio);
+        gl.setSize(oldSize.x, oldSize.y, false);
+        perspective.aspect = oldAspect;
+        perspective.updateProjectionMatrix();
+        reflectionSizes.forEach((saved, reflector) => {
+          reflector.getRenderTarget().setSize(saved.x, saved.y);
+          (reflector.material as THREE.ShaderMaterial).uniforms.texel.value.set(1 / saved.x, 1 / saved.y);
+        });
+        gl.render(scene, camera);
+        invalidate();
       }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.contours, props.targetContours, props.finalMaskContours, props.showMainContour,
-      props.showTargetOverlay, props.compareActive, props.compareAContours, props.compareBContours,
-      props.sweepContourSets, props.epeContours, props.epeMode, props.fovNm, props.intensityData]);
+    },
+  }), [gl, camera, scene, reflections, invalidate, surface, mask, beams, props.colormapType, props.colormapThreshold, props.maskAddRects, props.maskSubtractRects, props.fovNm, budget.maskTextureSize]);
 
-  // Mask + aperture effects
-  useEffect(() => {
-    disposeGroup(maskGroup);
-    const { maskAddRects, fovNm, showLightEffect } = props;
-    if (!maskAddRects.length) return;
-    maskGroup.add(buildMaskPlate(maskAddRects, fovNm));
-    if (showLightEffect !== false) {
-      for (const r of maskAddRects) {
-        const cx = (r.x + r.w * 0.5) / fovNm - 0.5;
-        const cy = 0.5 - (r.y + r.h * 0.5) / fovNm;
-        const hw = r.w / (2 * fovNm);
-        const hh = r.h / (2 * fovNm);
-        maskGroup.add(buildApertureEffect(cx, cy, hw, hh, maskAddRects.length));
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.maskAddRects, props.fovNm, props.showLightEffect]);
+  return <>
+    <ambientLight color={0xb9c9dc} intensity={0.28}/>
+    <hemisphereLight args={[0xc3d3e5,0x14202c,0.45]}/>
+    <directionalLight color={0xf0f4ff} intensity={2.2} position={[-2,1.5,3]}/>
+    <directionalLight color={0xa2bfdf} intensity={1.1} position={[2,-1,1.2]}/>
+    <directionalLight color={0xd2dde8} intensity={0.55} position={[0,1,-2]}/>
+    <group ref={outer} name="RenderedPivot">
+      <primitive object={chip} name="RenderedChip">
+        <primitive object={ground} name="RenderedGround"/>
+        <primitive object={surface} name="RenderedSurface"/>
+        <primitive object={contours} name="RenderedContours"/>
+        <primitive object={mask} name="RenderedMask"/>
+        <primitive object={beams} name="RenderedBeams"/>
+      </primitive>
+    </group>
+  </>;
+});
+SceneInner.displayName="RenderedScene";
 
-  // Cinematic emissive pulse — peaks slowly breathe with glow (ad-like feel)
-  useFrame(({ clock }) => {
-    if (surfaceRef.current) {
-      const mat = surfaceRef.current.material as THREE.MeshStandardMaterial;
-      mat.emissiveIntensity = 0.28 + 0.22 * Math.sin(clock.elapsedTime * 0.7);
-    }
+/** Warm the local studio after the portal commits, then keep its cubemap.
+ * Camera movement does not change the stationary studio environment. */
+const StudioEnvironment = React.memo(function StudioEnvironment() {
+  const invalidate = useThree((state) => state.invalidate);
+  const [settled, setSettled] = useState(false);
+  const frames = useRef(0);
+  useEffect(() => { invalidate(); }, [invalidate]);
+  useFrame(() => {
+    if (settled) return;
+    frames.current++;
+    if (frames.current >= 2) setSettled(true);
+    else invalidate();
   });
-
-  const waferColor = useMemo(() => new THREE.Color(0x1e2f42), []);
-  const waferEmissive = useMemo(() => new THREE.Color(0x060e1c), []);
-
-  return (
-    <>
-      {/* Cosmic lighting — deep void with blue peak illumination */}
-      <ambientLight color={0x000510} intensity={0.3} />
-      <pointLight color={0x3388ff} intensity={2.0 * Math.max(0.5, props.depthScale / 5)} distance={0} decay={2}
-        position={[0, 0, 0.5]} />
-      <hemisphereLight args={[0x001133, 0x000000, 0.5]} />
-
-      {/* Main chip group */}
-      <group ref={groupRef}>
-        {/* Silicon wafer */}
-        <mesh position-z={-(MASK_DEPTH / 2)}>
-          <boxGeometry args={[1.05, 1.05, MASK_DEPTH]} />
-          <meshPhysicalMaterial
-            color={waferColor}
-            emissive={waferEmissive}
-            emissiveIntensity={0.5}
-            roughness={0.08}
-            metalness={0.72}
-            clearcoat={0.50}
-            clearcoatRoughness={0.06}
-            transparent={true}
-            opacity={0.88}
-            depthWrite={false}
-            envMapIntensity={1.4}
-          />
-        </mesh>
-
-
-        {/* Imperative geometry groups */}
-        <primitive object={surfaceHolder} />
-        <primitive object={contourGroup} />
-        <primitive object={maskGroup} />
-      </group>
-    </>
-  );
+  return <Environment resolution={256} frames={settled ? 1 : 2} background={false} environmentIntensity={0.85}>
+    <Lightformer form="rect" intensity={2.4} color="#edf3fa" position={[-2,1.8,3]} scale={[6,3.5,1]} target={[0,0,0]}/>
+    <Lightformer form="rect" intensity={1.7} color="#afcbe6" position={[2,-1,1.5]} scale={[.8,4,1]} target={[0,0,.3]}/>
+    <Lightformer form="rect" intensity={1.25} color="#bfd0df" position={[0,1,-2]} scale={[3.5,1.5,1]} target={[0,0,0]}/>
+    <Lightformer form="rect" intensity={1.8} color="#edf3f8" position={[-2.5,3.6,-1.2]} scale={[4,1.5,1]} target={[0,0,0]}/>
+    <Lightformer form="rect" intensity={0.65} color="#c5d6e4" position={[3,2,-0.8]} scale={[2.5,2,1]} target={[0,0,0]}/>
+    <Lightformer form="rect" intensity={0.45} color="#adbed0" position={[-3,-2,0.5]} scale={[2,3,1]} target={[0,0,0]}/>
+  </Environment>;
 });
 
-SceneInner.displayName = "SceneInner";
-
-// ── Surface3DCanvas — outer component wrapping R3F Canvas ─────────────────────
-const Surface3DCanvas = React.forwardRef<
-  Surface3DHandle,
-  Surface3DProps & { className?: string; style?: React.CSSProperties }
->((props, ref) => {
-  return (
-    <Canvas
-      gl={{ antialias: true, powerPreference: "high-performance", toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1 }}
-      camera={{ position: [0, 0, 3.5], fov: 38, near: 0.01, far: 500 }}
-      style={{ display: "block", width: "100%", height: "100%", ...props.style }}
-      className={props.className}
-      dpr={[1, 2]}
-    >
-      <color attach="background" args={["#000307"]} />
-      <Environment preset="studio" background={false} environmentIntensity={0.1} />
-      <SceneInner ref={ref} {...props} />
-    </Canvas>
-  );
+const Surface3DCanvas=React.forwardRef<Surface3DHandle,Surface3DProps&{className?:string;style?:React.CSSProperties}>((props,ref)=>{
+  const [dpr, setDpr] = useState(2);
+  return <Canvas
+    gl={{antialias:true,powerPreference:"high-performance",toneMapping:THREE.ACESFilmicToneMapping,toneMappingExposure:1.02}}
+    camera={{position:[0,0,3.5],fov:38,near:.015,far:100}}
+    style={{display:"block",width:"100%",height:"100%",...props.style}} className={props.className} dpr={dpr} frameloop="demand"
+  >
+    <StudioEnvironment/>
+    <SceneInner ref={props.rendererRef ?? ref} {...props} onDprChange={setDpr}/>
+  </Canvas>;
 });
-
-Surface3DCanvas.displayName = "Surface3DCanvas";
-
+Surface3DCanvas.displayName="Surface3DCanvas";
 export default Surface3DCanvas;

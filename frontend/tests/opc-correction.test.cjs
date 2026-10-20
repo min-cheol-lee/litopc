@@ -38,6 +38,46 @@ const base = { plan: "PRO", preset_id: "DUV_193_DRY", grid: 1024,
 const options = { iterations: 2, nSamples: 1, segmentNm: 0, gain: 0.5,
   mrc: { minCdNm: 1, minSpaceNm: 50, maxBiasNm: 200, gridNm: 0 } };
 
+test("simplified long printed edges remain measurable across small OPC strips", async () => {
+  const target = { type: "rect", x_nm: 100, y_nm: 100, w_nm: 100, h_nm: 500 };
+  const api = loadCorrection(() => ({ contours_nm: [{ points_nm: [
+    { x: 105, y: 105 }, { x: 195, y: 105 }, { x: 195, y: 595 },
+    { x: 105, y: 595 }, { x: 105, y: 105 },
+  ] }], metrics: {} }));
+  const frames = [];
+  const result = await api.runOpcCorrection([target], [target], base,
+    { ...options, iterations: 1, nSamples: 7, segmentNm: 20, gain: 0 }, frame => frames.push(frame));
+  assert.equal(api.requests.length, 2);
+  assert.equal(result.length, 1);
+  assert.equal(frames.length, 1);
+  assert.equal(result[0].initialEpeMeanNm, 5);
+  assert.equal(result[0].epeMeanNm, 5);
+});
+
+test("EPE measures sloped printed edges rather than their distant stored vertices", async () => {
+  const api = loadCorrection(() => ({ contours_nm: [{ points_nm: [
+    { x: 150, y: 50 }, { x: 250, y: 150 }, { x: 150, y: 250 },
+    { x: 50, y: 150 }, { x: 150, y: 50 },
+  ] }], metrics: {} }));
+  const result = await api.runOpcCorrection([rect()], [rect()], base,
+    { ...options, iterations: 1, gain: 0 }, () => {});
+  assert.equal(result[0].initialEpeMeanNm, 25);
+  assert.equal(result[0].epeMeanNm, 25);
+});
+
+test("separate printed polylines cannot create a bridge through a missing target", async () => {
+  const api = loadCorrection(() => ({ contours_nm: [
+    { points_nm: [{ x: 0, y: 90 }, { x: 0, y: 110 }] },
+    { points_nm: [{ x: 400, y: 90 }, { x: 400, y: 110 }] },
+  ], metrics: {} }));
+  const target = { type: "rect", x_nm: 150, y_nm: 90, w_nm: 100, h_nm: 20 };
+  const frames = [];
+  await assert.rejects(api.runOpcCorrection([target], [target], base, options, frame => frames.push(frame)),
+    /a target edge has no measurable contour/);
+  assert.equal(frames.length, 0);
+  assert.equal(api.requests.length, 1);
+});
+
 function printed(body, inset = 20) {
   const contours_nm = body.mask.shapes.map(r => ({ points_nm: [
     { x: r.x_nm + inset, y: r.y_nm + inset },
