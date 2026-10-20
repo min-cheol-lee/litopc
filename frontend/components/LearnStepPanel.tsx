@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import type { OpcIterResult } from "../lib/opc-correction";
+import { opcImprovementPercent, type OpcIterResult } from "../lib/opc-correction";
 
 export type LearnStep = 0 | 1 | 2 | 3;
 
@@ -39,12 +39,16 @@ export default function LearnStepPanel(props: {
   loading: boolean;
   opcRunning: boolean;
   opcProgress: OpcIterResult[];
+  error?: string | null;
   onNextStep: () => void;
 }) {
-  const { step, loading, opcRunning, opcProgress, onNextStep } = props;
+  const { step, loading, opcRunning, opcProgress, onNextStep, error } = props;
 
-  const bestEpe  = opcProgress.length > 0 ? Math.min(...opcProgress.map(r => r.epeMeanNm)) : null;
-  const opcDone  = !opcRunning && opcProgress.length === 5;
+  const finalEpe = opcProgress[opcProgress.length - 1]?.epeMeanNm ?? null;
+  const initialEpe = opcProgress[0]?.initialEpeMeanNm ?? null;
+  const improvement = initialEpe !== null && finalEpe !== null
+    ? opcImprovementPercent(initialEpe, finalEpe) : null;
+  const opcDone  = !opcRunning && !error && opcProgress.length === 5;
   const opcStarted = opcRunning || opcProgress.length > 0;
 
   const content: React.ReactNode = (() => {
@@ -120,7 +124,7 @@ export default function LearnStepPanel(props: {
             </div>
             <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
               {opcProgress.map((r, i) => {
-                const maxEpe = opcProgress[0]?.epeMeanNm ?? 1;
+                const maxEpe = Math.max(initialEpe ?? 0, ...opcProgress.map(r => r.epeMeanNm), 1);
                 const pct    = Math.max(4, Math.round((r.epeMeanNm / maxEpe) * 100));
                 const isLast = i === opcProgress.length - 1;
                 return (
@@ -136,12 +140,12 @@ export default function LearnStepPanel(props: {
                 );
               })}
             </div>
-            {bestEpe !== null && opcProgress.length === 5 && (
+            {finalEpe !== null && !opcRunning && (
               <div style={{ marginTop:10, paddingTop:8, borderTop:`1px solid ${C.border}`, fontSize:13, color:C.text }}>
-                Final EPE: <strong style={{ color:C.green }}>{bestEpe.toFixed(1)} nm</strong>
-                {opcProgress[0] && (
+                Displayed EPE: <strong style={{ color:C.green }}>{finalEpe.toFixed(1)} nm</strong>
+                {improvement !== null && (
                   <span style={{ color:C.sub, marginLeft:8, fontSize:12 }}>
-                    ({Math.round((1 - bestEpe / opcProgress[0].epeMeanNm) * 100)}% improvement)
+                    ({Math.abs(improvement).toFixed(0)}% {improvement >= 0 ? "improvement" : "worse"})
                   </span>
                 )}
               </div>
@@ -152,7 +156,7 @@ export default function LearnStepPanel(props: {
         {opcDone && (
           <>
             <div style={{ padding:"10px 12px", borderRadius:10, background:"rgba(58,239,138,0.08)", border:"1px solid rgba(58,239,138,0.2)", fontSize:13, color:C.green, fontWeight:600 }}>
-              ✓ OPC complete — mask pre-distorted to print perfect
+              ✓ OPC iterations complete — inspect the remaining EPE
             </div>
             <div style={{ fontSize:13, color:C.sub, lineHeight:1.7 }}>
               The mask now looks "wrong" on purpose — it compensates for optical distortion so the wafer prints correctly.
@@ -204,6 +208,7 @@ export default function LearnStepPanel(props: {
 
       {/* Content */}
       <div style={{ flex:1, padding:"14px 18px", overflowY:"auto", display:"flex", flexDirection:"column", gap:10 }}>
+        {error && <div role="alert" style={{ color:C.orange, fontSize:13 }}>{error}</div>}
         {content}
       </div>
 

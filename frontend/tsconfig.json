@@ -28,7 +28,8 @@
     ".next/types/**/*.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next-font-report/types/**/*.ts"
+    ".next-font-report/types/**/*.ts",
+    ".next-debug/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

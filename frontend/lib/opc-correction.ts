@@ -436,15 +436,12 @@ function applyDelta(
 async function simulateCustom(
   base: SimRequest,
   shapes: MaskShape[],
+  signal?: AbortSignal,
 ): Promise<SimResponse> {
-  const isEuv = base.preset_id === "EUV_LNA" || base.preset_id === "EUV_HNA";
   const body: SimRequest = {
     ...base,
-    // DUV: cap at 384 for OPC iteration speed (100 nm features: 2.86 nm/px is sufficient).
-    // EUV: use the full base grid — at 24 nm features, 384 gives only 8 pixels per CD,
-    //      making sub-nm edge biases invisible after rasterization.
-    grid: isEuv ? base.grid : Math.min(base.grid, 384),
-    return_intensity: true,  // required: backend only computes contours_nm when true
+    // Use the workspace grid so re-running an applied mask reproduces its contour.
+    return_intensity: true,
     opc_sim: true,           // tells backend to skip per-plan rect-count guard (segments > free limit)
     mask: {
       ...base.mask,
@@ -457,6 +454,7 @@ async function simulateCustom(
 
   const r = await fetch(`${getApiBase()}/simulate`, {
     method: "POST",
+    signal,
     headers: { "Content-Type": "application/json", ...clientHeaders() },
     body: JSON.stringify(body),
   });
@@ -680,7 +678,13 @@ export type OpcIterResult = {
   simResult: SimResponse;   // full simulation output for this iteration (live contour preview)
   epeMeanNm: number;
   epeMaxNm: number;
+  initialEpeMeanNm: number; // measured before this batch's first correction
 };
+
+export function opcImprovementPercent(initial: number, current: number): number | null {
+  if (!Number.isFinite(initial) || !Number.isFinite(current) || initial <= 0) return null;
+  return (initial - current) / initial * 100;
+}
 
 export type OpcCorrectionOptions = {
   iterations?: number;      // default 5
@@ -774,6 +778,12 @@ export async function runOpcCorrection(
   const targetRects = segTarget.filter(
     (s): s is RectShape => s.type === "rect" && s.op !== "subtract",
   );
+  if (targetRects.length === 0 || segTarget.some(s => s.type !== "rect" || s.op === "subtract")) {
+    throw new Error("OPC requires an additive rectangle target; EPE is unavailable for this target.");
+  }
+  if (current.filter(s => s.type === "rect" && s.op !== "subtract").length !== targetRects.length) {
+    throw new Error("OPC mask and target segments do not match. Reset correction before continuing.");
+  }
 
   // Precompute interior-edge topology from TARGET shapes (design intent, never drifts).
   //
@@ -793,13 +803,53 @@ export async function runOpcCorrection(
     return set;
   });
 
+  // Only publish verified states. Missing contours/edges are not zero-error prints.
+  function measure(sim: SimResponse) {
+    if (!sim.contours_nm.some(c => c.points_nm.length >= 2)) {
+      throw new Error("OPC stopped: no printed contour. EPE is unavailable; adjust the mask or threshold.");
+    }
+    const allAbsEpes: number[] = [];
+    const deltas = targetRects.map((targetRect, targetIdx) => {
+      const edgeDeltas: Partial<Record<EdgeName, number>> = {};
+      for (const edge of ["left", "right", "top", "bottom"] as EdgeName[]) {
+        if (targetInteriorEdges[targetIdx].has(edge)) continue;
+        const measured = edgeDelta(
+          targetRect, edge, sim.contours_nm, 1, nSamples,
+          edgeSearchBox(targetRect, edge, mrc.maxBiasNm, mrc.minSpaceNm),
+        );
+        if (measured.absEpes.length !== nSamples) {
+          throw new Error("OPC stopped: a target edge has no measurable contour. EPE is unavailable for the full target.");
+        }
+        edgeDeltas[edge] = measured.delta;
+        allAbsEpes.push(...measured.absEpes);
+      }
+      return edgeDeltas;
+    });
+    if (allAbsEpes.length === 0) {
+      throw new Error("OPC stopped: no exposed target edges could be measured. EPE is unavailable.");
+    }
+    return {
+      deltas,
+      mean: allAbsEpes.reduce((sum, value) => sum + value, 0) / allAbsEpes.length,
+      max: Math.max(...allAbsEpes),
+    };
+  }
+
+  if (signal?.aborted || iterations <= 0) return results;
+  let sim: SimResponse;
+  try {
+    sim = await simulateCustom(simBase, current, signal);
+  } catch (error) {
+    if (signal?.aborted) return results;
+    throw error;
+  }
+  if (signal?.aborted) return results;
+  let measured = measure(sim);
+  const initialEpeMeanNm = measured.mean;
+
   for (let iter = 1; iter <= iterations; iter++) {
     if (signal?.aborted) break;
 
-    const sim = await simulateCustom(simBase, current);
-    const contours = sim.contours_nm;
-
-    const allAbsEpes: number[] = [];
     let targetIdx = 0;
     const next: MaskShape[] = current.map((shape, shapeIdx) => {
       // Pass through subtract and polygon shapes unchanged
@@ -807,7 +857,6 @@ export async function runOpcCorrection(
 
       const maskRect = shape as RectShape;
       const maskIdx = targetIdx;
-      const targetRect = targetRects[maskIdx] ?? maskRect;
       const interiorSet = targetInteriorEdges[maskIdx] ?? new Set<EdgeName>();
       targetIdx++;
 
@@ -818,21 +867,7 @@ export async function runOpcCorrection(
         // Topology is fixed from target shapes — safe across all iterations and continue batches.
         if (interiorSet.has(edge)) continue;
 
-        // Per-edge directional search box: only extends outward by maxBiasNm in the
-        // edge's outward direction, covering the full feature interior inward.
-        // Prevents EPE samples from finding contour points belonging to adjacent features.
-        const searchBox = edgeSearchBox(targetRect, edge, mrc.maxBiasNm, mrc.minSpaceNm);
-
-        const { delta: rawDelta, absEpes } = edgeDelta(
-          targetRect,
-          edge,
-          contours,
-          gain,
-          nSamples,
-          searchBox,
-        );
-
-        let delta = rawDelta;
+        let delta = (measured.deltas[maskIdx]?.[edge] ?? 0) * gain;
 
         // ── MRC: min-space clamp (outward growth only) ──────────────────────
         // Prevent outward-moving edge from bridging with a nearby distinct shape.
@@ -847,7 +882,6 @@ export async function runOpcCorrection(
         updated = applyDelta(
           updated, edge, delta, mrc, origEdgeCoords[shapeIdx][edge],
         );
-        allAbsEpes.push(...absEpes);
       }
 
       // Snap to manufacturing grid after all edge corrections
@@ -862,16 +896,31 @@ export async function runOpcCorrection(
       return updated;
     });
 
-    const epeMeanNm =
-      allAbsEpes.length > 0
-        ? allAbsEpes.reduce((a, b) => a + b, 0) / allAbsEpes.length
-        : 0;
-    const epeMaxNm = allAbsEpes.length > 0 ? Math.max(...allAbsEpes) : 0;
-
-    const result: OpcIterResult = { iteration: iter, maskShapes: next, simResult: sim, epeMeanNm, epeMaxNm };
+    // Evaluate the corrected mask before publishing it, including the final iteration.
+    // Reuse this simulation as the next iteration's input (N corrections need N+1 runs).
+    let nextSim: SimResponse;
+    try {
+      nextSim = await simulateCustom(simBase, next, signal);
+    } catch (error) {
+      if (signal?.aborted) return results;
+      throw error;
+    }
+    if (signal?.aborted) return results;
+    const nextMeasured = measure(nextSim);
+    const epeMeanNm = nextMeasured.mean;
+    const epeMaxNm = nextMeasured.max;
+    const result: OpcIterResult = {
+      iteration: iter, maskShapes: next,
+      simResult: {
+        ...nextSim,
+        metrics: { ...nextSim.metrics, epe_mean_nm: epeMeanNm, epe_max_nm: epeMaxNm },
+      },
+      epeMeanNm, epeMaxNm, initialEpeMeanNm,
+    };
     results.push(result);
     onProgress(result);
     current = next;
+    measured = nextMeasured;
 
     // ── Adaptive gain ────────────────────────────────────────────────────────
     // If EPE increased vs the previous iteration (oscillation detected), reduce

@@ -302,6 +302,7 @@ export default function Page() {
     maskShapes: MaskShape[];
     progress: OpcIterResult[];
     segmentedTarget: MaskShape[];
+    bestIterIndex: number | null;
   } | null>(null);
   // "improved" | "plateau" | "diverged" | null — set after each batch
   const [opcBatchStatus, setOpcBatchStatus] = useState<"improved" | "plateau" | "diverged" | null>(null);
@@ -311,6 +312,7 @@ export default function Page() {
   // null means the last iteration was already the best.
   const [opcBestIterIndex, setOpcBestIterIndex] = useState<number | null>(null);
   const [opcOriginMaskMode, setOpcOriginMaskMode] = useState<"TEMPLATE" | "CUSTOM" | null>(null);
+  const [opcMaskGenerated, setOpcMaskGenerated] = useState(false);
   const [authState, setAuthState] = useState(() => getRuntimeAuthState());
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("STUDIO");
@@ -433,6 +435,7 @@ export default function Page() {
     dose,
     focus: 0,
     return_intensity: returnIntensity,
+    opc_sim: opcMaskGenerated,
     mask: {
       mode: maskMode,
       template_id: maskMode === "TEMPLATE" ? normalizedTemplateId : undefined,
@@ -559,6 +562,9 @@ export default function Page() {
   // different wavelength/NA means different physics → previous corrections are meaningless.
   useEffect(() => {
     if (opcAbortRef.current) opcAbortRef.current.abort();
+    opcAbortRef.current = null;
+    setOpcMaskGenerated(false);
+    setOpcOriginMaskMode(null);
     setOpcRunning(false);
     setOpcProgress([]);
     setOpcSegmentedTarget([]);
@@ -596,6 +602,7 @@ export default function Page() {
     // If they were deps, the effect would re-fire every time OPC calls setCustomShapes(segments),
     // trimming the OPC-generated sub-rects back to 5 and destroying the mid-OPC mask state.
     setCustomShapes((prev) => {
+      if (opcMaskGenerated) return prev;
       const trimmed = prev.slice(0, FREE_CUSTOM_RECT_LIMIT);
       return trimmed.length !== prev.length ? trimmed : prev;
     });
@@ -603,7 +610,7 @@ export default function Page() {
       const trimmed = prev.slice(0, FREE_CUSTOM_RECT_LIMIT);
       return trimmed.length !== prev.length ? trimmed : prev;
     });
-  }, [plan, presetId, templateId, dose, presetEditShapes, presetFeatureOverrides, presetTargetOverrides]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [plan, presetId, templateId, dose, presetEditShapes, presetFeatureOverrides, presetTargetOverrides, opcMaskGenerated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const preferredTemplateId = getCompatibleTemplateIdForPreset(templateId, presetId);
@@ -732,13 +739,13 @@ export default function Page() {
     if (presetTargetOverrides.length > PRO_CUSTOM_SHAPE_LIMIT) {
       setPresetTargetOverrides((prev) => prev.slice(0, PRO_CUSTOM_SHAPE_LIMIT));
     }
-    if (customShapes.length > PRO_CUSTOM_SHAPE_LIMIT) {
+    if (!opcMaskGenerated && customShapes.length > PRO_CUSTOM_SHAPE_LIMIT) {
       setCustomShapes((prev) => prev.slice(0, PRO_CUSTOM_SHAPE_LIMIT));
     }
     if (targetShapes.length > PRO_CUSTOM_SHAPE_LIMIT) {
       setTargetShapes((prev) => prev.slice(0, PRO_CUSTOM_SHAPE_LIMIT));
     }
-  }, [plan, presetEditShapes.length, presetFeatureOverrides.length, presetTargetOverrides.length, customShapes.length, targetShapes.length]);
+  }, [plan, presetEditShapes.length, presetFeatureOverrides.length, presetTargetOverrides.length, customShapes.length, targetShapes.length, opcMaskGenerated]);
 
   useEffect(() => {
     void flushProductEvents();
@@ -1129,7 +1136,22 @@ export default function Page() {
     setEditorTool("SELECT");
   }
 
+  function discardOpcCorrection() {
+    opcAbortRef.current?.abort();
+    opcAbortRef.current = null;
+    setOpcRunning(false);
+    setOpcProgress([]);
+    setOpcSegmentedTarget([]);
+    setOpcCheckpoint(null);
+    setOpcBatchStatus(null);
+    setOpcBestIterIndex(null);
+    setOpcOriginMaskMode(null);
+    setOpcMaskGenerated(false);
+    setOpcError(null);
+  }
+
   function handleTemplateSelection(nextTemplateId: NonNullable<SimRequest["mask"]["template_id"]>) {
+    discardOpcCorrection();
     const normalizedNextTemplateId = normalizeTemplateId(nextTemplateId) ?? "ISO_LINE_DUV";
     const nextParams = { ...params, ...templateParamDefaults(normalizedNextTemplateId) };
     const nextTargetParams = templateTargetParamDefaults(normalizedNextTemplateId, nextParams);
@@ -1155,6 +1177,7 @@ export default function Page() {
   function reinitializeFromTemplate() {
     const nextTemplateId = normalizeTemplateId(templateId) ?? null;
     if (!nextTemplateId) return;
+    discardOpcCorrection();
     const nextTargetParams = templateTargetParamDefaults(nextTemplateId, params);
     setMaskMode("TEMPLATE");
     setTemplateId(nextTemplateId);
@@ -1176,6 +1199,7 @@ export default function Page() {
   }
 
   function startBlankWorkspace() {
+    discardOpcCorrection();
     setMaskMode("CUSTOM");
     setMaskSeedTemplateId(null);
     setCustomShapes([]);
@@ -1412,6 +1436,7 @@ export default function Page() {
   }
 
   function applyCustomMaskPreset(preset: CustomMaskPreset) {
+    discardOpcCorrection();
     const normalized = normalizeCustomMaskPreset(preset);
     const nextSeedTemplateId = normalizeTemplateId(normalized.seed_template_id ?? normalized.template_id ?? null);
     setMaskMode("CUSTOM");
@@ -1642,6 +1667,7 @@ export default function Page() {
         maskShapes: cloneMaskShapes(customShapes),
         progress: [...opcProgress],
         segmentedTarget: opcSegmentedTarget,
+        bestIterIndex: opcBestIterIndex,
       });
       initialMask = cloneMaskShapes(customShapes);
       effectiveTarget = opcSegmentedTarget;
@@ -1663,6 +1689,7 @@ export default function Page() {
       setOpcSegmentedTarget(segTarget);
       setOpcProgress([]);
       setOpcOriginMaskMode(maskMode);
+      setOpcMaskGenerated(true);
       setMaskMode("CUSTOM");
       setCustomShapes(cloneMaskShapes(cleanBase));
       initialMask = cloneMaskShapes(cleanBase);
@@ -1676,6 +1703,7 @@ export default function Page() {
     // Track the best result within this batch (for possible restoration after loop).
     let bestBatchResult: OpcIterResult | null = null;
     let bestBatchGlobalIdx = -1;
+    let batchInitialEpe: number | null = null;
     // globalIdx counts from 0 for fresh runs, from previous progress length for continues.
     let globalIdx = continueFromLast ? opcProgress.length : 0;
 
@@ -1690,6 +1718,7 @@ export default function Page() {
           setCustomShapes(cloneMaskShapes(result.maskShapes));
           setSim(result.simResult);
 
+          batchInitialEpe ??= result.initialEpeMeanNm;
           batchEpes.push(result.epeMeanNm);
           bestEpeInBatch = Math.min(bestEpeInBatch, result.epeMeanNm);
 
@@ -1711,8 +1740,21 @@ export default function Page() {
         },
         abort.signal,
       );
-
-      // If the best iteration wasn't the last one, restore it.
+      if (!abort.signal.aborted && batchEpes.length === OPC_ITERATIONS) {
+        trackProductEvent("opc_correction_completed", {
+          plan, presetId, iterations: batchEpes.length,
+          epeMeanNm: bestBatchResult?.epeMeanNm ?? null,
+        });
+      }
+    } catch (err) {
+      console.error("[OPC correction]", err);
+      if (!abort.signal.aborted) {
+        setOpcError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      // A new template/reset owns the workspace now; don't restore the old run.
+      if (opcAbortRef.current !== abort) return;
+      // Restore a verified state even if a later request fails or is cancelled.
       if (bestBatchResult !== null && batchEpes.length > 0) {
         const lastEpe = batchEpes[batchEpes.length - 1];
         if (bestBatchResult.epeMeanNm < lastEpe) {
@@ -1726,7 +1768,7 @@ export default function Page() {
 
       // Evaluate batch outcome for UI feedback.
       if (batchEpes.length > 0) {
-        const batchStart = batchEpes[0];
+        const batchStart = batchInitialEpe ?? batchEpes[0];
         const batchEnd   = batchEpes[batchEpes.length - 1];
         const relChange  = (batchStart - batchEnd) / Math.max(batchStart, 0.1);
         if (batchEnd > batchStart) {
@@ -1737,23 +1779,16 @@ export default function Page() {
           setOpcBatchStatus("improved");
         }
       }
-    } catch (err) {
-      console.error("[OPC correction]", err);
-      const msg = err instanceof Error ? err.message : String(err);
-      if (!msg.toLowerCase().includes("aborted") && !msg.toLowerCase().includes("abort")) {
-        setOpcError(msg);
-      }
-    } finally {
       setOpcRunning(false);
       opcAbortRef.current = null;
+      void refreshUsageStatus(plan);
     }
   }
 
   function applyOpcResult() {
-    if (opcOriginMaskMode === "TEMPLATE") {
-      setPresetEditShapes(cloneMaskShapes(customShapes));
-      setMaskMode("TEMPLATE");
-    }
+    // Keep the exact verified mask. Returning to TEMPLATE would union the original
+    // pattern back in and trim OPC-generated pieces to the manual-shape limit.
+    setMaskMode("CUSTOM");
     setOpcOriginMaskMode(null);
     setOpcProgress([]);
     setOpcSegmentedTarget([]);
@@ -1767,20 +1802,15 @@ export default function Page() {
     setCustomShapes(cloneMaskShapes(opcCheckpoint.maskShapes));
     setOpcProgress(opcCheckpoint.progress);
     setOpcSegmentedTarget(opcCheckpoint.segmentedTarget);
+    setOpcBestIterIndex(opcCheckpoint.bestIterIndex);
+    setOpcError(null);
     setOpcCheckpoint(null);
     setOpcBatchStatus(null);
-    setOpcBestIterIndex(null);
   }
 
   /** Discard all OPC results and restore the mask to the original template. */
   function resetOpcToTarget() {
-    opcAbortRef.current?.abort();
-    setOpcProgress([]);
-    setOpcSegmentedTarget([]);
-    setOpcCheckpoint(null);
-    setOpcBatchStatus(null);
-    setOpcBestIterIndex(null);
-    setOpcOriginMaskMode(null);
+    discardOpcCorrection();
     setMaskMode("TEMPLATE");
   }
 
@@ -1793,7 +1823,9 @@ export default function Page() {
     setOpcGifExporting(true);
     try {
       const effectiveTarget = opcSegmentedTarget.length > 0 ? opcSegmentedTarget : targetShapes;
-      await exportOpcGif(opcProgress, effectiveTarget, {
+      const verifiedProgress = opcBestIterIndex === null
+        ? opcProgress : opcProgress.slice(0, opcBestIterIndex + 1);
+      await exportOpcGif(verifiedProgress, effectiveTarget, {
         fovNm: params.fov_nm ?? 1100,
         presetLabel: presetId,
       });

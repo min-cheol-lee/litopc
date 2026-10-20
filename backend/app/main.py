@@ -154,6 +154,8 @@ TRUST_BENCHMARK_ARTIFACT_DIR = Path(__file__).resolve().parent.parent / "trust" 
 TRUST_BENCHMARK_LATEST_FILE = TRUST_BENCHMARK_ARTIFACT_DIR / "benchmark-latest.json"
 TRUST_BENCHMARK_HISTORY_FILE = TRUST_BENCHMARK_ARTIFACT_DIR / "benchmark-history.json"
 _PRODUCT_EVENT_NAMES: tuple[ProductEventName, ...] = (
+    "opc_correction_clicked",
+    "opc_correction_completed",
     "run_sim_clicked",
     "run_sim_succeeded",
     "run_sim_failed",

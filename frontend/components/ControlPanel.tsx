@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { opcImprovementPercent, type OpcIterResult } from "../lib/opc-correction";
 import type {
   BatchSimResponse,
   MaskShape,
@@ -162,7 +163,7 @@ export function ControlPanel(props: {
   onSignOutIntent: () => void;
   // OPC auto-correction
   opcRunning?: boolean;
-  opcProgress?: Array<{ iteration: number; epeMeanNm: number; epeMaxNm: number; maskShapes: import("../lib/types").MaskShape[] }>;
+  opcProgress?: OpcIterResult[];
   onRunOpcCorrection?: () => void;
   onContinueOpcCorrection?: () => void;
   canContinueOpc?: boolean;
@@ -633,18 +634,17 @@ export function ControlPanel(props: {
                 {targetShapes.length === 0 && (
                   <p className="opc-no-target-note">Set a target shape in the Target layer to enable OPC.</p>
                 )}
-                {opcError && (
-                  <div className="opc-error-msg">⚠ {opcError}</div>
-                )}
               </>
             )}
 
             {/* Active / done: convergence chart */}
             {(opcRunning || opcProgress.length > 0) && (() => {
               const maxEpe = Math.max(...opcProgress.map(r => r.epeMeanNm), 1);
-              const first = opcProgress[0]?.epeMeanNm ?? null;
-              const last  = opcProgress[opcProgress.length - 1]?.epeMeanNm ?? null;
-              const improved = first !== null && last !== null ? ((first - last) / first * 100) : null;
+              const first = opcProgress[0]?.initialEpeMeanNm ?? null;
+              const selectedIndex = !opcRunning && opcBestIterIndex !== null
+                ? opcBestIterIndex : opcProgress.length - 1;
+              const last = opcProgress[selectedIndex]?.epeMeanNm ?? null;
+              const improved = first !== null && last !== null ? opcImprovementPercent(first, last) : null;
               // Total iterations run (accumulates across continues)
               const totalIter = opcProgress.length;
               // Current batch: last opcIterations entries (or all if first run)
@@ -786,6 +786,7 @@ export function ControlPanel(props: {
                 </div>
               );
             })()}
+            {opcError && <div className="opc-error-msg" role="alert">{opcError}</div>}
           </div>
         )}
 

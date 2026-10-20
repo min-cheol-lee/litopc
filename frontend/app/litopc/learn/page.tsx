@@ -64,6 +64,7 @@ export default function LearnPage() {
   const [loading, setLoading]       = useState(false);
   const [opcRunning, setOpcRunning] = useState(false);
   const [opcProgress, setOpcProgress] = useState<OpcIterResult[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const [req, setReq]           = useState<SimRequest>(buildLearnReq());
   const [sim, setSim]           = useState<SimResponse | null>(null);
@@ -75,6 +76,7 @@ export default function LearnPage() {
   );
 
   const handleNextStep = useCallback(async () => {
+    setError(null);
     if (step === 0) {
       // Step 0 → 1: run simulation, stay on step 1 when done
       setLoading(true);
@@ -84,6 +86,7 @@ export default function LearnPage() {
         setSim(r);
       } catch (e) {
         console.error("Simulation error:", e);
+        setError(e instanceof Error ? e.message : "Simulation failed.");
       } finally {
         setLoading(false);
       }
@@ -112,6 +115,7 @@ export default function LearnPage() {
         );
       } catch (e) {
         console.error("OPC error:", e);
+        setError(e instanceof Error ? e.message : "OPC correction failed.");
       } finally {
         setOpcRunning(false);
       }
@@ -134,6 +138,7 @@ export default function LearnPage() {
         loading={loading}
         opcRunning={opcRunning}
         opcProgress={opcProgress}
+        error={error}
         onNextStep={handleNextStep}
       />
       <div style={{ flex: 1, height: "100%", minWidth: 0, position: "relative" }}>

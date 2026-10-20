@@ -6,6 +6,8 @@ MaskMode = Literal["TEMPLATE", "CUSTOM"]
 UsageOp = Literal["runs", "sweep_points", "exports"]
 PolicyDecision = Literal["allowed", "adjusted", "blocked", "clamped", "observed"]
 ProductEventName = Literal[
+    "opc_correction_clicked",
+    "opc_correction_completed",
     "run_sim_clicked",
     "run_sim_succeeded",
     "run_sim_failed",
