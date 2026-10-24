@@ -56,6 +56,8 @@ export interface Surface3DProps {
   // Appearance
   colormapType: ColormapType;
   colormapThreshold?: number;
+  // Display opacity only: 0 hides the scalar overlay; 1 preserves its original appearance.
+  colormapOpacity?: number;
   contourStyle: ContourStyle;
   showAerial: boolean;
   maskOpacityPreset: MaskOpacityPreset;

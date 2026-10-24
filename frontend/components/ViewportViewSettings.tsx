@@ -30,8 +30,8 @@ export function ViewportViewSettings(props: {
   onCameraPreset: (preset: "ISO" | "FRONT" | "TOP") => void;
   background: "DARK" | "LIGHT";
   onBackground: (value: "DARK" | "LIGHT") => void;
-  opacity: number;
-  onOpacity: (value: number) => void;
+  colormapOpacity: number;
+  onColormapOpacity: (value: number) => void;
   compareClean?: Toggle;
 }) {
   const layer = (label: string, state: Toggle) => (
@@ -62,6 +62,14 @@ export function ViewportViewSettings(props: {
             onChange={event => props.onColorRange(Number(event.target.value))} />
           <output>{Math.round(props.colorRange * 100)}%</output>
         </label>
+        <label className="viewport-setting-slider viewport-colormap-range" title="Transparency of the intensity colormap in 2D and 3D.">
+          <span>Transparency</span>
+          <input type="range" aria-label="Colormap transparency" min={0} max={100} step={1}
+            value={Math.round((1 - props.colormapOpacity) * 100)} disabled={props.reference}
+            aria-valuetext={`${Math.round((1 - props.colormapOpacity) * 100)}% transparent`}
+            onChange={event => props.onColormapOpacity(1 - Number(event.target.value) / 100)} />
+          <output>{Math.round((1 - props.colormapOpacity) * 100)}%</output>
+        </label>
         {props.reference && <p className="viewport-settings-note">Original Cosmic reference</p>}
       </section>
       <section className="viewport-settings-section">
@@ -89,7 +97,7 @@ export function ViewportViewSettings(props: {
         <div className="viewport-settings-row">
           <div className="viewport-segmented viewport-renderer-options" role="group" aria-label="3D rendering style">
             <button type="button" aria-pressed={props.rendered} onClick={() => props.onRendered(true)}>{props.reference ? "Cosmic ref" : "Rendered"}</button>
-            <button type="button" aria-pressed={!props.rendered} onClick={() => props.onRendered(false)}>Classic</button>
+            <button type="button" aria-pressed={!props.rendered} onClick={() => props.onRendered(false)}>Schematic</button>
           </div>
           <button type="button" className={`view-chip viewport-light-toggle ${props.light.value ? "on" : ""}`} aria-pressed={props.light.value}
             aria-label={props.light.value ? "Turn off light effect" : "Turn on light effect"} disabled={!props.rendered} onClick={props.light.toggle}>Light</button>
@@ -101,7 +109,7 @@ export function ViewportViewSettings(props: {
           </div>
           {(["azimuth", "elevation", "roll"] as const).map(axis => <label key={axis} className="viewport-setting-slider">
             <span>{axis === "azimuth" ? "Azimuth" : axis === "elevation" ? "Elevation" : "Roll"}</span>
-            <input type="range" aria-label={`3D camera ${axis}`} min={axis === "elevation" ? -89 : -180} max={axis === "elevation" ? 89 : 180} value={props.camera[axis]} onChange={event => props.onCamera(axis, Number(event.target.value))} />
+            <input type="range" aria-label={`3D camera ${axis}`} min={axis === "elevation" ? -89 : -180} max={axis === "elevation" ? 89 : 180} step={axis === "elevation" ? .5 : 1} value={props.camera[axis]} onChange={event => props.onCamera(axis, Number(event.target.value))} />
             <output>{props.camera[axis]}°</output>
           </label>)}
           <p className="viewport-settings-note">Drag to rotate · Shift + drag to pan</p>
@@ -112,7 +120,6 @@ export function ViewportViewSettings(props: {
         <div className="viewport-segmented" role="group" aria-label="2D background">
           {(["DARK", "LIGHT"] as const).map(theme => <button key={theme} type="button" aria-pressed={props.background === theme} onClick={() => props.onBackground(theme)}>{theme === "DARK" ? "Dark" : "Light"}</button>)}
         </div>
-        <label className="viewport-setting-slider"><span>Intensity</span><input type="range" aria-label="2D intensity opacity" min={.1} max={1} step={.05} value={props.opacity} onChange={event => props.onOpacity(Number(event.target.value))} /><output>{Math.round(props.opacity * 100)}%</output></label>
         {layer("Rulers", props.rulers)}
       </details>
       {props.compareClean && <section className="viewport-settings-section">{layer("Clean A/B overlay", props.compareClean)}</section>}

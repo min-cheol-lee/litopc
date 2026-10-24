@@ -1,3 +1,6 @@
+/** Frontal stack view used on first entry and when resetting the 3D view. */
+export const SURFACE3D_DEFAULT_VIEW = { azimuthDeg: 0, elevationDeg: 72.5, rollDeg: 0 } as const;
+
 /** Reference planes shared by the canvas and WebGL views (normalized FOV units). */
 export const SURFACE3D_PLANES = {
   classic: { maskTopZ: 0.44, siliconCenterZ: -0.02 },

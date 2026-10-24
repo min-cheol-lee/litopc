@@ -19,9 +19,9 @@ import { getSurfacePaletteColor } from "../lib/surface3d-palettes";
 import { COLORMAP_THRESHOLD_DEFAULT, mapColormapIntensity } from "../lib/colormap-display";
 import { getEpeColor, nearestTargetPoint } from "../lib/epe-overlay";
 import { ViewportViewSettings } from "./ViewportViewSettings";
-import { SURFACE3D_PLANES, createSurface3dRotation, getSurface3dPivot } from "../lib/surface3d-view";
+import { SURFACE3D_DEFAULT_VIEW, SURFACE3D_PLANES, createSurface3dRotation, getSurface3dPivot } from "../lib/surface3d-view";
 
-// Rendering style is shared through View and persisted in localStorage.
+// Every visit starts in Rendered; View and the panel share the current style.
 
 const DEFAULT_FOV = 1100;
 const COMPARE_A_COLOR = "#2f7dff";
@@ -148,7 +148,7 @@ export function Viewport(props: {
   const [showMainContour, setShowMainContour] = useState(true);
   const [showTargetOverlay, setShowTargetOverlay] = useState(true);
   const [showAerial, setShowAerial] = useState(true);
-  const [aerialOpacity, setAerialOpacity] = useState(0.58);
+  const [colormapOpacity, setColormapOpacity] = useState(1);
   const [colormapType, setColormapType] = useState<ColormapType>("apple");
   const [colormapThreshold, setColormapThreshold] = useState(COLORMAP_THRESHOLD_DEFAULT);
   const [bgTheme, setBgTheme] = useState<"DARK" | "LIGHT">("DARK");
@@ -156,18 +156,13 @@ export function Viewport(props: {
   const [epeOverlayMode, setEpeOverlayMode] = useState<"NONE" | "COLOR" | "ARROWS" | "BOTH">(initialEpeOverlayMode);
   const [exportResolution, setExportResolution] = useState<"WEB" | "HIGH_RES">(() => req.plan === "PRO" ? "HIGH_RES" : "WEB");
   const [showSurface3d, setShowSurface3d] = useState(true);
-  const [useWebGL, setUseWebGL] = useState(false);
+  const [useWebGL, setUseWebGL] = useState(true);
   const [useCosmicReference, setUseCosmicReference] = useState(false);
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     const reference = query.get("reference") === "cosmic";
     setUseCosmicReference(reference);
-    if (reference) { setSurfElevation(34); setColormapType("apple"); }
-    try {
-      setUseWebGL(reference || query.get("webgl") === "1" || localStorage.getItem("litopc_webgl3d") === "1");
-    } catch {
-      setUseWebGL(reference || query.get("webgl") === "1");
-    }
+    if (reference) { setSurfAzimuth(34); setSurfElevation(34); setColormapType("apple"); }
   }, []);
   const SurfaceRenderer = useCosmicReference ? Surface3DReference : Surface3DCanvas;
   const [surfLightEffect, setSurfLightEffect] = useState(true);
@@ -178,9 +173,9 @@ export function Viewport(props: {
   const [showSweepOverlay, setShowSweepOverlay] = useState(true);
   const [sweepStackAll, setSweepStackAll] = useState(true);
   const [sweepPointIndex, setSweepPointIndex] = useState(0);
-  const [surfAzimuth, setSurfAzimuth] = useState(34);
-  const [surfElevation, setSurfElevation] = useState(52);
-  const [surfRoll, setSurfRoll] = useState(0);
+  const [surfAzimuth, setSurfAzimuth] = useState<number>(SURFACE3D_DEFAULT_VIEW.azimuthDeg);
+  const [surfElevation, setSurfElevation] = useState<number>(SURFACE3D_DEFAULT_VIEW.elevationDeg);
+  const [surfRoll, setSurfRoll] = useState<number>(SURFACE3D_DEFAULT_VIEW.rollDeg);
   const [surfOffsetX, setSurfOffsetX] = useState(0);
   const [surfOffsetY, setSurfOffsetY] = useState(0);
   const [surfOffsetZ, setSurfOffsetZ] = useState(0);
@@ -735,6 +730,7 @@ export function Viewport(props: {
         lineScale,
         colormapType: colormapType,
         colormapThreshold: useCosmicReference ? 1 : colormapThreshold,
+        colormapOpacity,
         contourStyle,
         epeContours: epeOverlayMode !== "NONE" ? epeSegments : null,
         epeMode: epeOverlayMode !== "NONE" ? epeOverlayMode : undefined,
@@ -820,7 +816,7 @@ export function Viewport(props: {
   useEffect(() => {
     const canvas = surfaceCanvasRef.current;
     const intensity = sim?.intensity;
-    if (!canvas || !intensity || !showSurface3d) return;
+    if (!canvas || !showSurface3d) return;
 
     const draw = () => {
       const dpr = Math.max(2, Math.min(3, window.devicePixelRatio || 1));
@@ -832,7 +828,7 @@ export function Viewport(props: {
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      drawSurface3D(ctx, cssW, cssH, intensity.w, intensity.h, intensity.data, {
+      drawSurface3D(ctx, cssW, cssH, intensity?.w ?? 0, intensity?.h ?? 0, intensity?.data ?? [], {
         azimuthDeg: surfAzimuth,
         elevationDeg: surfElevation,
         rollDeg: surfRoll,
@@ -857,9 +853,10 @@ export function Viewport(props: {
         showMainContour: effectiveShowMainContour,
         showAerial,
         maskOpacityPreset,
-        nmPerPixel: sim?.nm_per_pixel ?? (fovNm / Math.max(1, intensity.w)),
+        nmPerPixel: sim?.nm_per_pixel ?? (fovNm / Math.max(1, intensity?.w ?? 1024)),
         colormapType: colormapType,
         colormapThreshold: useCosmicReference ? 1 : colormapThreshold,
+        colormapOpacity,
         contourStyle,
         epeContours: epeOverlayMode !== "NONE" ? epeSegments : null,
         epeMode: epeOverlayMode !== "NONE" ? epeOverlayMode : undefined,
@@ -869,7 +866,7 @@ export function Viewport(props: {
     const resize = new ResizeObserver(draw);
     resize.observe(canvas);
     return () => resize.disconnect();
-  }, [sim?.intensity, sim?.contours_nm, surfAzimuth, surfElevation, surfRoll, surfOffsetX, surfOffsetY, surfOffsetZ, surfDepth, surfaceZoomScale, surfaceQuality, req.plan, showSurface3d, useWebGL, useCosmicReference, surfaceSwapMain, fovNm, compareActive, compareAContours, compareBContours, sweepContourSets3d, effectiveShowMainContour, showAerial, maskOpacityPreset, maskAddRects, maskSubtractRects, overlayAddRects, finalMaskContours, targetContours, showTargetOverlay, colormapType, colormapThreshold, contourStyle, epeOverlayMode, epeSegments]);
+  }, [sim?.intensity, sim?.contours_nm, surfAzimuth, surfElevation, surfRoll, surfOffsetX, surfOffsetY, surfOffsetZ, surfDepth, surfaceZoomScale, surfaceQuality, req.plan, showSurface3d, useWebGL, useCosmicReference, surfaceSwapMain, fovNm, compareActive, compareAContours, compareBContours, sweepContourSets3d, effectiveShowMainContour, showAerial, maskOpacityPreset, maskAddRects, maskSubtractRects, overlayAddRects, finalMaskContours, targetContours, showTargetOverlay, colormapType, colormapThreshold, colormapOpacity, contourStyle, epeOverlayMode, epeSegments]);
 
   useEffect(() => {
     const contours = sim?.contours_nm;
@@ -1347,6 +1344,9 @@ export function Viewport(props: {
   }, [isCanvasLayout]);
 
   const openViewMenu = () => { if (viewMenuRef.current) viewMenuRef.current.open = true; };
+  const setSurfaceRenderer = (rendered: boolean) => {
+    setUseWebGL(rendered);
+  };
   const handleViewMenuToggle = (event: React.SyntheticEvent<HTMLDetailsElement>) => {
     const current = event.currentTarget;
     if (!current.open) return;
@@ -1416,10 +1416,13 @@ export function Viewport(props: {
             </button>
           </div>
         )}
-        {!isMainSurface && surfacePanelVisible && (
-          <div className="panel-corner-actions panel-corner-actions-bottom-left" style={{ top: "auto", right: "auto", bottom: 12, left: 12, zIndex: 9, display: "flex", gap: 4 }}>
-            <button type="button" className="panel-mini-control" onClick={openViewMenu} aria-label="Open shared view settings" title="View settings for 2D and 3D"><ToolbarIcon kind="view" /> View</button>
-            {useWebGL && <button type="button" className={`panel-mini-control ${surfLightEffect ? "is-active" : ""}`} onClick={() => setSurfLightEffect(v => !v)} aria-label={surfLightEffect ? "Turn off light effect" : "Turn on light effect"}>Light</button>}
+        {surfacePanelVisible && (
+          <div className="panel-corner-actions" style={{ top: isMainSurface ? panelTop + 2 : "auto", right: "auto", bottom: isMainSurface ? undefined : 12, left: 12, zIndex: 9 }}>
+            <button type="button" className="panel-mini-control panel-renderer-toggle" onClick={() => setSurfaceRenderer(!useWebGL)}
+              aria-label="Switch 3D rendering style" aria-pressed={useWebGL}
+              title={`Switch to ${useWebGL ? "Schematic" : useCosmicReference ? "Cosmic reference" : "Rendered"}`}>
+              <ToolbarIcon kind="cube" />{useWebGL ? (useCosmicReference ? "Cosmic ref" : "Rendered") : "Schematic"}<span aria-hidden="true">↔</span>
+            </button>
           </div>
         )}
         {!isMainSurface && renderSweepStatusLine("3d")}
@@ -1469,6 +1472,7 @@ export function Viewport(props: {
               fovNm={fovNm}
               colormapType={useCosmicReference ? "apple" : colormapType}
               colormapThreshold={useCosmicReference ? 1 : colormapThreshold}
+              colormapOpacity={useCosmicReference ? 1 : colormapOpacity}
               contourStyle={useCosmicReference ? "CLASSIC" : contourStyle}
               showAerial={showAerial}
               maskOpacityPreset={maskOpacityPreset}
@@ -1789,9 +1793,9 @@ export function Viewport(props: {
           onClick={() => {
             if (surfaceAsBackground && !useCosmicReference) {
               setSurfaceZoomScale(1);
-              setSurfAzimuth(34);
-              setSurfElevation(52);
-              setSurfRoll(0);
+              setSurfAzimuth(SURFACE3D_DEFAULT_VIEW.azimuthDeg);
+              setSurfElevation(SURFACE3D_DEFAULT_VIEW.elevationDeg);
+              setSurfRoll(SURFACE3D_DEFAULT_VIEW.rollDeg);
               setSurfOffsetX(0);
               setSurfOffsetY(0);
               setSurfOffsetZ(0);
@@ -1810,6 +1814,7 @@ export function Viewport(props: {
             <ViewportViewSettings
               palette={colormapType} onPalette={setColormapType} reference={useCosmicReference}
               colorRange={colormapThreshold} onColorRange={setColormapThreshold}
+              colormapOpacity={colormapOpacity} onColormapOpacity={setColormapOpacity}
               intensity={{ value: showAerial, toggle: () => setShowAerial(v => !v) }}
               contour={{ value: effectiveShowMainContour, toggle: () => setShowMainContour(v => !v), disabled: contourLockedByCompare }}
               target={{ value: showTargetOverlay, toggle: () => setShowTargetOverlay(v => !v), disabled: !targetContours.length }}
@@ -1817,15 +1822,15 @@ export function Viewport(props: {
               rulers={{ value: showRulers, toggle: toggleRulerVisibilityFromView }}
               surface={{ value: showSurface3d, toggle: () => setShowSurface3d(v => !v), disabled: !allowSurfacePanel }}
               hasTarget={Boolean(sim?.contours_nm?.length && targetContours.length)} epe={epeOverlayMode} onEpe={setEpeOverlayMode}
-              rendered={useWebGL} onRendered={value => { setUseWebGL(value); try { localStorage.setItem("litopc_webgl3d", value ? "1" : "0"); } catch {} }}
+              rendered={useWebGL} onRendered={setSurfaceRenderer}
               light={{ value: surfLightEffect, toggle: () => setSurfLightEffect(v => !v) }}
               camera={{ azimuth: surfAzimuth, elevation: surfElevation, roll: surfRoll }}
               onCamera={(axis, value) => { if (axis === "azimuth") setSurfAzimuth(value); else if (axis === "elevation") setSurfElevation(value); else setSurfRoll(value); }}
               onCameraPreset={preset => {
-                setSurfAzimuth(preset === "ISO" ? 34 : 0); setSurfElevation(preset === "ISO" ? 52 : preset === "FRONT" ? 78 : 0);
+                setSurfAzimuth(preset === "ISO" ? 34 : 0); setSurfElevation(preset === "ISO" ? 52 : preset === "FRONT" ? SURFACE3D_DEFAULT_VIEW.elevationDeg : 0);
                 setSurfRoll(0); setSurfOffsetX(0); setSurfOffsetY(0); setSurfOffsetZ(0); setSurfaceZoomScale(1);
               }}
-              background={bgTheme} onBackground={setBgTheme} opacity={aerialOpacity} onOpacity={setAerialOpacity}
+              background={bgTheme} onBackground={setBgTheme}
               compareClean={compareActive ? { value: compareContourMode === "AB_ONLY", toggle: () => setCompareContourMode(m => m === "AB_ONLY" ? "MIXED" : "AB_ONLY") } : undefined}
             />
           </div>
@@ -2195,7 +2200,7 @@ export function Viewport(props: {
                   width={fovNm}
                   height={fovNm}
                   preserveAspectRatio="none"
-                  opacity={aerialOpacity}
+                  opacity={0.58 * colormapOpacity}
                   transform={`translate(0 ${fovNm}) scale(1 -1)`}
                 />
               )}
@@ -3049,8 +3054,8 @@ function createSurfaceProjector(view: {
   featureBoost?: number;
 }) {
   const safe = (v: number, fallback: number) => (Number.isFinite(v) ? v : fallback);
-  const safeAzimuthDeg = safe(view.azimuthDeg, 34);
-  const safeElevationDeg = safe(view.elevationDeg, 34);
+  const safeAzimuthDeg = safe(view.azimuthDeg, SURFACE3D_DEFAULT_VIEW.azimuthDeg);
+  const safeElevationDeg = safe(view.elevationDeg, SURFACE3D_DEFAULT_VIEW.elevationDeg);
   const safeRollDeg = safe(view.rollDeg, 0);
   const safeOffsetX = safe(view.offsetX ?? 0, 0);
   const safeOffsetY = safe(view.offsetY ?? 0, 0);
@@ -3140,6 +3145,7 @@ function drawSurface3D(
     lineScale?: number;
     colormapType?: string;
     colormapThreshold?: number;
+    colormapOpacity?: number;
     contourStyle?: "CLASSIC" | "NEON" | "GOLD" | "MINIMAL";
     epeContours?: Array<Array<{ p: { x: number; y: number }; dist: number; nearest: { x: number; y: number } }>> | null;
     epeMode?: "COLOR" | "ARROWS" | "BOTH" | "NONE";
@@ -3148,10 +3154,12 @@ function drawSurface3D(
   ctx.clearRect(0, 0, wPx, hPx);
   const ls = Math.max(0.5, opts.lineScale ?? 1.0);
 
-  if (!w || !h || data.length !== w * h) return;
-  let vmin = Number.POSITIVE_INFINITY;
-  let vmax = Number.NEGATIVE_INFINITY;
-  for (let i = 0; i < data.length; i++) {
+  // The physical stack exists before a simulation. Only the scalar overlay
+  // needs sampled intensity; do not invent a field to draw the plates.
+  const hasIntensity = w > 1 && h > 1 && data.length === w * h;
+  let vmin = hasIntensity ? Number.POSITIVE_INFINITY : 0;
+  let vmax = hasIntensity ? Number.NEGATIVE_INFINITY : 1;
+  for (let i = 0; hasIntensity && i < data.length; i++) {
     const v = data[i];
     if (v < vmin) vmin = v;
     if (v > vmax) vmax = v;
@@ -3447,6 +3455,8 @@ function drawSurface3D(
     }
     quads.sort((a, b) => a.d - b.d);
 
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, opts.colormapOpacity ?? 1));
     for (const q of quads) {
       const t = Math.max(0, Math.min(1, q.t));
       const c = getColorMap(opts.colormapType ?? "silver", t, opts.colormapThreshold);
@@ -3466,6 +3476,7 @@ function drawSurface3D(
       ctx.stroke();
     }
 
+    ctx.restore();
     const siliconSheen = ctx.createLinearGradient(siliconPlate.p0.sx, siliconPlate.p0.sy, siliconPlate.p2.sx, siliconPlate.p2.sy);
     siliconSheen.addColorStop(0, "rgba(220,236,255,0.16)");
     siliconSheen.addColorStop(0.5, "rgba(170,206,246,0.03)");
@@ -3481,7 +3492,7 @@ function drawSurface3D(
     return siliconPlate;
   }
 
-  const siliconPlate = opts.showAerial ? drawSiliconSurface(data) : drawSiliconBase();
+  const siliconPlate = opts.showAerial && hasIntensity ? drawSiliconSurface(data) : drawSiliconBase();
   const maskPlate = drawMaskLayer();
 
   // Soft glossy highlight over silicon plane

@@ -365,6 +365,23 @@ function buildIntensityGeometry(iv: IntensityCache, palette: string, limit: numb
   geometry.computeVertexNormals();
   return geometry;
 }
+
+/** Fade the data overlay without resampling the field or its transparency map. */
+function updateIntensityOpacity(surface: THREE.Group, showAerial: boolean, value = 1) {
+  const opacity = Number.isFinite(value) ? THREE.MathUtils.clamp(value, 0, 1) : 1;
+  surface.visible = showAerial && opacity > 0;
+  surface.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    for (const material of materials) {
+      material.opacity = opacity;
+      // The alpha test follows opacity, retaining the same low-field cutoff
+      // while fading. Keep its shader branch enabled even while hidden at 0.
+      material.alphaTest = .035 * Math.max(opacity, Number.EPSILON);
+    }
+  });
+}
+
 function contourLine(contour:ContourSet, props:Surface3DProps, iv:IntensityCache|null, color:number|THREE.Color, dashed=false, epe?:EpePoint[], fixedZ?:number, opacity=1) {
   const positions:number[]=[], colors:number[]=[];
   const points=contour.points_nm, useEpe=epe?.length===points.length;
@@ -439,14 +456,19 @@ const SceneInner=React.forwardRef<Surface3DHandle,Surface3DProps & { onDprChange
     }
     const alpha=new THREE.DataTexture(rgba,w,h,THREE.RGBAFormat);alpha.flipY=true;alpha.minFilter=THREE.LinearFilter;alpha.magFilter=THREE.LinearFilter;alpha.needsUpdate=true;
     const mat=new THREE.MeshPhysicalMaterial({color:0xc0cbd6,vertexColors:true,specularIntensity:0,roughness:.65,metalness:0,clearcoat:0,emissive:0x45515d,emissiveIntensity:.015,alphaMap:alpha,transparent:true,depthWrite:true,alphaTest:.035,envMapIntensity:.1,side:THREE.DoubleSide});
-    const mesh=new THREE.Mesh(geo,mat);mesh.name="RenderedIntensitySurface";mesh.position.z=SURFACE_Z;surface.add(mesh);surface.visible=props.showAerial;invalidate();
+    const mesh=new THREE.Mesh(geo,mat);mesh.name="RenderedIntensitySurface";mesh.position.z=SURFACE_Z;surface.add(mesh);
+    updateIntensityOpacity(surface, props.showAerial, props.colormapOpacity);
+    invalidate();
   },[props.intensityData,props.intensityW,props.intensityH,props.depthScale,budget.geometrySegments,surface,invalidate]);
   useEffect(() => {
     const mesh = surface.children.find((object) => object instanceof THREE.Mesh) as THREE.Mesh | undefined;
     if (mesh) updateIntensityColors(mesh.geometry, props.colormapType, props.colormapThreshold ?? 1);
     invalidate();
   }, [props.colormapType, props.colormapThreshold, props.intensityData, props.intensityW, props.intensityH, props.depthScale, budget.geometrySegments, surface, invalidate]);
-  useEffect(()=>{surface.visible=props.showAerial;invalidate();},[props.showAerial,surface,invalidate]);
+  useEffect(() => {
+    updateIntensityOpacity(surface, props.showAerial, props.colormapOpacity);
+    invalidate();
+  }, [props.showAerial, props.colormapOpacity, surface, invalidate]);
 
   useEffect(()=>{
     disposeGroup(contours);const iv=intensity.current;
