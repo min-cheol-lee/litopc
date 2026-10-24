@@ -1,0 +1,200 @@
+/* Interactive hero stage: the approved still and the live scene share one box. */
+.m3d {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  isolation: isolate;
+}
+.m3d-field {
+  position: absolute;
+  inset: -10% -6%;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 46% 46% at 50% 44%,
+    rgba(30, 48, 68, 0.55) 0%,
+    rgba(22, 37, 54, 0.35) 45%,
+    rgba(16, 28, 40, 0) 100%
+  );
+}
+.m3d-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+}
+.m3d-stage > .m3d-image {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  height: 100% !important;
+  width: auto !important;
+  max-width: none !important;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  object-fit: contain;
+  pointer-events: none;
+  mask-image:
+    linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent),
+    linear-gradient(0deg, transparent, #000 8%, #000 92%, transparent);
+  mask-composite: intersect;
+  -webkit-mask-composite: source-in;
+  transition: opacity 0.45s ease;
+}
+.m3d[data-live="true"] .m3d-image {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.45s ease,
+    visibility 0s linear 0.45s;
+}
+.m3d-canvas {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+.m3d[data-live="true"] .m3d-canvas {
+  opacity: 1;
+}
+.m3d-canvas canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  background: transparent;
+}
+.m3d-drag {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  touch-action: pan-y;
+  cursor: default;
+  outline: none;
+}
+.m3d[data-live="true"] .m3d-drag {
+  cursor: grab;
+}
+.m3d[data-live="true"][data-dragging] .m3d-drag {
+  cursor: grabbing;
+}
+.m3d-drag:focus-visible {
+  outline: 2px solid #b3d0eb;
+  outline-offset: -4px;
+  border-radius: 24px;
+}
+.m3d-controls {
+  position: absolute;
+  z-index: 3;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.m3d-switch {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(156, 183, 203, 0.25);
+  border-radius: 14px;
+  background: rgba(19, 40, 60, 0.74);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+.m3d-switch button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: none;
+  color: #b1c9db;
+  cursor: pointer;
+  transition:
+    color 0.2s,
+    background 0.2s;
+}
+.m3d-switch button svg {
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+.m3d-switch button[aria-selected="true"] {
+  color: #17334c;
+  background: #e8f0f6;
+  border-color: #c4dcea;
+}
+.m3d-switch button:hover {
+  box-shadow: inset 0 0 0 1px rgba(189, 207, 226, 0.55);
+}
+.m3d-reset {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid rgba(156, 183, 203, 0.25);
+  border-radius: 12px;
+  background: rgba(19, 40, 60, 0.74);
+  color: #dce8f1;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateX(6px);
+  pointer-events: none;
+  transition:
+    opacity 0.25s,
+    transform 0.25s;
+}
+.m3d[data-moved] .m3d-reset {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.m3d-reset:hover {
+  background: rgba(39, 66, 92, 0.85);
+}
+@media (prefers-reduced-motion: reduce) {
+  .m3d-image,
+  .m3d-canvas,
+  .m3d-reset {
+    transition: none;
+  }
+}
+
+/* Built-in correction controls (the page may render its own instead). */
+.m3d-correct {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.m3d-correct-run,
+.m3d-correct-original {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid rgba(156, 183, 203, 0.25);
+  border-radius: 12px;
+  background: rgba(19, 40, 60, 0.74);
+  color: #e8f0f6;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.m3d-correct-run:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.m3d-correct-original {
+  font-weight: 500;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+.m3d:not([data-frame="0"]) .m3d-correct-original {
+  opacity: 1;
+  pointer-events: auto;
+}

@@ -19,6 +19,8 @@ const jost = Jost({
 });
 
 export const metadata = {
+  // Resolves the pages' relative canonical paths to litopc.com.
+  metadataBase: new URL("https://litopc.com"),
   title: "litopc",
   description: "Web-based OPC and lithography simulator for DUV and EUV. Hopkins wave-optics model, EPE metrics, Bossung curves, and publication-ready figures. No installation, no license fee.",
   other: {

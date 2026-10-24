@@ -1,78 +1,72 @@
-import type { Metadata } from "next";
-import { MarketingShell } from "../../components/MarketingShell";
+import "../site.css";
+import "../site-mono.css";
+import "../site-docs.css";
+import Link from "next/link";
+import {
+  DocSectionA as DocSection,
+  MarketingDocumentA,
+  docMetadataA,
+} from "../../components/site/DocsA";
+import { ROUTES } from "../../components/site/routes";
+import { Wordmark } from "../../components/site/ShellA";
 
-export const metadata: Metadata = {
-  title: "Terms | litopc",
-  description: "Terms of use for litopc.",
-};
-
-export default function TermsPage() {
+export const metadata = docMetadataA(
+  "Terms of use",
+  "Terms for using litopc’s website, simulator, and available account features.",
+  "/terms",
+);
+export default function Page() {
   return (
-    <MarketingShell navItems={[{ label: "Home", href: "/" }]}>
-      <article className="marketing-doc-page landing-anchor">
-        <div className="marketing-doc-hero">
-          <div className="landing-eyebrow">Terms of use</div>
-          <h1>Use litopc for simulation, research, and process exploration.</h1>
-          <p>
-            These terms describe the expected use of the site, simulator, and subscription features.
-          </p>
-        </div>
-
-        <section className="marketing-doc-section">
-          <h2>Acceptable use</h2>
-          <div className="marketing-doc-copy">
-            <p>
-              You may use litopc to simulate lithography processes, explore OPC behavior, run parameter sweeps,
-              generate figures, and evaluate the simulator for research or engineering work. You may not use the
-              service for abuse, unauthorized access attempts, data scraping, or automated misuse of the simulation
-              infrastructure.
-            </p>
-          </div>
-        </section>
-
-        <section className="marketing-doc-section">
-          <h2>Scope of the simulator</h2>
-          <div className="marketing-doc-copy">
-            <p>
-              litopc is a simulation and visualization tool. It is not a sign-off platform and should not be used as
-              the sole basis for manufacturing, process certification, or legal compliance decisions. Simulation
-              outputs are physics-based approximations and may not capture all real-world process effects.
-            </p>
-          </div>
-        </section>
-
-        <section className="marketing-doc-section">
-          <h2>Accounts and billing</h2>
-          <div className="marketing-doc-copy">
-            <p>
-              Authentication is handled through Clerk. Subscription billing and plan management are handled through
-              Stripe. Plan details and renewal timing are shown in the simulator account panel and Stripe billing
-              portal.
-            </p>
-          </div>
-        </section>
-
-        <section className="marketing-doc-section">
-          <h2>No warranty</h2>
-          <div className="marketing-doc-copy">
-            <p>
-              The service is provided on an as-available basis. Simulation outputs, figures, and process estimates
-              are provided without warranty and may change as the product evolves. litopc is not liable for decisions
-              made based on simulator output.
-            </p>
-          </div>
-        </section>
-
-        <section className="marketing-doc-section">
-          <h2>Changes to these terms</h2>
-          <div className="marketing-doc-copy">
-            <p>
-              These terms may be updated as the product and its features evolve. Continued use of the service after
-              a revision constitutes acceptance of the updated terms.
-            </p>
-          </div>
-        </section>
-      </article>
-    </MarketingShell>
+    <MarketingDocumentA
+      eyebrow={"Terms of use"}
+      title={"Terms of use"}
+      description={
+        "Terms for using litopc’s website, simulator, and available account features."
+      }
+    >
+      <DocSection title="Acceptable use">
+        <p>
+          You may use <Wordmark /> to learn about lithography, explore OPC behavior,
+          compare parameters, and generate figures. Do not attempt unauthorized
+          access, abuse the service, scrape the infrastructure, or automate
+          misuse.
+        </p>
+      </DocSection>
+      <DocSection title="Interpreting results">
+        <p>
+          Outputs are approximations from a simplified model. <Wordmark /> is not a
+          manufacturing sign-off platform and should not be the sole basis for
+          fabrication, process certification, or compliance decisions. Read{" "}
+          <Link href={ROUTES.modelSimulation}>the model scope</Link> when
+          evaluating results.
+        </p>
+      </DocSection>
+      <DocSection title="Accounts and access">
+        <p>
+          Available features and usage allowances depend on the current account
+          state. Sign-in, when enabled, uses Clerk. Any enabled paid
+          subscription is managed through Stripe and the{" "}
+          <Link href={ROUTES.billingPolicy}>billing policy</Link>.
+        </p>
+      </DocSection>
+      <DocSection title="Availability and responsibility">
+        <p>
+          The service is provided on an as-available basis, without warranty.
+          Features, models, and outputs may change as the product develops.
+          <Wordmark /> is not liable for decisions made from simulator output.
+        </p>
+      </DocSection>
+      <DocSection title="Updates and contact">
+        <p>
+          These terms may change as the product evolves. Continued use after a
+          revision constitutes acceptance of the updated terms. Questions can be
+          sent to{" "}
+          <a href="mailto:mincheol.chris.lee@gmail.com">
+            mincheol.chris.lee@gmail.com
+          </a>
+          .
+        </p>
+      </DocSection>
+    </MarketingDocumentA>
   );
 }

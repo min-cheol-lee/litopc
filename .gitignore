@@ -16,6 +16,7 @@ backend/.venv/
 frontend/node_modules/
 frontend/.next/
 frontend/.next-debug/
+frontend/out/
 frontend/.next-font-report/
 frontend/.turbo/
 frontend/build.log

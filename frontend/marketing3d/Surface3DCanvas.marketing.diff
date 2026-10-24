@@ -1,0 +1,67 @@
+367a368,383
+> /** Fade the data overlay without resampling the field or its transparency map. */
+> function updateIntensityOpacity(surface: THREE.Group, showAerial: boolean, value = 1) {
+>   const opacity = Number.isFinite(value) ? THREE.MathUtils.clamp(value, 0, 1) : 1;
+>   surface.visible = showAerial && opacity > 0;
+>   surface.traverse((object) => {
+>     if (!(object instanceof THREE.Mesh)) return;
+>     const materials = Array.isArray(object.material) ? object.material : [object.material];
+>     for (const material of materials) {
+>       material.opacity = opacity;
+>       // The alpha test follows opacity, retaining the same low-field cutoff
+>       // while fading. Keep its shader branch enabled even while hidden at 0.
+>       material.alphaTest = .035 * Math.max(opacity, Number.EPSILON);
+>     }
+>   });
+> }
+> 
+385c401
+< const SceneInner=React.forwardRef<Surface3DHandle,Surface3DProps & { onDprChange: (ratio: number) => void }>((props,ref)=>{
+---
+> const SceneInner=React.forwardRef<Surface3DHandle,Surface3DProps & { onDprChange: (ratio: number) => void; transparent?: boolean; onFirstFrame?: () => void }>((props,ref)=>{
+393a410,415
+>   const drawnFrames=useRef(0);
+>   useFrame(()=>{
+>     if(drawnFrames.current>=3)return;
+>     drawnFrames.current++;
+>     if(drawnFrames.current<3)invalidate();else props.onFirstFrame?.();
+>   });
+400a423
+>     if(props.transparent){scene.background=null;return;}
+411c434
+<   },[gl,scene]);
+---
+>   },[gl,scene,props.transparent]);
+442c465,467
+<     const mesh=new THREE.Mesh(geo,mat);mesh.name="RenderedIntensitySurface";mesh.position.z=SURFACE_Z;surface.add(mesh);surface.visible=props.showAerial;invalidate();
+---
+>     const mesh=new THREE.Mesh(geo,mat);mesh.name="RenderedIntensitySurface";mesh.position.z=SURFACE_Z;surface.add(mesh);
+>     updateIntensityOpacity(surface, props.showAerial, props.colormapOpacity);
+>     invalidate();
+449c474,477
+<   useEffect(()=>{surface.visible=props.showAerial;invalidate();},[props.showAerial,surface,invalidate]);
+---
+>   useEffect(() => {
+>     updateIntensityOpacity(surface, props.showAerial, props.colormapOpacity);
+>     invalidate();
+>   }, [props.showAerial, props.colormapOpacity, surface, invalidate]);
+458c486
+<     if(props.showTargetOverlay)add(props.targetContours,0x8dbebc,true,null,undefined,.75);
+---
+>     if(props.showTargetOverlay)add(props.targetContours,props.targetColor??0xcc4a5c,true,null,undefined,.9);
+502c530
+<   },[props.contours,props.targetContours,props.finalMaskContours,props.showMainContour,props.showTargetOverlay,props.compareActive,props.compareAContours,props.compareBContours,props.sweepContourSets,props.epeContours,props.epeMode,props.fovNm,props.intensityData,props.depthScale,props.showAerial,props.contourStyle,props.zoomScale,size.height,camera,contours,invalidate]);
+---
+>   },[props.contours,props.targetContours,props.finalMaskContours,props.showMainContour,props.showTargetOverlay,props.compareActive,props.compareAContours,props.compareBContours,props.sweepContourSets,props.epeContours,props.epeMode,props.fovNm,props.intensityData,props.depthScale,props.showAerial,props.contourStyle,props.zoomScale,size.height,camera,contours,invalidate,props.targetColor]);
+526c554
+<     const silicon=new THREE.Mesh(new THREE.BoxGeometry(1.05,1.05,MASK_DEPTH),new THREE.MeshPhysicalMaterial({color:0x1e2f42,emissive:0x030911,emissiveIntensity:.22,roughness:.09,metalness:.72,clearcoat:.55,clearcoatRoughness:.07,envMapIntensity:.5}));
+---
+>     const silicon=new THREE.Mesh(new THREE.BoxGeometry(1.05,1.05,MASK_DEPTH),new THREE.MeshPhysicalMaterial({color:props.waferColor??0x1e2f42,emissive:0x030911,emissiveIntensity:.22,roughness:.09,metalness:.72,clearcoat:.55,clearcoatRoughness:.07,envMapIntensity:.5}));
+533c561
+<   },[ground,reflections,resolution,invalidate]);
+---
+>   },[ground,reflections,resolution,invalidate,props.waferColor]);
+673c701
+< const Surface3DCanvas=React.forwardRef<Surface3DHandle,Surface3DProps&{className?:string;style?:React.CSSProperties}>((props,ref)=>{
+---
+> const Surface3DCanvas=React.forwardRef<Surface3DHandle,Surface3DProps&{className?:string;style?:React.CSSProperties;transparent?:boolean;onFirstFrame?:()=>void}>((props,ref)=>{

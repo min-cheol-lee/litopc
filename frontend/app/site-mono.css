@@ -1,0 +1,791 @@
+/* Site theme (chosen 2026-10-23): black on white, applied through the .pa-mono wrapper in ShellA.
+   The rules in site.css stay as the base and are overridden here. */
+.pa-mono .pa {
+  --pa-ink: #111111;
+  --pa-muted: #555555;
+  --pa-faint: #8a8a8a;
+  --pa-line: #e6e6e6;
+  --pa-glass: #ffffff;
+  --pa-glass-border: #e3e3e3;
+  color: var(--pa-ink);
+  background: #ffffff;
+}
+.pa-mono .pa :where(a, button, summary, input, [tabindex]):focus-visible {
+  outline: 2px solid #111;
+}
+.pa-mono .pa-eyebrow {
+  color: #8a8a8a;
+}
+
+/* Header */
+.pa-mono .pa-header {
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: 1px solid #ececec;
+}
+.pa-mono .pa-brand-mark {
+  color: #111;
+}
+.pa-mono .pa-brand-sep {
+  background: #d9d9d9;
+}
+.pa-mono .pa-brand-tag {
+  color: #8a8a8a;
+}
+.pa-mono .pa-nav {
+  color: #333;
+}
+.pa-mono .pa-nav a:hover {
+  color: #000;
+}
+.pa-mono .pa .pa-open {
+  border: 1px solid #111;
+  background: #111;
+  color: #fff;
+}
+.pa-mono .pa .pa-open:hover {
+  background: #2b2b2b;
+  border-color: #2b2b2b;
+}
+.pa-mono .pa-menu summary span {
+  background: #111;
+}
+.pa-mono .pa-menu nav {
+  border: 1px solid #e3e3e3;
+  background: #fff;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.12);
+}
+
+/* Buttons: black pill, grey outline */
+.pa-mono .pa .pa-button {
+  border: 1px solid #111;
+  background: #111;
+  color: #fff;
+  box-shadow: none;
+}
+.pa-mono .pa .pa-button:hover {
+  background: #2b2b2b;
+  border-color: #2b2b2b;
+  box-shadow: none;
+}
+.pa-mono .pa .pa-button-outline {
+  background: #f4f4f4;
+  border-color: #f4f4f4;
+  color: #111;
+}
+.pa-mono .pa .pa-button-outline:hover {
+  background: #e9e9e9;
+  border-color: #e9e9e9;
+}
+.pa-mono .pa-link,
+.pa-mono .pa-centered .pa-link {
+  border: 1px solid #e3e3e3;
+  background: #fff;
+  color: #111;
+}
+.pa-mono .pa-centered .pa-link:hover {
+  background: #f4f4f4;
+  border-color: #d9d9d9;
+}
+
+/* Hero copy */
+.pa-mono .pa-hero-copy h1 {
+  color: #111;
+  background: none;
+  -webkit-text-fill-color: #111;
+}
+.pa-mono .pa-hero-lead {
+  color: #444;
+}
+.pa-mono .pa-hero-sub {
+  color: #8a8a8a;
+}
+.pa-mono .pa-hero-stage .pa-hero-note {
+  color: #8a8a8a;
+}
+.pa-mono .pa-hero-stage .pa-hero-note .pa-wordmark {
+  color: #111;
+}
+.pa-mono .pa-hero-state {
+  color: #666;
+}
+.pa-mono .pa-hero-state::after {
+  background: #dcdcdc;
+}
+
+/* The stage: a black pane on the white page (the simulation keeps its own look) */
+.pa-mono .pa-hero-stage .m3d-stage {
+  border: 1px solid #1c1c1c;
+  background: linear-gradient(180deg, #121212 0%, #050505 100%);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.22);
+}
+.pa-mono .pa-hero-stage::before {
+  background: radial-gradient(ellipse 54% 44% at 50% 38%, rgba(255, 255, 255, 0.07), transparent 70%);
+}
+.pa-mono .pa-hero-stage::after {
+  background: none;
+}
+
+/* Segmented controls on white */
+.pa-mono .pa .pa-seg {
+  border-color: #e3e3e3;
+  background: #f4f4f4;
+}
+.pa-mono .pa .pa-seg button {
+  color: #444;
+}
+.pa-mono .pa .pa-seg button:hover:not([aria-selected="true"]):not([aria-pressed="true"]) {
+  color: #000;
+}
+.pa-mono .pa .pa-seg button[aria-selected="true"],
+.pa-mono .pa .pa-seg button[aria-pressed="true"] {
+  color: #fff;
+  background: #111;
+  box-shadow: none;
+}
+.pa-mono .pa .pa-seg button[data-invite] {
+  color: #fff;
+  background: #111;
+  box-shadow: none;
+}
+.pa-mono .pa .pa-seg button[data-invite]:hover {
+  background: #2b2b2b;
+}
+
+/* Sections */
+.pa-mono .pa-section {
+  border-top: 1px solid #ececec;
+}
+.pa-mono .pa-section::before,
+.pa-mono .pa-correct::before,
+.pa-mono .pa-access::before {
+  background: none;
+}
+.pa-mono .pa-section-head h2,
+.pa-mono .pa-close-cta h2 {
+  color: #111;
+}
+.pa-mono .pa-section-head p,
+.pa-mono .pa-close-cta p {
+  color: #555;
+}
+.pa-mono .pa-section-head p a,
+.pa-mono .pa-plans-note a {
+  color: #111;
+}
+
+/* Panels stay black: the figures were drawn for a dark surface */
+.pa-mono .pa-panel {
+  border: 1px solid #1c1c1c;
+  background: #0b0b0b;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.16);
+}
+.pa-mono .pa-panel-lit::after {
+  background: radial-gradient(ellipse 70% 60% at 50% 40%, rgba(255, 255, 255, 0.08), transparent 70%);
+}
+.pa-mono .pa-panel > img,
+.pa-mono .pa-raster {
+  background: #000;
+}
+.pa-mono .pa-panel-label,
+.pa-mono .pa-trio > .pa-panel > span {
+  color: #9a9a9a;
+}
+.pa-mono .pa-replay-value {
+  color: #fff;
+}
+
+/* Replay bar on white */
+.pa-mono .pa-play {
+  border: 1px solid #111;
+  background: #111;
+  color: #fff;
+}
+.pa-mono .pa-play:hover {
+  background: #2b2b2b;
+}
+.pa-mono .pa-scrub input::-webkit-slider-runnable-track {
+  background: linear-gradient(90deg, #111 var(--pa-fill), #e3e3e3 var(--pa-fill));
+}
+.pa-mono .pa-scrub input::-webkit-slider-thumb {
+  background: #111;
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.08);
+}
+.pa-mono .pa-scrub input::-moz-range-track {
+  background: #e3e3e3;
+}
+.pa-mono .pa-scrub input::-moz-range-progress {
+  background: #111;
+}
+.pa-mono .pa-scrub input::-moz-range-thumb {
+  background: #111;
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.08);
+}
+.pa-mono .pa-keys button {
+  color: #333;
+}
+.pa-mono .pa-key-contour {
+  border-color: #111;
+}
+.pa-mono .pa-replay-caption {
+  color: #8a8a8a;
+}
+
+/* Pricing: white cards, grey Pro card */
+.pa-mono .pa-plan {
+  border: 1px solid #e3e3e3;
+  background: #fff;
+  box-shadow: none;
+}
+.pa-mono .pa-plan-pro {
+  border-color: #e3e3e3;
+  background: #f6f6f6;
+  box-shadow: none;
+}
+.pa-mono .pa-plan-price {
+  color: #111;
+}
+.pa-mono .pa-plan-price small,
+.pa-mono .pa-plan-terms {
+  color: #666;
+}
+.pa-mono .pa-plan dl > div {
+  border-top: 1px solid #e6e6e6;
+}
+.pa-mono .pa-plan dt {
+  color: #8a8a8a;
+}
+.pa-mono .pa-plan dd {
+  color: #222;
+}
+.pa-mono .pa-plan-founding {
+  border: 1px solid #e3e3e3;
+  background: #fff;
+  color: #333;
+}
+.pa-mono .pa-plan-founding strong {
+  color: #111;
+}
+.pa-mono .pa-plans-note {
+  color: #8a8a8a;
+}
+
+/* Closing band and creator */
+.pa-mono .pa-close::before {
+  background: none;
+}
+.pa-mono .pa-creator p {
+  color: #222;
+}
+.pa-mono .pa-creator-links {
+  color: #555;
+}
+.pa-mono .pa-creator-links a {
+  border: 1px solid #e3e3e3;
+  background: #fff;
+  color: #111;
+}
+.pa-mono .pa-creator-links a:hover {
+  background: #f4f4f4;
+  border-color: #d9d9d9;
+  color: #000;
+}
+
+/* Footer */
+.pa-mono .pa-footer {
+  border-top: 1px solid #ececec;
+  background: #fafafa;
+}
+.pa-mono .pa-footer-brand p,
+.pa-mono .pa-footer-head,
+.pa-mono .pa-footer-bottom {
+  color: #8a8a8a;
+}
+.pa-mono .pa-footer-top nav {
+  color: #333;
+}
+.pa-mono .pa-footer-top nav a:hover {
+  color: #000;
+}
+.pa-mono .pa-footer-bottom {
+  border-top: 1px solid #ececec;
+}
+
+/* Outline buttons that sit on the grey Pro card need their own edge */
+.pa-mono .pa-plan-pro .pa-button-outline {
+  background: #fff;
+  border-color: #d9d9d9;
+}
+.pa-mono .pa-plan-pro .pa-button-outline:hover {
+  background: #f4f4f4;
+  border-color: #c9c9c9;
+}
+
+/* Second pass (2026-10-23): less black. Light stage, light figure panels, lighter headline,
+   only the Corrected invite and the primary calls to action stay black. */
+.pa-mono .pa-hero-copy h1 {
+  font-weight: 500;
+  letter-spacing: -0.045em;
+}
+.pa-mono .pa-section-head h2,
+.pa-mono .pa-close-cta h2 {
+  font-weight: 600;
+}
+
+/* Stage: a bright pane, the stack reads as an object on a table */
+.pa-mono .pa-hero-stage .m3d-stage {
+  border: 1px solid #e3e3e3;
+  background: linear-gradient(180deg, #ffffff 0%, #ededed 100%);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.1);
+}
+.pa-mono .pa-hero-stage::before {
+  background: radial-gradient(ellipse 54% 44% at 50% 38%, rgba(0, 0, 0, 0.05), transparent 70%);
+}
+.pa-mono .pa-hero-hint,
+.pa-mono .pa .pa-hero-reset {
+  border: 1px solid #e3e3e3;
+  background: rgba(255, 255, 255, 0.85);
+  color: #333;
+}
+.pa-mono .pa .pa-hero-reset:hover {
+  background: #fff;
+  border-color: #cfcfcf;
+  color: #000;
+}
+
+/* Segmented controls: quiet; only the Corrected invite is black */
+.pa-mono .pa .pa-seg {
+  border-color: #e6e6e6;
+  background: #f1f1f1;
+}
+.pa-mono .pa .pa-seg button {
+  color: #555;
+}
+.pa-mono .pa .pa-seg button[aria-selected="true"],
+.pa-mono .pa .pa-seg button[aria-pressed="true"] {
+  color: #111;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.pa-mono .pa .pa-seg button[data-invite] {
+  color: #fff;
+  background: #111;
+}
+
+/* Figure panels: light, with the line language inverted for a light surface */
+.pa-mono .pa-panel {
+  border: 1px solid #e6e6e6;
+  background: #f6f6f6;
+  box-shadow: none;
+}
+.pa-mono .pa-panel-lit::after {
+  background: none;
+}
+.pa-mono .pa-panel > img,
+.pa-mono .pa-raster {
+  background: #0b0b0b;
+}
+.pa-mono .pa-ln-print {
+  fill: rgba(0, 0, 0, 0.05);
+  stroke: #111;
+  filter: none;
+}
+.pa-mono .pa-ln-mask {
+  stroke: #7f9fb8;
+}
+.pa-mono .pa-key-contour {
+  border-color: #111;
+}
+.pa-mono .pa-panel-label,
+.pa-mono .pa-trio > .pa-panel > span,
+.pa-mono .pa-replay-plot-note {
+  color: #8a8a8a;
+}
+.pa-mono .pa-panel-label > span {
+  color: #b0b0b0;
+}
+.pa-mono .pa-replay-value {
+  color: #111;
+}
+.pa-mono .pa-replay-panel:first-child .pa-replay-value {
+  color: #666;
+}
+.pa-mono .pa-epe-axis {
+  stroke: #d4d4d4;
+}
+.pa-mono .pa-epe-area {
+  fill: rgba(0, 0, 0, 0.06);
+}
+.pa-mono .pa-epe-trace {
+  stroke: #111;
+}
+.pa-mono .pa-epe-dot {
+  fill: #111;
+}
+.pa-mono .pa-epe-dot[data-active] {
+  filter: none;
+}
+.pa-mono .pa-epe-label {
+  fill: #111;
+}
+.pa-mono .pa-epe-tick {
+  fill: #8a8a8a;
+}
+
+/* Replay controls: grey, not black */
+.pa-mono .pa-play {
+  border: 1px solid #e3e3e3;
+  background: #f1f1f1;
+  color: #111;
+}
+.pa-mono .pa-play:hover {
+  background: #e6e6e6;
+}
+
+
+/* ---- Sizes per x.ai: slimmer header, smaller headline and hero buttons ---- */
+.pa-mono .pa {
+  --pa-header: 56px;
+}
+.pa-mono .pa-brand-mark {
+  font-size: 22px;
+}
+.pa-mono .pa-brand-tag {
+  font-size: 11px;
+}
+.pa-mono .pa-nav {
+  gap: 30px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.pa-mono .pa .pa-open {
+  min-height: 32px;
+  padding: 0 13px;
+  font-size: 13px;
+}
+.pa-mono .pa-hero-copy h1 {
+  font-size: clamp(38px, 4.1vw, 62px);
+  line-height: 1.0;
+}
+.pa-mono .pa-hero-lead {
+  margin-top: 18px;
+  font-size: 17px;
+}
+.pa-mono .pa .pa-button {
+  min-height: 44px;
+  padding: 0 22px;
+  font-size: 14.5px;
+}
+.pa-mono .pa-hero-actions {
+  margin-top: 26px;
+}
+.pa-mono .pa-hero-sub {
+  margin-top: 14px;
+}
+
+/* ---- Corrected: a soft pulse that invites the first click ---- */
+@keyframes pa-invite-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(17, 17, 17, 0.38);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(17, 17, 17, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(17, 17, 17, 0);
+  }
+}
+.pa-mono .pa .pa-seg button[data-invite] {
+  position: relative;
+  animation: pa-invite-pulse 2.4s ease-out 1.4s infinite;
+}
+.pa-mono .pa .pa-seg button[data-invite]:hover {
+  animation: none;
+  background: #2b2b2b;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pa-mono .pa .pa-seg button[data-invite] {
+    animation: none;
+  }
+}
+
+/* ---- Subpages (docs) in the same tone ---- */
+.pa-mono .pa-doc::before {
+  background: none;
+}
+.pa-mono .pa-doc-breadcrumb {
+  color: #8a8a8a;
+}
+.pa-mono .pa-doc-breadcrumb .pa-wordmark {
+  color: #111;
+}
+.pa-mono .pa-doc-header h1 {
+  color: #111;
+  background: none;
+  -webkit-text-fill-color: #111;
+  font-weight: 600;
+}
+.pa-mono .pa-doc-header > p {
+  color: #555;
+}
+.pa-mono .pa-doc-contents {
+  color: #666;
+}
+.pa-mono .pa-doc-contents-head {
+  color: #9a9a9a;
+}
+.pa-mono .pa-doc-contents a {
+  color: #555;
+}
+.pa-mono .pa-doc-contents a:hover {
+  color: #000;
+}
+@media (max-width: 1000px) {
+  .pa-mono .pa-doc-contents a {
+    border: 1px solid #e3e3e3;
+    background: #fff;
+    color: #333;
+  }
+  .pa-mono .pa-doc-contents a:hover {
+    background: #f4f4f4;
+  }
+}
+.pa-mono .pa-doc-section p,
+.pa-mono .pa-doc-prose p,
+.pa-mono .pa-basics-caption,
+.pa-mono .pa-basics-figure > figcaption {
+  color: #444;
+}
+.pa-mono .pa-doc-section > p.pa-doc-lead,
+.pa-mono .pa-doc-section strong,
+.pa-mono .pa-doc-plain .pa-doc-section h2,
+.pa-mono .pa-fig-threshold-control strong {
+  color: #111;
+}
+.pa-mono .pa-doc-section a,
+.pa-mono .pa-doc-prose a,
+.pa-mono .pa-doc-references > a,
+.pa-mono .pa-doc-aside a {
+  color: #111;
+}
+.pa-mono .pa-doc-body figcaption,
+.pa-mono .pa-doc-references > span,
+.pa-mono .pa-doc-section .pa-doc-references > p,
+.pa-mono .pa-doc-aside,
+.pa-mono .pa-doc-body .pa-fig-scroll-hint,
+.pa-mono .pa-basics-pair figcaption,
+.pa-mono .pa-fig-sequence > .pa-panel > span,
+.pa-mono .pa-fig-pair .pa-panel > span {
+  color: #8a8a8a;
+}
+.pa-mono .pa-fig-sequence > .pa-panel > p,
+.pa-mono .pa-fig-threshold-control label {
+  color: #555;
+}
+.pa-mono .pa-doc-equation,
+.pa-mono .pa-doc-table,
+.pa-mono .pa-fig {
+  border: 1px solid #e6e6e6;
+  background: #f6f6f6;
+  box-shadow: none;
+}
+.pa-mono .pa-doc-equation math {
+  color: #111;
+}
+.pa-mono .pa-doc-equation > span,
+.pa-mono .pa-doc-table th {
+  color: #8a8a8a;
+}
+.pa-mono .pa-doc-table td {
+  border-top: 1px solid #e6e6e6;
+  color: #222;
+}
+.pa-mono .pa-doc-glossary th[scope="row"] {
+  border-top: 1px solid #e6e6e6;
+  color: #111;
+}
+.pa-mono .pa-doc-glossary tr {
+  border-top: 1px solid #e6e6e6;
+}
+.pa-mono .pa-doc-glossary td:nth-child(3),
+.pa-mono .pa-doc-glossary td:nth-child(3)::before {
+  color: #777;
+}
+.pa-mono .pa-doc-references,
+.pa-mono .pa-doc-actions,
+.pa-mono .pa-fig > figcaption {
+  border-top: 1px solid #e6e6e6;
+}
+.pa-mono .pa-doc-creator-links a {
+  border: 1px solid #e3e3e3;
+  background: #fff;
+  color: #111;
+}
+.pa-mono .pa-doc-creator-links a:hover {
+  background: #f4f4f4;
+  border-color: #d9d9d9;
+}
+.pa-mono .pa-doc-creator-icon {
+  background: #f1f1f1;
+  color: #111;
+}
+.pa-mono .pa-doc-body svg text,
+.pa-mono .pa .m-scale-bar text {
+  fill: #555;
+}
+.pa-mono .pa .m-scale-bar path {
+  stroke: #999;
+}
+.pa-mono .pa-fig-sequence > .pa-panel > svg,
+.pa-mono .pa-basics-pair > .pa-panel > svg {
+  background: #fff;
+}
+.pa-mono .pa-basics-label {
+  border: 1px solid #e3e3e3;
+  background: rgba(255, 255, 255, 0.88);
+  color: #111;
+}
+/* docs sliders */
+.pa-mono .pa .pa-fig-range::-webkit-slider-runnable-track,
+.pa-mono .pa .m-replay-scrub input::-webkit-slider-runnable-track {
+  background: linear-gradient(90deg, #111 var(--pa-fill), #e3e3e3 var(--pa-fill));
+}
+.pa-mono .pa .pa-fig-range::-webkit-slider-thumb,
+.pa-mono .pa .m-replay-scrub input::-webkit-slider-thumb {
+  background: #111;
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.08);
+}
+.pa-mono .pa .pa-fig-range::-moz-range-track,
+.pa-mono .pa .m-replay-scrub input::-moz-range-track {
+  background: #e3e3e3;
+}
+.pa-mono .pa .pa-fig-range::-moz-range-progress,
+.pa-mono .pa .m-replay-scrub input::-moz-range-progress {
+  background: #111;
+}
+.pa-mono .pa .pa-fig-range::-moz-range-thumb,
+.pa-mono .pa .m-replay-scrub input::-moz-range-thumb {
+  background: #111;
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.08);
+}
+/* docs replay (OpcReplay) */
+.pa-mono .pa .m-replay-canvas {
+  border: 1px solid #e6e6e6;
+  background: #f6f6f6;
+  box-shadow: none;
+}
+.pa-mono .pa .m-replay-after::after {
+  background: none;
+}
+.pa-mono .pa .m-replay-label,
+.pa-mono .pa .m-replay-value small,
+.pa-mono .pa .m-replay-scrub,
+.pa-mono .pa .m-replay-caption > p,
+.pa-mono .pa .m-recording-specs,
+.pa-mono .pa .m-caption-label {
+  color: #8a8a8a;
+}
+.pa-mono .pa .m-replay-label > span {
+  color: #b0b0b0;
+}
+.pa-mono .pa .m-replay-value {
+  color: #111;
+}
+.pa-mono .pa .m-replay-before .m-replay-value {
+  color: #666;
+}
+.pa-mono .pa .m-play-button {
+  border: 1px solid #e3e3e3;
+  background: #f1f1f1;
+  color: #111;
+}
+.pa-mono .pa .m-play-button:hover {
+  background: #e6e6e6;
+  border-color: #e3e3e3;
+}
+.pa-mono .pa .m-error-trace {
+  color: #d4d4d4;
+}
+.pa-mono .pa .m-error-trace polyline {
+  stroke: #111;
+}
+.pa-mono .pa .m-error-trace circle {
+  fill: #111;
+}
+.pa-mono .pa .m-layer-legend button {
+  color: #333;
+}
+.pa-mono .pa .m-layer-legend button:hover {
+  background: #f1f1f1;
+}
+.pa-mono .pa .m-swatch-contour {
+  border-color: #111;
+}
+.pa-mono .pa .m-recording-specs > span {
+  border-left: 1px solid #e6e6e6;
+}
+.pa-mono .pa .m-layer-contour {
+  fill: rgba(0, 0, 0, 0.05);
+  stroke: #111;
+  filter: none;
+}
+.pa-mono .pa .m-layer-mask {
+  stroke: #7f9fb8;
+}
+
+/* ---- Target line: grey family, distinct from the black print line and the steel-blue mask ---- */
+.pa-mono .pa-ln-target,
+.pa-mono .pa .m-layer-target {
+  stroke: #8f8f8f;
+}
+.pa-mono .pa-key-target,
+.pa-mono .pa .m-swatch-target {
+  border-color: #8f8f8f;
+}
+
+/* ---- Subpage titles in the hero's voice ---- */
+.pa-mono .pa-doc-header h1 {
+  font-size: clamp(34px, 3.6vw, 54px);
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  line-height: 1.0;
+}
+
+/* ---- OPC emphasis: the acronym alone, in ink ---- */
+.pa-mono .pa .pa-opc {
+  color: #111;
+}
+
+/* ---- Hero headline: "Light the mask. / See the silicon. / Correct the difference." ---- */
+.pa-mono .pa-hero-copy h1 {
+  font-size: clamp(30px, 3.3vw, 50px);
+  line-height: 1.04;
+}
+
+/* Transparent 3D stills sit on the same light pane as the hero stage */
+.pa-mono .pa-panel > img.pa-still {
+  background: linear-gradient(180deg, #ffffff 0%, #ededed 100%);
+}
+
+/* Section intros: even line lengths, no one-word last line */
+.pa-mono .pa-section-head p {
+  text-wrap: balance;
+}
+
+/* Hero lead: no single-word last line */
+.pa-mono .pa-hero-lead {
+  text-wrap: pretty;
+}
+
+/* ---- Simulation figures on white: recorded light in the 3D view's colormap, lines in ink ---- */
+.pa-mono .pa-basics-figure > svg {
+  background: #fff;
+}
+.pa-mono .pa-print .pa-miss line {
+  stroke: #111;
+}
+.pa-mono .pa-print .pa-miss circle {
+  fill: #111;
+}
+.pa-mono .pa-raster {
+  background: none;
+}
