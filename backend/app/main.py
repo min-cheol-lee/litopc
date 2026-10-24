@@ -140,7 +140,8 @@ DISABLED_PRESET_FALLBACKS = {
 
 FREE_CUSTOM_MAX_RECTS = 5
 PRO_CUSTOM_MAX_SHAPES = 48
-FREE_SWEEP_MAX_POINTS = 24
+# Free sweeps are a 5-point taste; Pro runs up to 120 points per sweep.
+FREE_SWEEP_MAX_POINTS = 5
 PRO_SWEEP_MAX_POINTS = 120
 FREE_RUNS_PER_DAY = 80
 FREE_SWEEP_POINTS_PER_DAY = 600
@@ -149,7 +150,7 @@ PRO_RUNS_PER_DAY = 2000
 PRO_SWEEP_POINTS_PER_DAY = 12000
 PRO_EXPORTS_PER_DAY = 600
 FREE_SCENARIO_LIMIT = 8
-ENTITLEMENT_VERSION = "2026-02-24"
+ENTITLEMENT_VERSION = "2026-10-24"
 POLICY_AUDIT_MAX_ROWS = 2000
 PRODUCT_EVENT_MAX_ROWS = 6000
 TRUST_BENCHMARK_ARTIFACT_DIR = Path(__file__).resolve().parent.parent / "trust" / "artifacts"
@@ -1062,8 +1063,10 @@ def _plan_entitlements(plan: Plan) -> PlanEntitlements:
         max_sweep_points_per_run=FREE_SWEEP_MAX_POINTS if plan == "FREE" else PRO_SWEEP_MAX_POINTS,
         scenario_limit=FREE_SCENARIO_LIMIT if plan == "FREE" else None,
         quick_add_enabled=plan == "PRO",
-        batch_sweep_enabled=plan == "PRO",
+        batch_sweep_enabled=True,
         high_res_export_enabled=plan == "PRO",
+        csv_export_enabled=plan == "PRO",
+        ads_enabled=plan == "FREE",
         updated_at_utc=_now_utc_iso(),
     )
 
@@ -1085,6 +1088,8 @@ def _current_entitlement_for_user(user_id: str) -> CurrentEntitlementResponse:
         quick_add_enabled=base.quick_add_enabled,
         batch_sweep_enabled=base.batch_sweep_enabled,
         high_res_export_enabled=base.high_res_export_enabled,
+        csv_export_enabled=base.csv_export_enabled,
+        ads_enabled=base.ads_enabled,
         updated_at_utc=base.updated_at_utc,
     )
 

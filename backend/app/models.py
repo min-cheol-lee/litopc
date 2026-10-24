@@ -198,6 +198,8 @@ class PlanEntitlements(BaseModel):
     quick_add_enabled: bool
     batch_sweep_enabled: bool
     high_res_export_enabled: bool
+    csv_export_enabled: bool
+    ads_enabled: bool
     updated_at_utc: str
 
 
@@ -308,6 +310,8 @@ class CurrentEntitlementResponse(BaseModel):
     quick_add_enabled: bool
     batch_sweep_enabled: bool
     high_res_export_enabled: bool
+    csv_export_enabled: bool
+    ads_enabled: bool
     updated_at_utc: str
 
 

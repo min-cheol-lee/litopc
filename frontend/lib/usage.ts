@@ -32,6 +32,9 @@ export type PlanEntitlements = {
   quick_add_enabled: boolean;
   batch_sweep_enabled: boolean;
   high_res_export_enabled: boolean;
+  /** Optional until every backend serves the 2026-10-24 entitlements. */
+  csv_export_enabled?: boolean;
+  ads_enabled?: boolean;
   updated_at_utc: string;
 };
 
@@ -52,6 +55,8 @@ export type CurrentEntitlementResponse = {
   quick_add_enabled: boolean;
   batch_sweep_enabled: boolean;
   high_res_export_enabled: boolean;
+  csv_export_enabled?: boolean;
+  ads_enabled?: boolean;
   updated_at_utc: string;
 };
 

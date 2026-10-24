@@ -103,7 +103,7 @@ const FREE_DOSE_MIN = 0.3;
 const FREE_DOSE_MAX = 0.8;
 const FREE_CUSTOM_RECT_LIMIT = 5;
 const PRO_CUSTOM_SHAPE_LIMIT = 48;
-const FREE_SWEEP_MAX_POINTS = 24;
+const FREE_SWEEP_MAX_POINTS = 5;
 const PRO_SWEEP_MAX_POINTS = 120;
 const FREE_SCENARIO_LIMIT = 8;
 const CUSTOM_MASK_LIBRARY_KEY = "litopc_mask_library_v2";
@@ -452,7 +452,8 @@ export default function Page() {
   };
   const scenarioLimit = plan === "FREE" ? FREE_SCENARIO_LIMIT : null;
   const scenarioLimitReached = scenarioLimit !== null && scenarios.length >= scenarioLimit;
-  const sweepLocked = plan === "FREE";
+  // Sweeps follow the server entitlement (open to Free since 2026-10-24, capped at 5 points).
+  const sweepLocked = currentEntitlement ? !currentEntitlement.batch_sweep_enabled : false;
   const isPitchSweepAllowed = maskMode === "TEMPLATE" && normalizedTemplateId === "DENSE_LS";
   const isSerifSweepAllowed = maskMode === "TEMPLATE" && supportsSerifSweep(normalizedTemplateId);
   const customShapeLimit = plan === "FREE" ? FREE_CUSTOM_RECT_LIMIT : PRO_CUSTOM_SHAPE_LIMIT;
@@ -1844,7 +1845,12 @@ export default function Page() {
   async function runSweep() {
     if (sweepLocked) return;
     trackProductEvent("sweep_run_clicked", { plan, sweepParam, maskMode, sweepGeometryScope });
-    const step = Math.max(0.0001, Math.abs(sweepStep));
+    // A Free sweep spreads its points over the whole requested range instead of stopping after the first few.
+    const requestedStep = Math.max(0.0001, Math.abs(sweepStep));
+    const sweepSpan = Math.abs(sweepStop - sweepStart);
+    const step = plan === "FREE" && sweepSpan / requestedStep > FREE_SWEEP_MAX_POINTS - 1 + 1e-9
+      ? Math.max(0.0001, sweepSpan / (FREE_SWEEP_MAX_POINTS - 1))
+      : requestedStep;
 
     const toBackendParam = (param: SweepParam): BatchSimRequest["param"] => {
       switch (param) {
@@ -2051,6 +2057,11 @@ export default function Page() {
   async function exportSweepResultCsv() {
     if (!sweepResult) return;
     trackProductEvent("export_attempted", { kind: "sweep_csv", plan });
+    if (plan !== "PRO") {
+      trackProductEvent("upgrade_prompt_viewed", { source: "sweep_csv", plan });
+      window.alert("CSV data export is a Pro feature.");
+      return;
+    }
     try {
       const consumed = await consumeUsage(plan, "exports", 1, false);
       setUsageStatus(consumed.status);
@@ -2538,6 +2549,7 @@ export default function Page() {
               sweepCompareALabel={compareA?.label ?? null}
               sweepCompareBLabel={compareB?.label ?? null}
               sweepLocked={sweepLocked}
+              sweepPointCap={plan === "FREE" ? FREE_SWEEP_MAX_POINTS : PRO_SWEEP_MAX_POINTS}
               onRunSweep={runSweep}
               sweepSavedSnapshots={savedSweeps.map((s) => ({ id: s.id, name: s.name, createdAt: s.createdAt, count: s.main.count, param: s.param }))}
               onSaveSweepSnapshot={saveSweepSnapshot}
@@ -2710,8 +2722,10 @@ function findEntitlementMismatch(res: EntitlementsResponse): string | null {
     { ok: (free.scenario_limit ?? null) === FREE_SCENARIO_LIMIT, msg: "FREE scenario limit mismatch" },
     { ok: free.quick_add_enabled === false, msg: "FREE quick add entitlement mismatch" },
     { ok: pro.quick_add_enabled === true, msg: "PRO quick add entitlement mismatch" },
-    { ok: free.batch_sweep_enabled === false, msg: "FREE batch sweep entitlement mismatch" },
+    { ok: free.batch_sweep_enabled === true, msg: "FREE batch sweep entitlement mismatch" },
     { ok: pro.batch_sweep_enabled === true, msg: "PRO batch sweep entitlement mismatch" },
+    { ok: free.csv_export_enabled !== true, msg: "FREE CSV export entitlement mismatch" },
+    { ok: pro.csv_export_enabled !== false, msg: "PRO CSV export entitlement mismatch" },
   ];
   const broken = checks.find((c) => !c.ok);
   return broken ? `Policy parity warning: ${broken.msg}` : null;

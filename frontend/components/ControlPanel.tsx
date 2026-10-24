@@ -136,6 +136,8 @@ export function ControlPanel(props: {
   sweepCompareALabel?: string | null;
   sweepCompareBLabel?: string | null;
   sweepLocked: boolean;
+  /** Most points one sweep may run on this plan. */
+  sweepPointCap: number;
   onRunSweep: () => void;
   sweepSavedSnapshots: Array<{ id: string; name: string; createdAt: string; count: number; param: SweepParam }>;
   onSaveSweepSnapshot: (name: string) => void;
@@ -276,6 +278,7 @@ export function ControlPanel(props: {
     sweepCompareALabel = null,
     sweepCompareBLabel = null,
     sweepLocked,
+    sweepPointCap,
     onRunSweep,
     sweepSavedSnapshots,
     onSaveSweepSnapshot,
@@ -1084,12 +1087,16 @@ export function ControlPanel(props: {
                     </button>
                     <button
                       className="mini-btn slim"
-                      disabled={!sweepResult}
+                      disabled={!sweepResult || plan !== "PRO"}
+                      title={plan !== "PRO" ? "CSV data export is a Pro feature." : undefined}
                       onClick={onExportSweepCsv}
                     >
-                      CSV
+                      {plan === "PRO" ? "CSV" : "CSV \u2605"}
                     </button>
                   </div>
+                  {plan === "FREE" && !sweepLocked && (
+                    <div className="small-note tiny-note">Free sweeps run {sweepPointCap} points across the range.</div>
+                  )}
                 </div>
                 <div className="analysis-list sweep-list">
                   {!sweepResult && <div className="small-note tiny-note">No sweep result yet.</div>}

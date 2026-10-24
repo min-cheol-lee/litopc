@@ -609,6 +609,11 @@ export function Viewport(props: {
 
   async function guardExportQuota(kind: "figure_png" | "figure_svg" | "runs_csv"): Promise<boolean> {
     trackProductEvent("export_attempted", { kind, plan: req.plan });
+    if (kind === "runs_csv" && req.plan !== "PRO") {
+      trackProductEvent("upgrade_prompt_viewed", { source: kind, plan: req.plan });
+      window.alert("CSV data export is a Pro feature.");
+      return false;
+    }
     try {
       const consumed = await consumeUsage(req.plan, "exports", 1, false);
       onUsageConsumed?.();
@@ -1925,7 +1930,8 @@ export function Viewport(props: {
             <button
               type="button"
               className="view-chip view-chip-wide"
-              disabled={exportRuns.length === 0}
+              disabled={exportRuns.length === 0 || req.plan !== "PRO"}
+              title={req.plan !== "PRO" ? "Upgrade to Pro for CSV data export." : undefined}
               onClick={(e) => {
                 e.preventDefault();
                 void onExportCsv();
@@ -1933,7 +1939,7 @@ export function Viewport(props: {
                 if (d) d.open = false;
               }}
             >
-              Runs CSV
+              {req.plan === "PRO" ? "Runs CSV" : "Runs CSV (Pro)"}
             </button>
             <button
               type="button"
@@ -1954,7 +1960,7 @@ export function Viewport(props: {
             </button>
             {req.plan === "FREE" && (
               <div className="view-inline-note">
-                ★ Pro unlocks high-resolution export (up to 4200px).
+                ★ Pro unlocks high-resolution (up to 4200px) and CSV export.
               </div>
             )}
           </div>
