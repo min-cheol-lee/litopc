@@ -789,3 +789,199 @@
 .pa-mono .pa-raster {
   background: none;
 }
+
+/* ---- Spectrum accents (2026-10-25), shared with the simulator: indigo #5e5ce6 to purple #bf5af2,
+   the two ends of the intensity colormap. Calls to action and Corrected carry it; text stays ink. ---- */
+.pa-mono .pa {
+  --pa-accent: #5e5ce6;
+  --pa-accent-2: #bf5af2;
+  --pa-cta: linear-gradient(100deg, #5e5ce6 0%, #bf5af2 100%);
+  --pa-cta-glow: rgba(124, 92, 236, 0.42);
+}
+.pa-mono .pa .pa-open,
+.pa-mono .pa .pa-button:not(.pa-button-outline) {
+  border-color: transparent;
+  background: var(--pa-cta) border-box;
+  color: #fff;
+  box-shadow: 0 8px 22px -12px var(--pa-cta-glow);
+  transition:
+    filter 0.2s,
+    box-shadow 0.2s;
+}
+.pa-mono .pa .pa-open:hover,
+.pa-mono .pa .pa-button:not(.pa-button-outline):hover {
+  border-color: transparent;
+  background: var(--pa-cta) border-box;
+  filter: brightness(1.07);
+  box-shadow: 0 10px 26px -10px var(--pa-cta-glow);
+}
+.pa-mono .pa .pa-button .pa-wordmark {
+  top: 0.05em;
+}
+
+/* Corrected: the one spectrum control on the stage. Invite = gradient with an indigo halo,
+   running = the same gradient with a light sweep, done = white segment with spectrum text. */
+@keyframes pa-correct-halo {
+  0% {
+    box-shadow: 0 0 0 0 rgba(124, 92, 236, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(124, 92, 236, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(124, 92, 236, 0);
+  }
+}
+@keyframes pa-correct-sweep {
+  from {
+    background-position: 160% 0, 0 0;
+  }
+  to {
+    background-position: -60% 0, 0 0;
+  }
+}
+.pa-mono .pa .pa-seg button.pa-seg-correct[data-invite],
+.pa-mono .pa .pa-seg button.pa-seg-correct[data-running] {
+  color: #fff;
+  background: var(--pa-cta);
+  font-weight: 600;
+}
+.pa-mono .pa .pa-seg button.pa-seg-correct[data-invite] {
+  animation: pa-correct-halo 2.4s ease-out 1.2s infinite;
+}
+.pa-mono .pa .pa-seg button.pa-seg-correct[data-invite]:hover {
+  animation: none;
+  background: var(--pa-cta);
+  filter: brightness(1.07);
+  box-shadow: 0 6px 18px -6px var(--pa-cta-glow);
+}
+.pa-mono .pa .pa-seg button.pa-seg-correct[data-running] {
+  background:
+    linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.38) 50%, transparent 70%) no-repeat,
+    var(--pa-cta);
+  background-size: 60% 100%, 100% 100%;
+  animation: pa-correct-sweep 1.1s linear infinite;
+}
+.pa-mono .pa .pa-seg button.pa-seg-correct[aria-pressed="true"]:not([data-running]) {
+  font-weight: 600;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.1),
+    inset 0 0 0 1px rgba(124, 92, 236, 0.28);
+}
+.pa-mono .pa .pa-seg button.pa-seg-correct[aria-pressed="true"]:not([data-running]) {
+  color: var(--pa-accent);
+}
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .pa-mono .pa .pa-seg button.pa-seg-correct[aria-pressed="true"]:not([data-running]) {
+    background: var(--pa-cta), #fff;
+    -webkit-background-clip: text, padding-box;
+    background-clip: text, padding-box;
+    -webkit-text-fill-color: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pa-mono .pa .pa-seg button.pa-seg-correct[data-invite],
+  .pa-mono .pa .pa-seg button.pa-seg-correct[data-running] {
+    animation: none;
+  }
+  .pa-mono .pa .pa-seg button.pa-seg-correct[data-invite] {
+    box-shadow: 0 0 0 4px rgba(124, 92, 236, 0.18);
+  }
+}
+
+/* The provenance caption in the hero's own voice: sentence case Manrope, the wordmark kept */
+.pa-mono .pa-hero-stage .pa-hero-note {
+  display: block;
+  line-height: var(--pa-stage-top);
+  color: #8a8a8a;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.pa-mono .pa-hero-stage .pa-hero-note .pa-wordmark {
+  top: 0;
+  margin: 0 0.06em;
+  color: #111;
+  font-size: 1.16em;
+  line-height: 1;
+}
+
+/* litopc in running text: "Lit" of Lithography and every OPC in the wordmark's typeface */
+.pa-mono .pa .pa-lit,
+.pa-mono .pa .pa-opc {
+  font-family: var(--font-jost), var(--pa-font), sans-serif;
+  font-style: italic;
+  font-weight: 900;
+  color: #111;
+  line-height: 1;
+}
+.pa-mono .pa .pa-lit-word {
+  white-space: nowrap;
+}
+/* Lowercase like the wordmark; Jost's x-height is smaller than Manrope's, hence the step up */
+.pa-mono .pa .pa-lit {
+  margin-right: 0.06em;
+  font-size: 1.08em;
+  letter-spacing: -0.03em;
+}
+.pa-mono .pa .pa-opc {
+  margin-right: 0.03em;
+  font-size: 1.1em;
+  letter-spacing: -0.03em;
+}
+.pa-mono .pa-hero-lead .pa-wordmark {
+  color: #111;
+}
+
+/* Hero lead in two parts: the explanation, then a beat, then what litopc does */
+.pa-mono .pa-hero-lead + .pa-hero-lead-close {
+  margin-top: 12px;
+  color: #111;
+}
+
+/* ---- Centered picture-first docs (plain-language guide) ---- */
+.pa-mono .pa-doc-centered .pa-doc-contents a {
+  border: 1px solid #e3e3e3;
+  background: #fff;
+  color: #333;
+}
+.pa-mono .pa-doc-centered .pa-doc-contents a:hover {
+  background: #f4f4f4;
+  border-color: #d9d9d9;
+  color: #000;
+}
+.pa-mono .pa-doc-centered .pa-doc-section-title {
+  color: #111;
+}
+.pa-mono .pa-doc-centered .pa-doc-section > p.pa-doc-lead {
+  color: #555;
+}
+
+/* "Start here": the beginner's door, marked with the spectrum */
+.pa-mono .pa .pa-nav-start {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.pa-mono .pa-doc-body .pa-custom-tag text {
+  fill: #fff;
+  font-size: 36px;
+}
+/* The header's beginner link is handwritten (Caveat), sized so its x-height sits with Manrope's */
+.pa-mono .pa .pa-nav-start {
+  font-family: var(--font-caveat), "Segoe Script", cursive;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1;
+  position: relative;
+  /* Caveat's x-height sits high in its em box; nudge it down onto Manrope's centre line */
+  top: 2px;
+}
+@media (max-width: 1060px) {
+  .pa-mono .pa-menu .pa-nav-start {
+    font-size: 20px;
+  }
+}

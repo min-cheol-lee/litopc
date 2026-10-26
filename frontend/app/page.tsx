@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { ShellA, Wordmark } from "../components/site/ShellA";
-import { Opc, OpcName } from "../components/site/Opc";
+import { Lithography, Opc, OpcName, WithOpc } from "../components/site/Opc";
 import { HeroStageA } from "../components/site/HeroA";
 import { ReplayA } from "../components/site/ReplayA";
 import { SimulationFigure } from "../components/site/Figures";
@@ -71,8 +71,10 @@ export default function Home() {
               Correct the difference.
             </h1>
             <p className="pa-hero-lead">
-              Lithography prints chip patterns onto silicon with light, and at this scale the print
-              blurs. Reshaping the mask to compensate is called <OpcName />, or <Opc />.{" "}
+              <Lithography /> prints chip patterns onto silicon with light, and at this scale
+              the print blurs. Reshaping the mask to compensate is called <OpcName />, or <Opc />.
+            </p>
+            <p className="pa-hero-lead pa-hero-lead-close">
               <Wordmark /> simulates both in your browser.
             </p>
             <div className="pa-hero-actions">
@@ -126,7 +128,9 @@ export default function Home() {
             <ReplayA />
           </div>
           <Link className="pa-link" href={CORRECTION_GUIDE} data-reveal>
-            How OPC works
+            <span>
+              How <Opc /> works
+            </span>
             <ChevronIcon />
           </Link>
         </div>
@@ -151,7 +155,9 @@ export default function Home() {
                 {PLAN_ROWS.map(([label, free]) => (
                   <div key={label}>
                     <dt>{label}</dt>
-                    <dd>{free}</dd>
+                    <dd>
+                      <WithOpc text={free} />
+                    </dd>
                   </div>
                 ))}
               </dl>
@@ -203,7 +209,7 @@ export default function Home() {
               <a href={CREATOR_WEBSITE_URL} target="_blank" rel="noreferrer">
                 Min-Cheol Lee
               </a>
-              , an OPC engineer with a Ph.D. in Physics.
+              , an <Opc /> engineer with a Ph.D. in Physics.
             </p>
             <div className="pa-creator-links">
               <a href={CREATOR_WEBSITE_URL} target="_blank" rel="noreferrer">

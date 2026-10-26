@@ -1129,3 +1129,559 @@
 .pa-print .pa-miss circle {
   fill: #fff;
 }
+
+/* ---- Centered picture-first pages (plain-language guide), 2026-10-25 ----
+   One column on the page axis: centered title, contents as pills, and every section opens
+   with a centered title and a one-line lead before its picture. Tables stay left-aligned. */
+.pa-doc-centered .pa-doc-layout {
+  grid-template-columns: minmax(0, 860px);
+  row-gap: 0;
+}
+.pa-doc-centered .pa-doc-layout > .pa-doc-header,
+.pa-doc-centered .pa-doc-body,
+.pa-doc-centered .pa-doc-contents {
+  grid-column: 1;
+}
+.pa-doc-centered .pa-doc-header {
+  max-width: none;
+  text-align: center;
+}
+.pa-doc-centered .pa-doc-breadcrumb {
+  justify-content: center;
+}
+.pa-doc-centered .pa-doc-contents {
+  grid-row: auto;
+  position: static;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 760px;
+  margin: 30px auto 0;
+  padding: 0;
+  border-left: 0;
+}
+.pa-doc-centered .pa-doc-contents-head {
+  display: none;
+}
+.pa-doc-centered .pa-doc-contents a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: var(--pa-radius);
+  font-size: 13.5px;
+}
+.pa-doc-centered .pa-doc-body {
+  margin-top: 88px;
+}
+.pa-doc-centered .pa-doc-section + .pa-doc-section {
+  margin-top: 120px;
+}
+.pa-doc-centered .pa-doc-section-title {
+  max-width: 640px;
+  margin: 0 auto;
+  text-align: center;
+  font-size: clamp(28px, 2.6vw, 38px);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+.pa-doc-centered .pa-doc-section > p.pa-doc-lead {
+  max-width: 600px;
+  margin: 14px auto 0;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.55;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+}
+.pa-doc-centered .pa-doc-section > .pa-basics-caption,
+.pa-doc-centered .pa-basics-figure > figcaption,
+.pa-doc-centered .pa-basics-pair figcaption {
+  text-align: center;
+}
+.pa-doc-centered .pa-doc-section > p.pa-basics-caption {
+  max-width: 600px;
+  margin: 18px auto 0;
+  font-size: 15px;
+  text-wrap: pretty;
+}
+.pa-doc-centered .pa-basics-figure > figcaption {
+  max-width: 520px;
+  margin-inline: auto;
+  text-wrap: pretty;
+}
+.pa-doc-centered .pa-basics-figure,
+.pa-doc-centered .pa-basics-pair,
+.pa-doc-centered .pa-doc-body .pa-replay {
+  margin-top: 36px;
+}
+.pa-doc-centered .pa-doc-actions {
+  justify-content: center;
+  margin-top: 120px;
+}
+.pa-doc-centered .pa-replay-caption,
+.pa-doc-centered .pa-fig-pair > figcaption {
+  max-width: 640px;
+  margin-inline: auto;
+  text-align: center;
+  text-wrap: balance;
+}
+@media (max-width: 720px) {
+  /* Contents become one swipeable row instead of a screenful of pills */
+  .pa-doc-centered .pa-doc-contents {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    max-width: none;
+    /* bleed to the screen edge: the container is 92vw wide, so each gutter is 4vw */
+    margin-inline: -4vw;
+    padding: 2px 4vw;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
+  }
+  .pa-doc-centered .pa-doc-contents::-webkit-scrollbar {
+    display: none;
+  }
+  .pa-doc-centered .pa-doc-contents a {
+    flex: none;
+    white-space: nowrap;
+  }
+  .pa-doc-centered .pa-doc-body {
+    margin-top: 56px;
+  }
+  .pa-doc-centered .pa-doc-section + .pa-doc-section {
+    margin-top: 80px;
+  }
+  .pa-doc-centered .pa-doc-section > p.pa-doc-lead {
+    font-size: 17px;
+  }
+}
+
+/* ---- The guide's opening tour (components/site/BasicsTour.tsx) ----
+   The learn stage (simulator-learn.css, .lrn-*) played like a short film: one centered pane,
+   a quiet row of four step lines under it, one sentence. Nothing else on the first screen. */
+.pa-tour {
+  grid-column: 1;
+  max-width: 760px;
+  margin: 26px auto 0;
+  scroll-margin-top: calc(var(--pa-header) + 16px);
+}
+.pa-tour-stage.lrn {
+  min-height: 0;
+  display: block;
+  background: none;
+}
+.pa-tour-stage .lrn-stage {
+  height: clamp(340px, 40vw, 400px);
+  min-height: 0;
+  box-shadow: none;
+}
+
+/* Stage chrome in the step row's voice: hairline controls, 12 px labels, nothing heavier than the picture.
+   These override simulator-learn.css only inside the tour. */
+.pa-tour-stage .lrn-cap {
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+}
+.pa-tour-stage .lrn-seg {
+  padding: 2px;
+  box-shadow: none;
+}
+.pa-tour-stage .lrn-seg button {
+  height: 22px;
+  min-width: 34px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.pa-tour-stage .lrn-foot {
+  height: 48px;
+  padding: 0 16px;
+  gap: 12px;
+}
+.pa-tour-stage .lrn-scrub {
+  gap: 12px;
+}
+.pa-tour-stage .lrn-scrub-k {
+  font-size: 10.5px;
+}
+.pa-tour-stage .lrn-scrub-track {
+  max-width: 220px;
+}
+.pa-tour-stage .lrn-scrub-track::before,
+.pa-tour-stage .lrn-scrub-fill {
+  left: 9px;
+  right: 9px;
+}
+.pa-tour-stage .lrn-scrub-fill {
+  width: calc((100% - 18px) * var(--p, 0));
+}
+.pa-tour-stage .lrn-scrub-track button {
+  flex: none;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  font-size: 10px;
+}
+.pa-tour-stage .lrn-scrub-track button.is-on {
+  box-shadow: 0 0 0 3px var(--lt-accent-soft);
+}
+.pa-tour-stage .lrn-replay.lrn-pill {
+  height: 28px;
+  padding: 0 12px;
+  gap: 6px;
+  font-size: 12px;
+  border-color: var(--lt-line);
+}
+.pa-tour-stage .lrn-replay svg {
+  width: 12px;
+  height: 12px;
+}
+.pa-tour-stage .lrn-legend span {
+  font-size: 11.5px;
+}
+.pa-tour-stage .lrn-hud {
+  left: 14px;
+  bottom: 12px;
+  gap: 8px;
+}
+.pa-tour-stage .lrn-chip {
+  padding: 7px 11px;
+  border-radius: 12px;
+  box-shadow: none;
+}
+.pa-tour-stage .lrn-chip-k {
+  font-size: 10px;
+}
+.pa-tour-stage .lrn-chip-v {
+  font-size: 18px;
+}
+.pa-tour-stage .lrn-spark svg {
+  width: 150px;
+  height: 46px;
+}
+.pa-tour-stage .lrn-3d-corner .lrn-pill {
+  height: 28px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+.pa-tour-stage .lrn-stage-top {
+  height: 40px;
+  padding: 0 16px;
+}
+.pa-tour-stage .lrn-foot {
+  padding: 0 16px;
+}
+.pa-tour-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 16px 0 0;
+  padding: 0 2px;
+}
+.pa .pa-tour-play {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #e3e3e3;
+  background: #fff;
+  color: #111;
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
+}
+.pa .pa-tour-play:hover {
+  background: #f4f4f4;
+  border-color: #d4d4d4;
+}
+.pa-tour-play svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.pa-tour-play .pa-tour-play-tri {
+  fill: currentColor;
+  stroke-width: 1.2;
+}
+.pa-tour-steps {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pa .pa-tour-steps button {
+  width: 100%;
+  display: grid;
+  gap: 9px;
+  padding: 6px 0 2px;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pa-tour-track {
+  display: block;
+  height: 2px;
+  border-radius: 2px;
+  background: #e3e3e3;
+  overflow: hidden;
+}
+.pa-tour-track > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #5e5ce6 0%, #bf5af2 100%);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+.pa-tour-label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: #9a9a9a;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  transition: color 0.2s;
+}
+.pa-tour-label b {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.pa .pa-tour-steps button:hover .pa-tour-label,
+.pa-tour-steps .is-done .pa-tour-label {
+  color: #555;
+}
+.pa-tour-steps .is-on .pa-tour-label {
+  color: #111;
+}
+.pa-tour-steps .is-on .pa-tour-label b {
+  color: #5e5ce6;
+}
+.pa-tour-copy {
+  max-width: 560px;
+  min-height: 84px;
+  margin: 18px auto 0;
+  text-align: center;
+}
+.pa-tour-copy p {
+  margin: 0;
+}
+.pa-tour-lead {
+  color: #111;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.pa-tour-sub {
+  margin-top: 6px !important;
+  color: #6b6b6b;
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.pa-tour-provenance {
+  max-width: 560px;
+  margin: 14px auto 0;
+  text-align: center;
+  color: #a3a3a3;
+  font-size: 12px;
+  line-height: 1.5;
+  text-wrap: balance;
+}
+@media (max-width: 720px) {
+  .pa-tour {
+    margin-top: 28px;
+  }
+  .pa-tour-stage .lrn-stage {
+    height: auto;
+  }
+  .pa-tour-bar {
+    gap: 12px;
+  }
+  .pa-tour-steps {
+    gap: 6px;
+  }
+  .pa-tour-label {
+    flex-direction: column;
+    gap: 1px;
+    font-size: 12.5px;
+  }
+  .pa-tour-lead {
+    font-size: 17px;
+  }
+  .pa-doc-centered .pa-tour + .pa-doc-contents .pa-doc-contents-head {
+    display: none;
+  }
+}
+
+/* Contents after the tour: labelled, so the pills read as "the same story, slower" */
+.pa-doc-centered .pa-tour + .pa-doc-contents {
+  margin-top: 80px;
+}
+.pa-doc-centered .pa-tour + .pa-doc-contents .pa-doc-contents-head {
+  display: block;
+  flex-basis: 100%;
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+/* Section eyebrow: which tour step the section expands on */
+.pa-doc-centered .pa-doc-section-eyebrow {
+  display: block;
+  width: fit-content;
+  margin: 0 auto 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #5e5ce6;
+  background: linear-gradient(90deg, #5e5ce6 0%, #bf5af2 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ---- Picture sizes on the guide (2026-10-25): every section fits one screen ---- */
+.pa-doc-centered .pa-doc-section + .pa-doc-section {
+  margin-top: 96px;
+}
+.pa-doc-centered .pa-doc-section-title {
+  font-size: clamp(26px, 2.3vw, 34px);
+}
+.pa-doc-centered .pa-doc-section > p.pa-doc-lead {
+  margin-top: 12px;
+  font-size: 17px;
+}
+.pa-doc-centered .pa-basics-narrow {
+  max-width: 440px;
+}
+.pa-doc-centered .pa-basics-pair,
+.pa-doc-centered .pa-fig-pair > div {
+  max-width: 720px;
+  margin-inline: auto;
+}
+.pa-doc-centered .pa-basics-figure,
+.pa-doc-centered .pa-basics-pair,
+.pa-doc-centered .pa-trio,
+.pa-doc-centered .pa-doc-body .pa-replay,
+.pa-doc-centered .pa-fig-pair {
+  margin-top: 28px;
+}
+.pa-doc-centered .pa-doc-section > p.pa-basics-caption {
+  margin-top: 16px;
+  font-size: 14.5px;
+}
+.pa-doc-centered .pa-doc-section > .pa-basics-more {
+  margin-top: 18px;
+}
+.pa-doc-centered .pa-doc-section > .pa-basics-more .pa-link {
+  margin-top: 0;
+}
+@media (max-width: 640px) {
+  .pa-doc-centered .pa-basics-narrow {
+    max-width: none;
+  }
+  .pa-doc-centered .pa-doc-section + .pa-doc-section {
+    margin-top: 72px;
+  }
+}
+
+/* The custom-mask trio: numbered rectangles on the first panel */
+.pa-custom-tag circle {
+  fill: #111;
+}
+.pa-custom-tag text {
+  fill: #fff;
+  font-family: var(--pa-font);
+  font-size: 36px;
+  font-weight: 700;
+  text-anchor: middle;
+}
+.pa-doc-centered .pa-doc-section .pa-basics-more .pa-link,
+.pa-doc-centered .pa-doc-section .pa-basics-more .pa-link:hover {
+  text-decoration: none;
+}
+.pa-custom .pa-ln-mask {
+  vector-effect: non-scaling-stroke;
+}
+/* The guide opens tighter than the technical pages: the tour should sit on the first screen */
+.pa-doc-centered.pa-doc {
+  padding-top: 36px;
+}
+/* globals.css gives every button min-height 34px and a gradient; the learn stage inside the guide must not inherit it */
+.pa-tour-stage .lrn-scrub-track button,
+.pa-tour-stage .lrn-seg button {
+  min-height: 0;
+}
+.pa-tour-stage .lrn-seg button {
+  background: none;
+}
+.pa-tour-stage .lrn-seg button[aria-pressed="true"] {
+  background: var(--lt-accent-soft);
+}
+
+/* ---- The guide opens quietly (2026-10-25): title, one line, contents, then Step 1.
+   The tour sits after Step 4 as a recap. ---- */
+.pa-doc-centered .pa-doc-opening {
+  grid-column: 1;
+  max-width: 560px;
+  margin: 18px auto 0;
+  text-align: center;
+  color: #555;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-wrap: balance;
+}
+.pa-doc-centered .pa-doc-opening + .pa-doc-contents {
+  margin-top: 34px;
+}
+.pa-doc-centered .pa-doc-section .pa-tour {
+  margin-top: 28px;
+}
+/* Inside a doc section the body's p rules outrank the tour's; restate the tour text at that specificity */
+.pa-doc-centered .pa-doc-section .pa-tour-copy p.pa-tour-lead {
+  margin: 0;
+  color: #111;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+}
+.pa-doc-centered .pa-doc-section .pa-tour-copy p.pa-tour-sub {
+  margin: 6px 0 0;
+  color: #6b6b6b;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.pa-doc-centered .pa-doc-section p.pa-tour-provenance {
+  max-width: 560px;
+  margin: 14px auto 0;
+  color: #a3a3a3;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+}

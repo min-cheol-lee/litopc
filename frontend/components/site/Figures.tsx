@@ -1,6 +1,7 @@
 import geometry from "../../lib/marketing-simulation.json";
 import recording from "../../lib/marketing-opc-recording.json";
 import epeSamples from "../../lib/marketing-epe-samples.json";
+import custom from "../../lib/marketing-custom-run.json";
 
 /** A 940 nm window centered on the pattern (center 485, 480 nm): shapes read about 17% larger than the full field, centered. */
 const WINDOW = "15 -950 940 940";
@@ -61,5 +62,55 @@ export function RecordedPrint({ iteration, showMisses = false, label }: { iterat
           </g>
         ))}
     </svg>
+  );
+}
+
+/**
+ * A mask drawn by hand, not picked from the library: three rectangles, simulated and corrected
+ * with the same code the simulator runs (lib/marketing-custom-run.json, images rendered from its
+ * recorded light). Three panels: what was drawn, what printed, what the correction made of it.
+ */
+export function CustomFigure() {
+  const { x, y, size } = custom.window;
+  const view = `${x} ${-(y + size)} ${size} ${size}`;
+  const [before, after] = custom.frames;
+  return (
+    <figure className="pa-trio pa-custom" aria-label="A custom mask: drawn from three rectangles, its print, and its corrected mask">
+      <div className="pa-panel">
+        <svg className="pa-print" viewBox={view} role="img" aria-label="Three rectangles drawn as a mask: a pad with a notch and a line ending next to it">
+          {/* Each rectangle on its own, so the three the user drew stay visible as three */}
+          {custom.targetRectPaths.map((d, i) => (
+            <path key={i} className="pa-ln-mask" d={d} />
+          ))}
+          {custom.targetRects.map((r, i) => (
+            <g key={i} className="pa-custom-tag" transform={`translate(${r.x + r.w / 2} ${r.y + r.h / 2})`}>
+              <circle r="30" />
+              <text dy="0.36em">{i + 1}</text>
+            </g>
+          ))}
+        </svg>
+        <span>Drawn, 3 rectangles</span>
+      </div>
+      <div className="pa-panel pa-panel-lit">
+        <svg className="pa-print" viewBox={view} role="img" aria-label="The simulated print of the drawn mask: the light on the wafer and the printed outline against the dashed target">
+          <path className="pa-ln-mask pa-ln-mask-fill" d={before.mask} />
+          <image href="/marketing/review/custom-light-0.webp" x={x} y={-(y + size)} width={size} height={size} />
+          <path className="pa-ln-mask pa-ln-mask-edge" d={before.mask} />
+          <path className="pa-ln-target" d={custom.target} />
+          <path className="pa-ln-print" d={before.contour} />
+        </svg>
+        <span>Printed</span>
+      </div>
+      <div className="pa-panel pa-panel-lit">
+        <svg className="pa-print" viewBox={view} role="img" aria-label={`The mask after ${after.iteration} rounds of correction, now ${after.maskRects} small rectangles, and its print on the target`}>
+          <path className="pa-ln-mask pa-ln-mask-fill" d={after.mask} />
+          <image href={`/marketing/review/custom-light-${after.iteration}.webp`} x={x} y={-(y + size)} width={size} height={size} />
+          <path className="pa-ln-mask pa-ln-mask-edge" d={after.mask} />
+          <path className="pa-ln-target" d={custom.target} />
+          <path className="pa-ln-print" d={after.contour} />
+        </svg>
+        <span>Corrected, {after.iteration} rounds</span>
+      </div>
+    </figure>
   );
 }

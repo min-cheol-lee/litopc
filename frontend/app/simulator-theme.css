@@ -1,0 +1,110 @@
+/* litopc simulator theme (2026-10-25 redesign).
+   Light is the default and follows the landing design: white chrome, #f6f6f6 panels,
+   #e6e6e6 hairlines, 20px radius, Manrope. Emphasis comes from two spectrum colours
+   (indigo #5e5ce6, purple #bf5af2) taken from the intensity colormap, not from black.
+   html[data-theme="dark"] is the same system on neutral dark greys (no navy, no pure black).
+   Every simulator rule reads these tokens; the component CSS lives in simulator-ui.css. */
+@font-face {
+  font-family: "Manrope";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("/fonts/marketing/Manrope-Latin.woff2") format("woff2");
+}
+
+:root {
+  --lt-font: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --lt-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* chrome */
+  --lt-bg: #ffffff;
+  --lt-panel: #f6f6f6;
+  --lt-card: #ffffff;
+  --lt-line: #e6e6e6;
+  --lt-line-strong: #d4d4d4;
+  --lt-track: #ececec;
+  --lt-ink: #111111;
+  --lt-text: #2a2a2a;
+  --lt-muted: #6b6b6b;
+  --lt-faint: #9a9a9a;
+  --lt-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+  --lt-shadow-pop: 0 18px 44px rgba(0, 0, 0, 0.12);
+
+  /* spectrum accents (from the "apple" intensity colormap) */
+  --lt-accent: #5e5ce6;
+  --lt-accent-2: #bf5af2;
+  --lt-accent-ink: #4b49c9;
+  --lt-accent-soft: rgba(94, 92, 230, 0.1);
+  --lt-accent-line: rgba(94, 92, 230, 0.35);
+  --lt-cta: linear-gradient(100deg, #5e5ce6 0%, #bf5af2 100%);
+  --lt-cta-text: #ffffff;
+  --lt-pulse: rgba(191, 90, 242, 0.45);
+  --lt-warn: #ff453a;
+  --lt-gold: #ffd60a;
+  --lt-navy: #27436c;
+
+  /* 2D stage */
+  --lt-stage: linear-gradient(180deg, #ffffff 0%, #ededed 100%);
+  --lt-stage-line: #e3e3e3;
+  --lt-grid: rgba(0, 0, 0, 0.06);
+  --lt-print: #111111;
+  --lt-print-halo: rgba(255, 255, 255, 0.85);
+  --lt-target: #8f8f8f;
+  --lt-mask-fill: #8ab0c8;
+  --lt-mask-fill-a: 0.32;
+  --lt-mask-stroke: #7f9fb8;
+  --lt-select: #5e5ce6;
+  --lt-canvas-text: #333333;
+  --lt-pill-bg: rgba(255, 255, 255, 0.88);
+  --lt-pill-line: #e3e3e3;
+
+  /* 3D stage (the landing hero's light pane) */
+  --lt-stage-3d: linear-gradient(180deg, #ffffff 0%, #ededed 100%);
+  --lt-stage-3d-line: #e3e3e3;
+
+  --lt-radius: 20px;
+  --lt-radius-sm: 12px;
+  --lt-radius-xs: 8px;
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  --lt-bg: #141416;
+  --lt-panel: #1b1b1e;
+  --lt-card: #232327;
+  --lt-line: #2c2c31;
+  --lt-line-strong: #3a3a40;
+  --lt-track: #2a2a2f;
+  --lt-ink: #f4f4f5;
+  --lt-text: #dadadd;
+  --lt-muted: #a2a2a8;
+  --lt-faint: #74747b;
+  --lt-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  --lt-shadow-pop: 0 18px 44px rgba(0, 0, 0, 0.55);
+
+  --lt-accent: #7d7bff;
+  --lt-accent-2: #cf7cf7;
+  --lt-accent-ink: #a3a1ff;
+  --lt-accent-soft: rgba(125, 123, 255, 0.16);
+  --lt-accent-line: rgba(125, 123, 255, 0.45);
+  --lt-cta: linear-gradient(100deg, #6f6dff 0%, #c56cf0 100%);
+  --lt-pulse: rgba(207, 124, 247, 0.4);
+
+  --lt-stage: linear-gradient(180deg, #1c1c1c 0%, #0f0f0f 100%);
+  --lt-stage-line: #2a2a2a;
+  --lt-grid: rgba(255, 255, 255, 0.06);
+  --lt-print: #ffffff;
+  --lt-print-halo: rgba(0, 0, 0, 0.7);
+  --lt-target: #9a9a9a;
+  --lt-mask-fill: #8ab0c8;
+  --lt-mask-fill-a: 0.28;
+  --lt-mask-stroke: #b7cce5;
+  --lt-select: #8d8bff;
+  --lt-canvas-text: #d8d8d8;
+  --lt-pill-bg: rgba(24, 24, 26, 0.86);
+  --lt-pill-line: #333333;
+
+  --lt-stage-3d: linear-gradient(180deg, #1c1c1c 0%, #0f0f0f 100%);
+  --lt-stage-3d-line: #2a2a2a;
+  color-scheme: dark;
+}

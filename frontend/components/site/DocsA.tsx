@@ -37,21 +37,28 @@ export function TechnicalArticleA({
   contents,
   children,
   next,
+  centered = false,
+  beforeContents,
 }: {
   title: string;
   introduction: ReactNode;
   contents: { id: string; label: string }[];
   children: ReactNode;
   next: { href: string; label: string };
+  /** One centered column with the contents as pills under the title (picture-first pages). */
+  centered?: boolean;
+  /** Shown between the title and the contents (centered pages): the guide's opening tour. */
+  beforeContents?: ReactNode;
 }) {
   return (
     <ShellA>
-      <article className="pa-doc pa-doc-technical">
+      <article className={`pa-doc pa-doc-technical${centered ? " pa-doc-centered" : ""}`}>
         <div className="pa-container pa-doc-layout">
           <header className="pa-doc-header" data-reveal>
             <Breadcrumb current={title} />
             <h1>{introduction}</h1>
           </header>
+          {beforeContents}
           <nav className="pa-doc-contents" aria-label="On this page">
             <span className="pa-doc-contents-head" aria-hidden="true">
               On this page
@@ -83,10 +90,15 @@ export function TechnicalSectionA({
   id,
   title,
   children,
+  showTitle = false,
+  eyebrow,
 }: {
   id: string;
   title: string;
   children: ReactNode;
+  showTitle?: boolean;
+  /** A short label above a visible title, e.g. the tour step it expands on. */
+  eyebrow?: string;
 }) {
   return (
     <section
@@ -95,7 +107,8 @@ export function TechnicalSectionA({
       aria-labelledby={`${id}-label`}
       data-reveal
     >
-      <h2 className="pa-visually-hidden" id={`${id}-label`}>
+      {showTitle && eyebrow && <span className="pa-doc-section-eyebrow">{eyebrow}</span>}
+      <h2 className={showTitle ? "pa-doc-section-title" : "pa-visually-hidden"} id={`${id}-label`}>
         {title}
       </h2>
       {children}

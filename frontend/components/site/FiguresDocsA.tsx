@@ -364,23 +364,25 @@ export function Existing3dPair() {
     <figure className="pa-fig-pair">
       <div>
         {[
-          ["before-3d.webp", "Before correction"],
-          ["after-3d.webp", "After correction"],
+          ["l-corner-3d-before.webp", "Before correction"],
+          ["l-corner-3d-after.webp", "After correction"],
         ].map(([file, label]) => (
           <div key={file} className="pa-panel">
             <img
+              className="pa-still"
               src={`/marketing/review/${file}`}
-              alt={`litopc 3D view: ${label.toLowerCase()}`}
-              width="1000"
-              height="1000"
+              alt={`litopc 3D view of the L-corner, ${label.toLowerCase()}: the mask plate above, the light on the wafer below`}
+              width="1600"
+              height="1600"
             />
             <span>{label}</span>
           </div>
         ))}
       </div>
       <figcaption>
-        <Wordmark /> 3D views of a separate example, before and after correction.
-        Surface height represents aerial intensity, not resist.
+        <Wordmark /> 3D view of the recorded L-corner run, before and after five
+        iterations. The corrected mask grows small ears and notches, and the
+        light on the wafer comes out fuller along the whole L.
       </figcaption>
     </figure>
   );

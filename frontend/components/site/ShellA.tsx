@@ -6,6 +6,7 @@ import {
   SIMULATOR_URL,
   SUPPORT_EMAIL,
 } from "../../lib/marketing";
+import { Opc } from "./Opc";
 import { RevealA } from "./RevealA";
 import { ROUTES } from "./routes";
 
@@ -30,6 +31,9 @@ export function ShellA({ children }: { children: React.ReactNode }) {
               <span className="pa-brand-tag">Lithography &amp; OPC simulator</span>
             </Link>
             <nav className="pa-nav" aria-label="Main navigation">
+              <Link className="pa-nav-start" href={ROUTES.basics}>
+                What&rsquo;s this for?
+              </Link>
               <Link href={ROUTES.modelSimulation}>Model simulation</Link>
               <Link href={ROUTES.maskCorrection}>Mask correction</Link>
               <Link href={ROUTES.pricing}>Pricing</Link>
@@ -44,6 +48,9 @@ export function ShellA({ children }: { children: React.ReactNode }) {
                 <span />
               </summary>
               <nav aria-label="Mobile navigation">
+                <Link className="pa-nav-start" href={ROUTES.basics}>
+                  What&rsquo;s this for?
+                </Link>
                 <Link href={ROUTES.modelSimulation}>Model simulation</Link>
                 <Link href={ROUTES.maskCorrection}>Mask correction</Link>
                 <Link href={ROUTES.pricing}>Pricing</Link>
@@ -59,7 +66,9 @@ export function ShellA({ children }: { children: React.ReactNode }) {
               <Link className="pa-brand" href={ROUTES.home} aria-label="litopc home">
                 <Wordmark className="pa-brand-mark" />
               </Link>
-              <p>Lithography and OPC simulator for DUV and EUV. No EDA license. No installation.</p>
+              <p>
+                Lithography and <Opc /> simulator for DUV and EUV. No EDA license. No installation.
+              </p>
             </div>
             <nav aria-label="Product">
               <span className="pa-footer-head">Product</span>

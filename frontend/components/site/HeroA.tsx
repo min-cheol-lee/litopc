@@ -77,6 +77,7 @@ function HeroControls({ state, actions }: { state: HeroState; actions: HeroActio
           </button>
           <button
             type="button"
+            className="pa-seg-correct"
             aria-pressed={corrected || state.running}
             disabled={!state.live || state.running}
             data-running={state.running || undefined}

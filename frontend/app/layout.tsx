@@ -1,6 +1,6 @@
 import "./globals.css";
 import React from "react";
-import { Inter, Jost } from "next/font/google";
+import { Caveat, Inter, Jost } from "next/font/google";
 import Script from "next/script";
 import { AppProviders } from "../components/AppProviders";
 
@@ -16,6 +16,14 @@ const jost = Jost({
   variable: "--font-jost",
   weight: ["900"],
   style: ["italic"],
+});
+
+/** The beginner's door in the site header ("What's this for?"): a handwritten note beside the menu. */
+const caveat = Caveat({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-caveat",
+  weight: ["600"],
 });
 
 export const metadata = {
@@ -70,7 +78,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           `}
         </Script>
       </head>
-      <body className={`${inter.variable} ${jost.variable}`}>
+      <body className={`${inter.variable} ${jost.variable} ${caveat.variable}`}>
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

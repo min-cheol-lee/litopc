@@ -1,15 +1,22 @@
+import "../simulator-theme.css";
+import "../simulator-learn.css";
 import "../site.css";
 import "../site-mono.css";
 import "../site-docs.css";
 import Link from "next/link";
 import geometry from "../../lib/marketing-simulation.json";
+import type { ComponentProps } from "react";
 import {
   TechnicalArticleA,
-  TechnicalSectionA as Section,
+  TechnicalSectionA,
   docMetadataA,
 } from "../../components/site/DocsA";
-import { RecordedPrint, SimulationFigure } from "../../components/site/Figures";
-import { ReplayA } from "../../components/site/ReplayA";
+import { CustomFigure, RecordedPrint, SimulationFigure } from "../../components/site/Figures";
+import customRun from "../../lib/marketing-custom-run.json";
+import { ChevronIcon } from "../../components/site/Icons";
+import { SIMULATOR_URL } from "../../lib/marketing";
+import { BasicsTour } from "../../components/site/BasicsTour";
+import { ITERATIONS, MEAN_AFTER, MEAN_BEFORE, POINT_COUNT, fmt } from "../../components/learn/learn-data";
 import {
   Existing3dPair,
   ThresholdExplorer,
@@ -29,10 +36,11 @@ const contents = [
   { id: "print", label: "What you draw vs what prints" },
   { id: "miss", label: "Where the print misses" },
   { id: "fix", label: "The fix" },
-  { id: "watch", label: "Watch it happen" },
+  { id: "tour", label: "Watch it" },
   { id: "three-d", label: "In 3D" },
   { id: "lines", label: "Lines close together" },
   { id: "knob", label: "The brightness knob" },
+  { id: "yours", label: "Draw your own" },
   { id: "glossary", label: "Glossary" },
 ];
 
@@ -58,6 +66,11 @@ const glossary: Array<[string, string, string]> = [
   ["Focus", "How sharply the lens is focused.", "A 0 to 1 blur control."],
   ["Sweep", "Repeating a run while one setting changes.", "5 points Free, 120 Pro."],
 ];
+
+/** Sections on this page show their titles: a centered title, a one-line lead, then the picture. */
+function Section(props: Omit<ComponentProps<typeof TechnicalSectionA>, "showTitle">) {
+  return <TechnicalSectionA {...props} showTitle />;
+}
 
 function DenseLines() {
   const d = geometry.dense;
@@ -85,8 +98,14 @@ export default function Page() {
       }
       contents={contents}
       next={{ href: ROUTES.modelSimulation, label: "How the print is simulated" }}
+      centered
+      beforeContents={
+        <p className="pa-doc-opening">
+          A chip is printed with light. Here is how, one picture at a time.
+        </p>
+      }
     >
-      <Section id="stencil" title="A stencil and a lamp">
+      <Section id="stencil" title="A stencil and a lamp" eyebrow="Step 1 · The mask">
         <p className="pa-doc-lead">
           A chip is printed with light. A stencil on top, a lamp above it, and
           the wafer below.
@@ -115,7 +134,7 @@ export default function Page() {
         </figure>
       </Section>
 
-      <Section id="print" title="What you draw vs what prints">
+      <Section id="print" title="What you draw vs what prints" eyebrow="Step 2 · The print">
         <p className="pa-doc-lead">
           The shapes are so small that the light blurs on the way down. The
           print is not the stencil.
@@ -127,7 +146,7 @@ export default function Page() {
         </p>
       </Section>
 
-      <Section id="miss" title="Where the print misses">
+      <Section id="miss" title="Where the print misses" eyebrow="Step 3 · The miss">
         <p className="pa-doc-lead">
           Corners round off. Line ends pull back. The middle gets thin.
         </p>
@@ -138,14 +157,15 @@ export default function Page() {
             label="Uncorrected L over its light: the printed outline falls inside the dashed target, and short black ticks show how far it misses at measured points"
           />
           <figcaption>
-            Each black tick is one measurement of the miss, from the dashed
-            target to the printed line. <Wordmark /> takes 126 of them around
-            this shape; one per edge is drawn here.
+            How far the print lands from the target is called edge placement
+            error, or EPE. Each black tick is one measurement of it, from the
+            dashed target to the printed line. <Wordmark /> takes {POINT_COUNT}{" "}
+            of them around this shape; one per edge is drawn here.
           </figcaption>
         </figure>
       </Section>
 
-      <Section id="fix" title="The fix">
+      <Section id="fix" title="The fix" eyebrow="Step 4 · The fix">
         <p className="pa-doc-lead">
           Where the print came out too small, make the stencil bigger. Where it
           came out too big, make it smaller. Then check again.
@@ -169,26 +189,28 @@ export default function Page() {
         <p className="pa-basics-caption">
           This is <OpcName />, or <Opc />. The little ears and notches are the
           nudges. The target never moved; only the stencil did, and now the
-          print lands on it.
+          print lands on it. {ITERATIONS} rounds took the average miss from{" "}
+          {fmt(MEAN_BEFORE)}&nbsp;nm to {fmt(MEAN_AFTER)}&nbsp;nm.
         </p>
       </Section>
 
-      <Section id="watch" title="Watch it happen">
+      <Section id="tour" title="All four steps, in half a minute" eyebrow="Recap">
         <p className="pa-doc-lead">
-          Five rounds of nudging, recorded from the real simulator. Drag the
-          slider.
+          The same run, played through. It starts on its own; click a step to
+          jump, or switch to 3D at the end.
         </p>
-        <ReplayA />
+        <BasicsTour />
       </Section>
 
-      <Section id="three-d" title="In 3D">
+      <Section id="three-d" title="In 3D" eyebrow="Step 4, in 3D">
         <p className="pa-doc-lead">
-          The same idea seen from the side: height is brightness.
+          The same correction in the 3D view: the stencil above, the light on
+          the wafer below.
         </p>
         <Existing3dPair />
       </Section>
 
-      <Section id="lines" title="Lines close together">
+      <Section id="lines" title="Lines close together" eyebrow="Going further">
         <p className="pa-doc-lead">
           Neighbors matter. Lines drawn side by side print thinner, and their
           ends fall short.
@@ -211,12 +233,35 @@ export default function Page() {
         </div>
       </Section>
 
-      <Section id="knob" title="The brightness knob">
+      <Section id="knob" title="The brightness knob" eyebrow="Going further">
         <p className="pa-doc-lead">
           The wafer coating only reacts where the light is bright enough. Move
           the cutoff and watch the printed width change.
         </p>
         <ThresholdExplorer />
+      </Section>
+
+      <Section id="yours" title="Draw your own" eyebrow="Your turn">
+        <p className="pa-doc-lead">
+          The built-in patterns are a start. Draw any mask from rectangles, set
+          the target, and run the same simulation and correction on it.
+        </p>
+        <CustomFigure />
+        <p className="pa-basics-caption">
+          This one is three rectangles: a pad with a notch and a line running
+          up to its side. Simulated and corrected with the same code the
+          simulator runs: the average miss went from{" "}
+          {customRun.frames[0].epeMeanNm.toFixed(1)}&nbsp;nm to{" "}
+          {customRun.frames[1].epeMeanNm.toFixed(1)}&nbsp;nm in{" "}
+          {customRun.frames[1].iteration} rounds. Free accounts draw up to 5
+          rectangles; Pro, up to 48.
+        </p>
+        <p className="pa-centered pa-basics-more">
+          <a className="pa-link" href={SIMULATOR_URL}>
+            <span>Draw one in the simulator</span>
+            <ChevronIcon />
+          </a>
+        </p>
       </Section>
 
       <Section id="glossary" title="Glossary">
