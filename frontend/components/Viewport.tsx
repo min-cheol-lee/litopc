@@ -15,6 +15,7 @@ const Surface3DCanvas = dynamic(() => import("./Surface3DCanvas"), {
 });
 const Surface3DReference = dynamic(() => import("./Surface3DReference"), { ssr: false });
 import type { ColormapType, Surface3DHandle } from "../lib/surface3d-types";
+import type { SimulatorTheme } from "../lib/simulator-theme";
 import { getSurfacePaletteColor } from "../lib/surface3d-palettes";
 import { COLORMAP_THRESHOLD_DEFAULT, mapColormapIntensity } from "../lib/colormap-display";
 import { getEpeColor, nearestTargetPoint } from "../lib/epe-overlay";
@@ -24,8 +25,42 @@ import { SURFACE3D_DEFAULT_VIEW, SURFACE3D_PLANES, createSurface3dRotation, getS
 // Every visit starts in Rendered; View and the panel share the current style.
 
 const DEFAULT_FOV = 1100;
-const COMPARE_A_COLOR = "#2f7dff";
+const COMPARE_A_COLOR = "#5e5ce6";
 const COMPARE_B_COLOR = "#bf5af2";
+
+/** Canvas colours per theme. Exports serialise the live SVG, so these are concrete colours,
+ *  not CSS variables. Light follows the landing figures: steel-blue mask, grey dashed target,
+ *  ink print; dark is the same language on a neutral dark stage. */
+type CanvasPalette = {
+  print: string; printHalo: string;
+  target: string; targetHalo: string;
+  maskFill: string; maskFillA: number; maskStroke: string; maskHalo: string; maskHatch: string;
+  select: string; selectTarget: string; anchor: string; handleFill: string;
+  addDraftFill: string; subDraftFill: string; warn: string;
+  overlayAddFill: string; subtractFill: string; subtractStroke: string;
+  sraf: string; sweepActive: string; sweepHalo: string;
+  rulerMask: string; rulerContour: string; grid: string;
+};
+const CANVAS_LIGHT: CanvasPalette = {
+  print: "#111111", printHalo: "rgba(255,255,255,0.82)",
+  target: "#8f8f8f", targetHalo: "rgba(255,255,255,0.7)",
+  maskFill: "#8ab0c8", maskFillA: 0.32, maskStroke: "#7f9fb8", maskHalo: "rgba(255,255,255,0.6)", maskHatch: "rgba(127,159,184,0.18)",
+  select: "#5e5ce6", selectTarget: "#bf5af2", anchor: "rgba(127,159,184,0.55)", handleFill: "#ffffff",
+  addDraftFill: "rgba(94,92,230,0.12)", subDraftFill: "rgba(255,69,58,0.12)", warn: "#ff453a",
+  overlayAddFill: "rgba(138,176,200,0.14)", subtractFill: "rgba(0,0,0,0.08)", subtractStroke: "rgba(0,0,0,0.38)",
+  sraf: "#d9a300", sweepActive: "#ff453a", sweepHalo: "rgba(255,69,58,0.25)",
+  rulerMask: "#5e5ce6", rulerContour: "#bf5af2", grid: "rgba(0,0,0,0.06)",
+};
+const CANVAS_DARK: CanvasPalette = {
+  print: "#ffffff", printHalo: "rgba(0,0,0,0.6)",
+  target: "#9a9a9a", targetHalo: "rgba(0,0,0,0.5)",
+  maskFill: "#8ab0c8", maskFillA: 0.28, maskStroke: "#b7cce5", maskHalo: "rgba(0,0,0,0.45)", maskHatch: "rgba(183,204,229,0.14)",
+  select: "#8d8bff", selectTarget: "#cf7cf7", anchor: "rgba(183,204,229,0.5)", handleFill: "#1b1b1e",
+  addDraftFill: "rgba(141,139,255,0.14)", subDraftFill: "rgba(255,69,58,0.14)", warn: "#ff6b61",
+  overlayAddFill: "rgba(138,176,200,0.14)", subtractFill: "rgba(255,255,255,0.1)", subtractStroke: "rgba(255,255,255,0.45)",
+  sraf: "#ffd60a", sweepActive: "#ff6b61", sweepHalo: "rgba(255,107,97,0.25)",
+  rulerMask: "#8d8bff", rulerContour: "#cf7cf7", grid: "rgba(255,255,255,0.06)",
+};
 const MODEL_VERSION_TAG = "v0.1.0 · edu-guard-1";
 
 type TrustPresetInfo = {
@@ -84,6 +119,12 @@ export function Viewport(props: {
   canvasLeftInset?: number;
   onUsageConsumed?: () => void;
   initialEpeOverlayMode?: "NONE" | "COLOR" | "ARROWS" | "BOTH";
+  theme?: SimulatorTheme;
+  onThemeChange?: (next: SimulatorTheme) => void;
+  /** Focus mode: the overlay rail reports when the pointer leaves it (peeked panels fold back). */
+  onOverlayPointerLeave?: () => void;
+  /** Tells the page whether the 3D view is currently the main stage (kept across Studio/Focus). */
+  onSurfaceMainChange?: (isMain: boolean) => void;
 }) {
   const {
     sim,
@@ -127,6 +168,10 @@ export function Viewport(props: {
     canvasLeftInset = 0,
     onUsageConsumed,
     initialEpeOverlayMode = "NONE",
+    theme = "light",
+    onThemeChange,
+    onOverlayPointerLeave,
+    onSurfaceMainChange,
   } = props;
   type RulerKey = "mask" | "contour";
   type RulerAxis = "H" | "V";
@@ -143,7 +188,7 @@ export function Viewport(props: {
   const [tx, setTx] = useState(0);
   const [ty, setTy] = useState(0);
   const [showLegend, setShowLegend] = useState(true);
-  const [showRulers, setShowRulers] = useState(true);
+  const [showRulers, setShowRulers] = useState(false);
   const [rulerAxis, setRulerAxis] = useState<RulerAxis>("H");
   const [showMainContour, setShowMainContour] = useState(true);
   const [showTargetOverlay, setShowTargetOverlay] = useState(true);
@@ -151,7 +196,10 @@ export function Viewport(props: {
   const [colormapOpacity, setColormapOpacity] = useState(1);
   const [colormapType, setColormapType] = useState<ColormapType>("apple");
   const [colormapThreshold, setColormapThreshold] = useState(COLORMAP_THRESHOLD_DEFAULT);
-  const [bgTheme, setBgTheme] = useState<"DARK" | "LIGHT">("DARK");
+  // The colour theme is owned by the page (html[data-theme]); the View menu's Dark/Light control forwards to it.
+  const bgTheme: "DARK" | "LIGHT" = theme === "dark" ? "DARK" : "LIGHT";
+  const setBgTheme = (next: "DARK" | "LIGHT") => onThemeChange?.(next === "DARK" ? "dark" : "light");
+  const C = theme === "dark" ? CANVAS_DARK : CANVAS_LIGHT;
   const contourStyle = "MINIMAL" as "CLASSIC" | "NEON" | "GOLD" | "MINIMAL";
   const [epeOverlayMode, setEpeOverlayMode] = useState<"NONE" | "COLOR" | "ARROWS" | "BOTH">(initialEpeOverlayMode);
   const [exportResolution, setExportResolution] = useState<"WEB" | "HIGH_RES">(() => req.plan === "PRO" ? "HIGH_RES" : "WEB");
@@ -356,14 +404,13 @@ export function Viewport(props: {
   const contourUnderWidth = 3.35;
   const contourMainWidth = 1.95;
   const contourColors = useMemo(() => {
-    const light = bgTheme === "LIGHT";
     switch (contourStyle) {
       case "NEON":    return { shadow: "rgba(0,200,160,0.2)",  main: "rgba(30,255,200,0.95)", sw: 4.5, mw: 1.8 };
       case "GOLD":    return { shadow: "rgba(50,20,0,0.6)",    main: "rgba(255,195,50,0.96)", sw: 3.8, mw: 1.9 };
-      case "MINIMAL": return { shadow: null, main: light ? "rgba(30,60,120,0.5)" : "rgba(220,235,255,0.55)", sw: 0, mw: 1.1 };
-      default:        return { shadow: light ? "rgba(160,185,220,0.85)" : "rgba(36,50,76,0.72)", main: light ? "rgba(20,40,90,0.9)" : "rgba(236,243,255,0.96)", sw: 3.35, mw: 1.95 };
+      case "MINIMAL": return { shadow: C.printHalo, main: C.print, sw: 3.2, mw: 1.9 };
+      default:        return { shadow: C.printHalo, main: C.print, sw: 3.35, mw: 1.95 };
     }
-  }, [contourStyle, bgTheme]);
+  }, [contourStyle, C]);
   const compareContourWidth = 2.1;
   const compareDash2d = `8 5`;
   const exportRuns = useMemo<RunRecord[]>(() => {
@@ -485,9 +532,9 @@ export function Viewport(props: {
       stacked,
       active: {
         contours: rectsToClosedContours(maskRectsFromTemplate(reqActive, fovNm)),
-        color: "rgba(124,215,255,0.96)",
+        color: C.maskStroke,
         dash: [5, 2] as [number, number],
-        underColor: "rgba(195,236,255,0.46)",
+        underColor: C.maskHalo,
       },
     };
   }, [showSweepOverlay, sweepResult, sweepPoints, req, fovNm, sweepCustomTargetIndex, sweepIndexClamped, nonDoseStackSweepPoints]);
@@ -737,6 +784,7 @@ export function Viewport(props: {
         colormapThreshold: useCosmicReference ? 1 : colormapThreshold,
         colormapOpacity,
         contourStyle,
+        theme,
         epeContours: epeOverlayMode !== "NONE" ? epeSegments : null,
         epeMode: epeOverlayMode !== "NONE" ? epeOverlayMode : undefined,
       });
@@ -863,6 +911,7 @@ export function Viewport(props: {
         colormapThreshold: useCosmicReference ? 1 : colormapThreshold,
         colormapOpacity,
         contourStyle,
+        theme,
         epeContours: epeOverlayMode !== "NONE" ? epeSegments : null,
         epeMode: epeOverlayMode !== "NONE" ? epeOverlayMode : undefined,
       });
@@ -901,16 +950,24 @@ export function Viewport(props: {
     console.groupEnd();
   }, [sim?.contours_nm, sim?.nm_per_pixel, fovNm, templateId, paramsSignature]);
 
+  // Fit the view when the pattern itself changes (field, template, parameters) or when the first
+  // shape appears. Not on every mask edit: refitting while a shape is dragged cancels the drag
+  // on screen, because the view recentres on the moved shape.
+  const maskBoundsRef = useRef(maskBounds);
+  maskBoundsRef.current = maskBounds;
+  const hasMaskBounds = Boolean(maskBounds);
   useEffect(() => {
-    if (!maskBounds) return;
-    const cx = (maskBounds.minX + maskBounds.maxX) * 0.5;
-    const cy = (maskBounds.minY + maskBounds.maxY) * 0.5;
-    const nextScale = clampScale(calcFitScale(maskBounds, fovNm));
+    const bounds = maskBoundsRef.current;
+    if (!bounds) return;
+    const cx = (bounds.minX + bounds.maxX) * 0.5;
+    const cy = (bounds.minY + bounds.maxY) * 0.5;
+    const nextScale = clampScale(calcFitScale(bounds, fovNm));
     setScale(nextScale);
     setSurfaceZoomScale(1);
     setTx(fovNm * 0.5 - cx * nextScale);
     setTy(fovNm * 0.5 - cy * nextScale);
-  }, [fovNm, templateId, paramsSignature, maskBounds?.minX, maskBounds?.minY, maskBounds?.maxX, maskBounds?.maxY]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fovNm, templateId, paramsSignature, hasMaskBounds]);
 
   useEffect(() => {
     maskRulerRef.current = maskRuler;
@@ -1014,6 +1071,19 @@ export function Viewport(props: {
       const target = e.target as HTMLElement | null;
       if (target && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
 
+      if ((e.key === "Delete" || e.key === "Backspace") && onEditableShapesChange) {
+        const indexes = selectedCustomShapeIndexes.length ? selectedCustomShapeIndexes : (selectedCustomShapeIndex >= 0 ? [selectedCustomShapeIndex] : []);
+        if (indexes.length) {
+          e.preventDefault();
+          onEditableShapesChange(editableShapes.filter((_, i) => !indexes.includes(i)));
+          onSelectCustomShape?.(-1);
+        }
+        return;
+      }
+      if (e.key === "Escape") {
+        onSelectCustomShape?.(-1);
+        return;
+      }
       const step = e.shiftKey ? 10 : 1;
       let dx = 0;
       let dy = 0;
@@ -1066,7 +1136,7 @@ export function Viewport(props: {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedRuler, editableShapes, selectedCustomShapeIndex, selectedCustomShapeIndexes, onEditableShapesChange, fovNm, req.mask.mode, selectedPresetAnchorIndex, presetAnchorShapes, onUpdatePresetFeatureRect]);
+  }, [selectedRuler, editableShapes, selectedCustomShapeIndex, selectedCustomShapeIndexes, onEditableShapesChange, onSelectCustomShape, fovNm, req.mask.mode, selectedPresetAnchorIndex, presetAnchorShapes, onUpdatePresetFeatureRect]);
 
   function clampScale(v: number) {
     const safe = Number.isFinite(v) ? v : 1;
@@ -1126,6 +1196,78 @@ export function Viewport(props: {
     const p = pointerToSvgUnits(e.clientX, e.clientY);
     const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
     zoomAt(scale * factor, p.x, p.y);
+  }
+
+  // Touch: up to two pointers; a second finger turns any drag into a pinch (zoom + pan).
+  const activePointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchRef = useRef<{ dist: number; mid: { x: number; y: number }; scale: number; tx: number; ty: number } | null>(null);
+  const coarsePointer = typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
+
+  function pinchState() {
+    const pts = Array.from(activePointers.current.values());
+    if (pts.length < 2) return null;
+    const [a, b] = pts;
+    return { dist: Math.max(1, Math.hypot(b.x - a.x, a.y - b.y)), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
+  }
+
+  function onPointerDownCapture(e: React.PointerEvent<SVGSVGElement>) {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    // Register every pointer (shape handlers stop propagation) so a second finger is seen as a pinch.
+    // No capture here: capturing during the capture phase made the SVG receive the same pointerdown
+    // again and start a pan under the shape drag.
+    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  }
+
+  function onPointerDown(e: React.PointerEvent<SVGSVGElement>) {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* unsupported */ }
+    const pinch = pinchState();
+    if (pinch) {
+      // Second finger: abandon the single-finger gesture and start a pinch.
+      customRectCreateRef.current = null;
+      setCustomRectDraft(null);
+      customShapeDragRef.current = null;
+      customRectResizeRef.current = null;
+      rulerDragRef.current = null;
+      dragStart.current = null;
+      pinchRef.current = { ...pinch, scale, tx, ty };
+      setDragging(true);
+      return;
+    }
+    onMouseDown(e);
+  }
+
+  function onPointerMove(e: React.PointerEvent<SVGSVGElement>) {
+    if (activePointers.current.has(e.pointerId)) activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const pinch = pinchState();
+    if (pinch && pinchRef.current) {
+      const start = pinchRef.current;
+      const ratio = pinch.dist / start.dist;
+      const nextScale = clampScale(start.scale * ratio);
+      const applied = nextScale / start.scale;
+      // Keep the start midpoint under the fingers, then follow the midpoint's travel.
+      const m0 = pointerToSvgUnits(start.mid.x, start.mid.y);
+      const m1 = pointerToSvgUnits(pinch.mid.x, pinch.mid.y);
+      setTx(m0.x - (m0.x - start.tx) * applied + (m1.x - m0.x));
+      setTy(m0.y - (m0.y - start.ty) * applied + (m1.y - m0.y));
+      setScale(nextScale);
+      return;
+    }
+    onMouseMove(e);
+  }
+
+  function onPointerUp(e: React.PointerEvent<SVGSVGElement>) {
+    activePointers.current.delete(e.pointerId);
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+    if (pinchRef.current) {
+      if (activePointers.current.size < 2) {
+        pinchRef.current = null;
+        dragStart.current = null;
+        setDragging(false);
+      }
+      return;
+    }
+    onMouseUp(e);
   }
 
   function onMouseDown(e: React.MouseEvent<SVGSVGElement>) {
@@ -1324,6 +1466,7 @@ export function Viewport(props: {
 
   useEffect(() => {
     if (!canSwapSurfaceMain && surfaceSwapMain) setSurfaceSwapMain(false);
+    onSurfaceMainChange?.(canSwapSurfaceMain && surfaceSwapMain);
   }, [canSwapSurfaceMain, surfaceSwapMain]);
 
   useEffect(() => {
@@ -1375,18 +1518,10 @@ export function Viewport(props: {
     const panelTop = isMainSurface ? Math.max(12, canvasCommandHeight + 8) : 10;
     return (
       <div
-        className="viewport-panel-shell viewport-panel-shell-3d"
+        className={`viewport-panel-shell viewport-panel-shell-3d ${isMainSurface ? "is-main" : "is-rail"} ${isMainSurface && isCanvasLayout ? "is-canvas" : ""}`}
         style={{
           position: isMainSurface ? "absolute" : "relative",
           inset: isMainSurface ? (isCanvasLayout ? -1 : 0) : undefined,
-          border: isStudioMainSurface ? "1px solid rgba(122, 144, 176, 0.34)" : "none",
-          borderRadius: isMainSurface ? (isCanvasLayout ? 0 : 18) : 16,
-          background: isStudioMainSurface
-            ? "radial-gradient(168% 158% at 18% 2%, #334763 0%, #25364e 40%, #172538 78%, #121c2b 100%)"
-            : "transparent",
-          boxShadow: isStudioMainSurface
-            ? "inset 0 1px 0 rgba(244,248,255,0.12), inset 0 -38px 74px rgba(4,10,22,0.42), 0 16px 30px rgba(20,30,46,0.18)"
-            : "none",
           overflow: "hidden",
           height: isMainSurface ? twoDPanelHeight : surfacePanelHeight,
           display: "flex",
@@ -1430,10 +1565,9 @@ export function Viewport(props: {
             </button>
           </div>
         )}
-        {!isMainSurface && renderSweepStatusLine("3d")}
         <div
-          style={{ padding: 0, flex: 1, minHeight: 0, position: "relative", zIndex: 1, cursor: "grab" }}
-          onMouseDown={(e) => {
+          style={{ padding: 0, flex: 1, minHeight: 0, position: "relative", zIndex: 1, cursor: "grab", touchAction: "none" }}
+          onPointerDown={(e) => {
             if (e.shiftKey) {
               surfaceDragRef.current = { mode: "pan", x: e.clientX, y: e.clientY, ox: surfOffsetX, oy: surfOffsetY };
             } else {
@@ -1441,7 +1575,7 @@ export function Viewport(props: {
             }
             setSurfaceFastMode();
           }}
-          onMouseMove={(e) => {
+          onPointerMove={(e) => {
             if (!surfaceDragRef.current) return;
             const d = surfaceDragRef.current;
             const dx = e.clientX - d.x;
@@ -1455,8 +1589,9 @@ export function Viewport(props: {
             }
             setSurfaceFastMode();
           }}
-          onMouseUp={() => { surfaceDragRef.current = null; scheduleSurfaceFullMode(120); }}
-          onMouseLeave={() => { surfaceDragRef.current = null; scheduleSurfaceFullMode(120); }}
+          onPointerUp={() => { surfaceDragRef.current = null; scheduleSurfaceFullMode(120); }}
+          onPointerCancel={() => { surfaceDragRef.current = null; scheduleSurfaceFullMode(120); }}
+          onPointerLeave={() => { surfaceDragRef.current = null; scheduleSurfaceFullMode(120); }}
         >
           {useWebGL ? (
             <SurfaceRenderer
@@ -1496,6 +1631,8 @@ export function Viewport(props: {
               epeContours={epeOverlayMode !== "NONE" ? epeSegments : null}
               epeMode={epeOverlayMode !== "NONE" ? epeOverlayMode : undefined}
               showLightEffect={surfLightEffect}
+              theme={theme}
+              transparent={!useCosmicReference}
               wavelengthNm={TRUST_PRESET_INFO[req.preset_id].wavelengthNm}
               style={{
                 width: isMainSurface && isCanvasLayout ? "calc(100% + 2px)" : "100%",
@@ -1513,19 +1650,18 @@ export function Viewport(props: {
                 height: isMainSurface && isCanvasLayout ? "calc(100% + 2px)" : "100%",
                 marginLeft: isMainSurface && isCanvasLayout ? -1 : 0,
                 marginTop: isMainSurface && isCanvasLayout ? -1 : 0,
-                border: isMainSurface ? "none" : "1px solid rgba(96,108,132,0.4)",
                 borderRadius: isMainSurface ? (isCanvasLayout ? 0 : 18) : 16,
-                background:
-                  "radial-gradient(168% 158% at 18% 2%, #334763 0%, #25364e 40%, #172538 78%, #121c2b 100%)",
-                boxShadow: isMainSurface
-                  ? "none"
-                  : "inset 0 1px 0 rgba(244,248,255,0.18), inset 0 -34px 72px rgba(4,10,22,0.46), 0 10px 20px rgba(20,30,46,0.22)",
               }}
             />
           )}
           {!sim?.intensity && (
             <div className="small-note" style={{ marginTop: 6 }}>
               Run simulation to generate 3D aerial surface.
+            </div>
+          )}
+          {(req.preset_id === "EUV_LNA" || req.preset_id === "EUV_HNA") && (
+            <div className="surface-euv-note" title="Real EUV masks are reflective: light arrives at about 6 degrees and bounces off a multilayer mirror. This view keeps the familiar transmission layout.">
+              Schematic: EUV masks are reflective, shown unfolded
             </div>
           )}
           {useCosmicReference && (
@@ -1677,7 +1813,7 @@ export function Viewport(props: {
           className={`canvas-tech-text ${reserveBottomRightOverlayRail ? "has-overlay-rail" : ""}`}
           style={{ position: "relative", right: "auto", bottom: "auto", top: "auto" }}
         >
-          {sim ? `grid=${sim.grid_used} · nm/px=${sim.nm_per_pixel.toFixed(2)}` : "Run to simulate"}
+          {sim ? `FOV ${Math.round(fovNm)} nm · grid ${sim.grid_used} · ${sim.nm_per_pixel.toFixed(2)} nm/px` : `FOV ${Math.round(fovNm)} nm · run to simulate`}
         </div>
       )}
       {showLegend && (
@@ -1691,8 +1827,6 @@ export function Viewport(props: {
             left: "auto",
             zIndex: 3,
             margin: 0,
-            backdropFilter: "blur(10px)",
-            background: "linear-gradient(180deg, rgba(255,255,255,0.86), rgba(248,250,255,0.62))",
             pointerEvents: "none",
             display: "inline-flex",
             alignItems: "center",
@@ -1710,28 +1844,28 @@ export function Viewport(props: {
               style={{
                 width: 16,
                 height: 8,
-                border: "1.2px solid #cc2d64",
+                border: `1.2px solid ${C.maskStroke}`,
                 borderRadius: 2,
-                background: "repeating-linear-gradient(-28deg, rgba(255,232,242,0.38) 0px, rgba(255,232,242,0.38) 2px, rgba(255,90,138,0.16) 2px, rgba(255,90,138,0.16) 8px)",
+                background: `rgba(138,176,200,${C.maskFillA})`,
               }}
             />
-            Final Mask
+            Mask
           </span>
           {!!overlayAddPaths.length && (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 11, fontWeight: 560 }}>
-              <span style={{ width: 16, height: 8, borderRadius: 2, background: "rgba(176,216,255,0.14)", border: "1px solid rgba(176,216,255,0.32)" }} />
+              <span style={{ width: 16, height: 8, borderRadius: 2, background: C.overlayAddFill, border: `1px solid ${C.maskStroke}` }} />
               Add
             </span>
           )}
           {!!maskSubtractPaths.length && (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 11, fontWeight: 560 }}>
-              <span style={{ width: 16, height: 8, borderRadius: 2, background: "rgba(22,42,74,0.18)", border: "1px solid rgba(124,162,228,0.44)" }} />
+              <span style={{ width: 16, height: 8, borderRadius: 2, background: C.subtractFill, border: `1px solid ${C.subtractStroke}` }} />
               Subtract
             </span>
           )}
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 11, fontWeight: 560 }}>
             <span style={{ width: 16, height: 8, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-              <span style={{ width: "100%", borderTop: "1.6px solid #1f1f1f", display: "block", transform: "translateY(-0.5px)" }} />
+              <span style={{ width: "100%", borderTop: `1.6px solid ${C.print}`, display: "block", transform: "translateY(-0.5px)" }} />
             </span>
             <span style={{ transform: "translateY(-0.5px)", opacity: effectiveShowMainContour ? 1 : 0.45 }}>Contour</span>
           </span>
@@ -1741,7 +1875,7 @@ export function Viewport(props: {
           </span>
           {targetGuide && (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginLeft: 11, fontWeight: 560, opacity: showTargetOverlay ? 1 : 0.45 }}>
-              <span style={{ width: 16, borderTop: "1.6px dashed rgba(98,242,214,0.95)" }} />
+              <span style={{ width: 16, borderTop: `1.6px dashed ${C.target}` }} />
               Target
             </span>
           )}
@@ -1846,8 +1980,8 @@ export function Viewport(props: {
           </summary>
           <div className="view-menu-panel view-menu-panel-minimal export-menu-panel">
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "rgba(30,50,80,0.45)" }}>Resolution</span>
-              <div style={{ display: "flex", gap: 3, background: "rgba(30,50,80,0.06)", borderRadius: 10, padding: 3 }}>
+              <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--lt-faint)" }}>Resolution</span>
+              <div style={{ display: "flex", gap: 3, background: "var(--lt-track)", border: "1px solid var(--lt-line)", borderRadius: 999, padding: 3 }}>
                 {([
                   { res: "WEB",      label: "Web",      title: "Standard (up to 1800px)", pro: false },
                   { res: "HIGH_RES", label: "High-Res", title: "High-res (up to 4200px)",  pro: true  },
@@ -1861,12 +1995,12 @@ export function Viewport(props: {
                       title={disabled ? "Upgrade to Pro" : title}
                       onClick={() => setExportResolution(res)}
                       style={{
-                        flex: 1, padding: "5px 0", fontSize: 10,
-                        fontWeight: exportResolution === res ? 600 : 400,
-                        border: "none", borderRadius: 7, cursor: disabled ? "default" : "pointer",
-                        background: exportResolution === res ? "white" : "transparent",
-                        color: disabled ? "rgba(30,50,80,0.25)" : exportResolution === res ? "rgba(10,84,166,1)" : "rgba(30,50,80,0.55)",
-                        boxShadow: exportResolution === res ? "0 1px 4px rgba(14,26,50,0.13)" : "none",
+                        flex: 1, padding: "5px 0", fontSize: 12, minHeight: 26,
+                        fontWeight: 600,
+                        border: "none", borderRadius: 999, cursor: disabled ? "default" : "pointer",
+                        background: exportResolution === res ? "var(--lt-card)" : "transparent",
+                        color: disabled ? "var(--lt-faint)" : exportResolution === res ? "var(--lt-ink)" : "var(--lt-muted)",
+                        boxShadow: exportResolution === res ? "0 1px 2px rgba(0,0,0,0.12)" : "none",
                         transition: "all 0.15s",
                       }}
                     >
@@ -2027,7 +2161,7 @@ export function Viewport(props: {
         <div style={{ display: "flex", flexDirection: "column", gap: isCanvasLayout ? 0 : 8, minWidth: 0, position: "relative", height: twoDPanelHeight }}>
           {surfaceAsBackground && renderSurfacePanel("main")}
           <div
-            className="viewport-panel-shell viewport-panel-shell-2d"
+            className={`viewport-panel-shell viewport-panel-shell-2d ${surfaceAsBackground ? "is-mini" : ""} ${isCanvasLayout && !surfaceAsBackground ? "is-canvas" : ""}`}
             style={{
               position: surfaceAsBackground ? "absolute" : "relative",
               top: miniPanelTop,
@@ -2035,18 +2169,6 @@ export function Viewport(props: {
               left: surfaceAsBackground ? "auto" : undefined,
               width: surfaceAsBackground ? overlayRailWidth : "100%",
               height: surfaceAsBackground ? surfacePanelHeight : twoDPanelHeight,
-              border: surfaceAsBackground
-                ? "1px solid rgba(96,108,132,0.4)"
-                : (isCanvasLayout ? "none" : "1px solid rgba(162,186,224,0.34)"),
-              borderRadius: surfaceAsBackground ? 16 : (isCanvasLayout ? 0 : 16),
-              background: bgTheme === "LIGHT"
-                ? "radial-gradient(160% 150% at 18% 4%, #f0f4fa 0%, #e8edf5 45%, #dce4f0 100%)"
-                : "radial-gradient(160% 150% at 18% 4%, #1c2b39 0%, #101c29 45%, #09131e 100%)",
-              boxShadow: surfaceAsBackground
-                ? "inset 0 1px 0 rgba(238,246,255,0.28), inset 0 -30px 66px rgba(2,10,22,0.46), 0 10px 20px rgba(20,30,46,0.22)"
-                : (isCanvasLayout
-                  ? "none"
-                  : "inset 0 1px 0 rgba(238,246,255,0.28), inset 0 -40px 80px rgba(2,10,22,0.42), 0 18px 36px rgba(4,10,18,0.38)"),
               overflow: "hidden",
               zIndex: surfaceAsBackground ? 8 : 1,
               ["--canvas-left-inset" as any]: `${(!surfaceAsBackground && panelLayoutMode === "overlay") ? canvasLeftInset : 0}px`,
@@ -2109,95 +2231,43 @@ export function Viewport(props: {
               cursor: editorTool === "DRAW_ADD_RECT" || editorTool === "DRAW_SUBTRACT_RECT" || editorTool === "PLACE_SRAF"
                 ? "crosshair"
                 : (dragging ? "grabbing" : "grab"),
+              touchAction: "none",
             }}
             onWheel={onWheel}
-            onMouseDown={onMouseDown}
-            onMouseMove={onMouseMove}
-            onMouseUp={onMouseUp}
-            onMouseLeave={onMouseUp}
+            onPointerDownCapture={onPointerDownCapture}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+            onPointerLeave={(e) => { if (e.pointerType === "mouse") onPointerUp(e); }}
           >
               <defs>
-                <linearGradient id="panel-base" x1="0" y1="0" x2="0" y2="1">
-                  {bgTheme === "LIGHT" ? (
-                    <>
-                      <stop offset="0%" stopColor="#f5f8fc" />
-                      <stop offset="48%" stopColor="#edf2f8" />
-                      <stop offset="100%" stopColor="#e2eaf4" />
-                    </>
-                  ) : (
-                    <>
-                      <stop offset="0%" stopColor="#1f3452" />
-                      <stop offset="48%" stopColor="#13253d" />
-                      <stop offset="100%" stopColor="#081325" />
-                    </>
-                  )}
-                </linearGradient>
-                <linearGradient id="panel-accent" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="rgba(166, 206, 255, 0.14)" />
-                  <stop offset="42%" stopColor="rgba(130, 170, 232, 0.075)" />
-                  <stop offset="100%" stopColor="rgba(58, 78, 120, 0.02)" />
-                </linearGradient>
-                <linearGradient id="panel-fog" x1="0" y1="0" x2="0.85" y2="1">
-                  <stop offset="0%" stopColor="rgba(226,240,255,0.055)" />
-                  <stop offset="38%" stopColor="rgba(188,216,248,0.022)" />
-                  <stop offset="100%" stopColor="rgba(120,152,212,0.01)" />
-                </linearGradient>
-                <radialGradient id="panel-vignette" cx="50%" cy="50%" r="64%">
-                  <stop offset="0%" stopColor="rgba(0,0,0,0)" />
-                  <stop offset="72%" stopColor="rgba(0,0,0,0.14)" />
-                  <stop offset="100%" stopColor="rgba(0,0,0,0.42)" />
-                </radialGradient>
-                <radialGradient id="panel-glass-bloom" cx="52%" cy="44%" r="56%">
-                  <stop offset="0%" stopColor="rgba(198,232,255,0.16)" />
-                  <stop offset="46%" stopColor="rgba(146,194,248,0.055)" />
-                  <stop offset="100%" stopColor="rgba(86,126,188,0)" />
-                </radialGradient>
-                <linearGradient id="panel-water-sheen" x1="0" y1="0" x2="0.9" y2="1">
-                  <stop offset="0%" stopColor="rgba(246,251,255,0.18)" />
-                  <stop offset="22%" stopColor="rgba(222,238,255,0.07)" />
-                  <stop offset="62%" stopColor="rgba(170,210,255,0.03)" />
-                  <stop offset="100%" stopColor="rgba(150,194,246,0)" />
-                </linearGradient>
-                <linearGradient id="panel-reflect-top" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="rgba(255,255,255,0.4)" />
-                  <stop offset="16%" stopColor="rgba(236,246,255,0.2)" />
-                  <stop offset="32%" stopColor="rgba(210,232,255,0.06)" />
-                  <stop offset="100%" stopColor="rgba(180,214,255,0)" />
-                </linearGradient>
-                <radialGradient id="panel-caustic-core" cx="52%" cy="48%" r="36%">
-                  <stop offset="0%" stopColor="rgba(214,236,255,0.18)" />
-                  <stop offset="48%" stopColor="rgba(178,214,255,0.06)" />
-                  <stop offset="100%" stopColor="rgba(130,176,236,0)" />
-                </radialGradient>
-                <pattern id="panel-texture" width={12} height={12} patternUnits="userSpaceOnUse">
-                  <path d="M 0 12 L 12 0" fill="none" stroke="rgba(190,214,244,0.042)" strokeWidth="0.45" />
-                  <circle cx="2" cy="2" r="0.55" fill="rgba(182,208,238,0.028)" />
-                  <circle cx="8" cy="6" r="0.45" fill="rgba(176,202,234,0.022)" />
-                </pattern>
-                <pattern id="panel-ripples" width={120} height={120} patternUnits="userSpaceOnUse">
-                  <path d="M -20 62 Q 12 46, 44 62 T 108 62 T 172 62" fill="none" stroke="rgba(214,234,255,0.11)" strokeWidth="1.1" />
-                  <path d="M -26 84 Q 10 70, 46 84 T 118 84 T 190 84" fill="none" stroke="rgba(182,214,250,0.08)" strokeWidth="0.9" />
-                </pattern>
-                <pattern id="opc-grid" width={80} height={80} patternUnits="userSpaceOnUse">
-                  <path d="M 80 0 L 0 0 0 80" fill="none" stroke={bgTheme === "LIGHT" ? "rgba(80,110,160,0.12)" : "rgba(166,198,236,0.065)"} strokeWidth="1" />
-                </pattern>
-                <pattern id="target-hatch" width={14} height={14} patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
-                  <path d="M 0 0 L 0 14" fill="none" stroke="rgba(98,242,214,0.24)" strokeWidth="2" />
-                </pattern>
                 <pattern id="final-mask-hatch" width={18} height={18} patternUnits="userSpaceOnUse" patternTransform="rotate(-28)">
-                  <path d="M 0 0 L 0 18" fill="none" stroke="rgba(255,226,242,0.09)" strokeWidth="3" />
+                  <path d="M 0 0 L 0 18" fill="none" stroke={C.maskHatch} strokeWidth="3" />
                 </pattern>
                 <linearGradient id="mask-fill" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="rgba(255,204,225,0.58)" />
-                  <stop offset="60%" stopColor="rgba(255,132,179,0.24)" />
-                  <stop offset="100%" stopColor="rgba(255,82,150,0.3)" />
+                  <stop offset="0%" stopColor={C.maskFill} stopOpacity={C.maskFillA} />
+                  <stop offset="100%" stopColor={C.maskFill} stopOpacity={C.maskFillA} />
                 </linearGradient>
-                <filter id="mask-glow" x="-35%" y="-35%" width="170%" height="170%">
-                  <feGaussianBlur stdDeviation="3.6" result="b" />
-                  <feColorMatrix in="b" type="matrix" values="1 0 0 0 0  0 0.35 0 0 0  0 0 0.2 0 0  0 0 0 0.22 0" />
-                </filter>
               </defs>
               <g transform={`translate(${tx} ${ty}) scale(${scale})`}>
+              {finalMaskCompoundPath && (
+                <>
+                  <path
+                    d={finalMaskCompoundPath}
+                    fill="url(#mask-fill)"
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                  />
+                  <path
+                    d={finalMaskCompoundPath}
+                    fill="url(#final-mask-hatch)"
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                    opacity={0.55}
+                  />
+                </>
+              )}
               {showAerial && heatmapUrl && (
                 <image
                   href={heatmapUrl}
@@ -2206,7 +2276,7 @@ export function Viewport(props: {
                   width={fovNm}
                   height={fovNm}
                   preserveAspectRatio="none"
-                  opacity={0.58 * colormapOpacity}
+                  opacity={0.92 * colormapOpacity}
                   transform={`translate(0 ${fovNm}) scale(1 -1)`}
                 />
               )}
@@ -2215,11 +2285,11 @@ export function Viewport(props: {
                   key={`custom-hit-${idx}`}
                   d={editableShapePaths[idx] ?? ""}
                   fill="rgba(255,255,255,0.001)"
-                  stroke={selectedCustomShapeIndexes.includes(idx) ? (activeEditLayer === "TARGET" ? "rgba(98,242,214,0.98)" : "rgba(255,132,196,0.94)") : "rgba(0,0,0,0)"}
+                  stroke={selectedCustomShapeIndexes.includes(idx) ? (activeEditLayer === "TARGET" ? C.selectTarget : C.select) : "rgba(0,0,0,0)"}
                   strokeWidth={selectedCustomShapeIndexes.includes(idx) ? 1.2 : 0.001}
                   vectorEffect="non-scaling-stroke"
                   style={{ cursor: "move" }}
-                  onMouseDown={(e) => {
+                  onPointerDown={(e) => {
                     if (editorTool !== "SELECT") return;
                     e.stopPropagation();
                     const additive = e.shiftKey || e.ctrlKey || e.metaKey;
@@ -2245,13 +2315,13 @@ export function Viewport(props: {
                   <g key={`preset-anchor-${idx}`}>
                     <path
                       d={d}
-                      fill="rgba(255,132,196,0.01)"
-                      stroke={selected ? "rgba(255,132,196,0.96)" : "rgba(255,182,220,0.34)"}
+                      fill="rgba(0,0,0,0.001)"
+                      stroke={selected ? C.select : C.anchor}
                       strokeWidth={selected ? 1.4 : 0.95}
                       strokeDasharray={selected ? "8 4" : "4 4"}
                       vectorEffect="non-scaling-stroke"
                       style={{ cursor: "pointer" }}
-                      onMouseDown={(e) => {
+                      onPointerDown={(e) => {
                         if (editorTool !== "SELECT") return;
                         e.stopPropagation();
                         onSelectPresetAnchor?.(idx);
@@ -2260,83 +2330,15 @@ export function Viewport(props: {
                   </g>
                 );
               })}
-              {selectedCustomRect && (() => {
-                const handleRadiusNm = 4.2 / Math.max(scale, 0.0001);
-                const left = selectedCustomRect.x_nm;
-                const right = selectedCustomRect.x_nm + selectedCustomRect.w_nm;
-                const top = fovNm - (selectedCustomRect.y_nm + selectedCustomRect.h_nm);
-                const bottom = fovNm - selectedCustomRect.y_nm;
-                const corners: Array<{ key: "nw" | "ne" | "sw" | "se"; x: number; y: number }> = [
-                  { key: "nw", x: left, y: top },
-                  { key: "ne", x: right, y: top },
-                  { key: "sw", x: left, y: bottom },
-                  { key: "se", x: right, y: bottom },
-                ];
-                return (
-                  <g>
-                    <rect
-                      x={left}
-                      y={top}
-                      width={Math.max(1, selectedCustomRect.w_nm)}
-                      height={Math.max(1, selectedCustomRect.h_nm)}
-                      fill="none"
-                      stroke="rgba(255,132,196,0.96)"
-                      strokeWidth={1.25}
-                      strokeDasharray="4 3"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                    {corners.map((c) => (
-                      <circle
-                        key={`rect-handle-${c.key}`}
-                        cx={c.x}
-                        cy={c.y}
-                        r={handleRadiusNm}
-                        fill="rgba(235,246,255,0.95)"
-                        stroke="rgba(214,88,150,0.94)"
-                        strokeWidth={1.1}
-                        vectorEffect="non-scaling-stroke"
-                        style={{ cursor: c.key === "nw" || c.key === "se" ? "nwse-resize" : "nesw-resize" }}
-                        onMouseDown={(e) => {
-                          e.stopPropagation();
-                          customRectResizeRef.current = {
-                            index: selectedCustomShapeIndex,
-                            corner: c.key,
-                            startShapes: editableShapes.map(cloneViewportShape),
-                          };
-                          setDragging(true);
-                        }}
-                      />
-                    ))}
-                  </g>
-                );
-              })()}
               {customRectDraft && (
                 <path
                   d={rectPath(customRectDraft.x_nm, customRectDraft.y_nm, customRectDraft.w_nm, customRectDraft.h_nm, fovNm)}
-                  fill={editorTool === "DRAW_SUBTRACT_RECT" ? "rgba(255,142,118,0.12)" : "rgba(120,190,255,0.16)"}
-                  stroke={editorTool === "DRAW_SUBTRACT_RECT" ? "rgba(255,142,118,0.98)" : "rgba(120,190,255,0.95)"}
+                  fill={editorTool === "DRAW_SUBTRACT_RECT" ? C.subDraftFill : C.addDraftFill}
+                  stroke={editorTool === "DRAW_SUBTRACT_RECT" ? C.warn : C.select}
                   strokeWidth={1.2}
                   strokeDasharray="5 4"
                   vectorEffect="non-scaling-stroke"
                 />
-              )}
-              {finalMaskCompoundPath && (
-                <>
-                  <path
-                    d={finalMaskCompoundPath}
-                    fill="url(#mask-fill)"
-                    fillRule="evenodd"
-                    clipRule="evenodd"
-                    filter="url(#mask-glow)"
-                  />
-                  <path
-                    d={finalMaskCompoundPath}
-                    fill="url(#final-mask-hatch)"
-                    fillRule="evenodd"
-                    clipRule="evenodd"
-                    opacity={0.72}
-                  />
-                </>
               )}
               {targetGuide && showTargetOverlay && targetContours.map((contour, idx) => {
                 const d = polylineToPath(contour.points_nm, fovNm);
@@ -2345,8 +2347,8 @@ export function Viewport(props: {
                     <path
                       d={d}
                       fill="none"
-                      stroke="rgba(10,42,44,0.62)"
-                      strokeWidth={4.1}
+                      stroke={C.targetHalo}
+                      strokeWidth={3.4}
                       strokeLinejoin="round"
                       strokeLinecap="round"
                       vectorEffect="non-scaling-stroke"
@@ -2354,18 +2356,9 @@ export function Viewport(props: {
                     <path
                       d={d}
                       fill="none"
-                      stroke="rgba(12,42,44,0.28)"
-                      strokeWidth={2.15}
-                      strokeLinejoin="round"
-                      strokeLinecap="round"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                    <path
-                      d={d}
-                      fill="none"
-                      stroke="rgba(98,242,214,0.9)"
-                      strokeWidth={1.12}
-                      strokeDasharray="5 3"
+                      stroke={C.target}
+                      strokeWidth={1.5}
+                      strokeDasharray="6 4.5"
                       strokeLinejoin="round"
                       strokeLinecap="round"
                       vectorEffect="non-scaling-stroke"
@@ -2377,7 +2370,7 @@ export function Viewport(props: {
                 <g key={`overlay-add-${idx}`}>
                   <path
                     d={d}
-                    fill="rgba(176,216,255,0.07)"
+                    fill={C.overlayAddFill}
                     stroke="none"
                   />
                 </g>
@@ -2387,7 +2380,7 @@ export function Viewport(props: {
                   key={`overlay-add-outline-${idx}`}
                   d={d}
                   fill="none"
-                  stroke="rgba(255,142,202,0.84)"
+                  stroke={C.maskStroke}
                   strokeWidth={0.92}
                   strokeDasharray="4 3"
                   strokeLinejoin="round"
@@ -2399,13 +2392,13 @@ export function Viewport(props: {
                 <g key={`mask-sub-outline-${idx}`}>
                   <path
                     d={d}
-                    fill="rgba(22,42,74,0.18)"
+                    fill={C.subtractFill}
                     stroke="none"
                   />
                   <path
                     d={d}
                     fill="none"
-                    stroke="rgba(124,162,228,0.44)"
+                    stroke={C.subtractStroke}
                     strokeWidth={0.96}
                     strokeLinejoin="round"
                     vectorEffect="non-scaling-stroke"
@@ -2417,8 +2410,8 @@ export function Viewport(props: {
                   <path
                     d={d}
                     fill="none"
-                    stroke="rgba(70,28,60,0.7)"
-                    strokeWidth={1.62}
+                    stroke={C.maskHalo}
+                    strokeWidth={2.4}
                     strokeLinejoin="round"
                     strokeLinecap="round"
                     vectorEffect="non-scaling-stroke"
@@ -2426,8 +2419,8 @@ export function Viewport(props: {
                   <path
                     d={d}
                     fill="none"
-                    stroke="rgba(255,236,246,0.98)"
-                    strokeWidth={1.06}
+                    stroke={C.maskStroke}
+                    strokeWidth={1.3}
                     strokeLinejoin="round"
                     strokeLinecap="round"
                     vectorEffect="non-scaling-stroke"
@@ -2441,9 +2434,9 @@ export function Viewport(props: {
                     key={`target-contour-top-${idx}`}
                     d={d}
                     fill="none"
-                    stroke="rgba(118,255,230,0.92)"
-                    strokeWidth={1.08}
-                    strokeDasharray="5 3"
+                    stroke={C.target}
+                    strokeWidth={1.5}
+                    strokeDasharray="6 4.5"
                     strokeLinejoin="round"
                     strokeLinecap="round"
                     vectorEffect="non-scaling-stroke"
@@ -2631,7 +2624,7 @@ export function Viewport(props: {
                     <path
                       d={d}
                       fill="none"
-                      stroke="rgba(255,218,162,0.58)"
+                      stroke={C.sweepHalo}
                       strokeWidth={2.85}
                       strokeLinejoin="round"
                       strokeLinecap="round"
@@ -2640,7 +2633,7 @@ export function Viewport(props: {
                     <path
                       d={d}
                       fill="none"
-                      stroke="rgba(255,165,46,0.95)"
+                      stroke={C.sweepActive}
                       strokeWidth={1.7}
                       strokeLinejoin="round"
                       strokeLinecap="round"
@@ -2656,7 +2649,7 @@ export function Viewport(props: {
                     <path
                       d={d}
                       fill="none"
-                      stroke={sweepMaskOverlay.active?.underColor ?? "rgba(195,236,255,0.46)"}
+                      stroke={sweepMaskOverlay.active?.underColor ?? C.maskHalo}
                       strokeWidth={2.7}
                       strokeLinejoin="round"
                       strokeLinecap="round"
@@ -2665,7 +2658,7 @@ export function Viewport(props: {
                     <path
                       d={d}
                       fill="none"
-                      stroke={sweepMaskOverlay.active?.color ?? "rgba(124,215,255,0.96)"}
+                      stroke={sweepMaskOverlay.active?.color ?? C.maskStroke}
                       strokeWidth={1.5}
                       strokeDasharray={sweepMaskOverlay.active?.dash?.join(" ")}
                       strokeLinejoin="round"
@@ -2680,11 +2673,11 @@ export function Viewport(props: {
                   key={`custom-hit-top-${idx}`}
                   d={editableShapePaths[idx] ?? ""}
                   fill="rgba(255,255,255,0.001)"
-                  stroke={selectedCustomShapeIndexes.includes(idx) ? (activeEditLayer === "TARGET" ? "rgba(98,242,214,0.98)" : "rgba(255,132,196,0.94)") : "rgba(0,0,0,0)"}
+                  stroke={selectedCustomShapeIndexes.includes(idx) ? (activeEditLayer === "TARGET" ? C.selectTarget : C.select) : "rgba(0,0,0,0)"}
                   strokeWidth={selectedCustomShapeIndexes.includes(idx) ? 1.2 : 0.001}
                   vectorEffect="non-scaling-stroke"
                   style={{ cursor: "move" }}
-                  onMouseDown={(e) => {
+                  onPointerDown={(e) => {
                     if (editorTool !== "SELECT") return;
                     e.stopPropagation();
                     const additive = e.shiftKey || e.ctrlKey || e.metaKey;
@@ -2703,6 +2696,56 @@ export function Viewport(props: {
                   }}
                 />
               ))}
+              {selectedCustomRect && (() => {
+                const handleRadiusNm = (coarsePointer ? 9 : 4.2) / Math.max(scale, 0.0001);
+                const left = selectedCustomRect.x_nm;
+                const right = selectedCustomRect.x_nm + selectedCustomRect.w_nm;
+                const top = fovNm - (selectedCustomRect.y_nm + selectedCustomRect.h_nm);
+                const bottom = fovNm - selectedCustomRect.y_nm;
+                const corners: Array<{ key: "nw" | "ne" | "sw" | "se"; x: number; y: number }> = [
+                  { key: "nw", x: left, y: top },
+                  { key: "ne", x: right, y: top },
+                  { key: "sw", x: left, y: bottom },
+                  { key: "se", x: right, y: bottom },
+                ];
+                return (
+                  <g>
+                    <rect
+                      x={left}
+                      y={top}
+                      width={Math.max(1, selectedCustomRect.w_nm)}
+                      height={Math.max(1, selectedCustomRect.h_nm)}
+                      fill="none"
+                      stroke={C.select}
+                      strokeWidth={1.25}
+                      strokeDasharray="4 3"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                    {corners.map((c) => (
+                      <circle
+                        key={`rect-handle-${c.key}`}
+                        cx={c.x}
+                        cy={c.y}
+                        r={handleRadiusNm}
+                        fill={C.handleFill}
+                        stroke={C.select}
+                        strokeWidth={1.1}
+                        vectorEffect="non-scaling-stroke"
+                        style={{ cursor: c.key === "nw" || c.key === "se" ? "nwse-resize" : "nesw-resize" }}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          customRectResizeRef.current = {
+                            index: selectedCustomShapeIndex,
+                            corner: c.key,
+                            startShapes: editableShapes.map(cloneViewportShape),
+                          };
+                          setDragging(true);
+                        }}
+                      />
+                    ))}
+                  </g>
+                );
+              })()}
               {req.mask.mode === "TEMPLATE" && activeEditLayer !== "TARGET" && presetAnchorShapes.map((_, idx) => {
                 const d = presetAnchorPaths[idx] ?? "";
                 const selected = selectedCustomShapeIndexes.length === 0 && idx === selectedPresetAnchorIndex;
@@ -2710,13 +2753,13 @@ export function Viewport(props: {
                   <path
                     key={`preset-anchor-top-${idx}`}
                     d={d}
-                    fill="rgba(255,132,196,0.01)"
-                    stroke={selected ? "rgba(255,132,196,0.96)" : "rgba(255,182,220,0.34)"}
+                    fill="rgba(0,0,0,0.001)"
+                    stroke={selected ? C.select : C.anchor}
                     strokeWidth={selected ? 1.4 : 0.95}
                     strokeDasharray={selected ? "8 4" : "4 4"}
                     vectorEffect="non-scaling-stroke"
                     style={{ cursor: "pointer" }}
-                    onMouseDown={(e) => {
+                    onPointerDown={(e) => {
                       if (editorTool !== "SELECT") return;
                       e.stopPropagation();
                       onSelectPresetAnchor?.(idx);
@@ -2731,7 +2774,7 @@ export function Viewport(props: {
                     y1={sweepRuler.y}
                     x2={sweepRuler.x1}
                     y2={sweepRuler.y}
-                    stroke="rgba(255,181,71,0.96)"
+                    stroke={C.sraf}
                     strokeWidth={1.45}
                     strokeDasharray="5 3"
                     vectorEffect="non-scaling-stroke"
@@ -2741,7 +2784,7 @@ export function Viewport(props: {
                     y1={sweepRuler.y - 5.5 * viewInvZoom}
                     x2={sweepRuler.x0}
                     y2={sweepRuler.y + 5.5 * viewInvZoom}
-                    stroke="rgba(255,181,71,0.96)"
+                    stroke={C.sraf}
                     strokeWidth={1.2}
                     vectorEffect="non-scaling-stroke"
                   />
@@ -2750,7 +2793,7 @@ export function Viewport(props: {
                     y1={sweepRuler.y - 5.5 * viewInvZoom}
                     x2={sweepRuler.x1}
                     y2={sweepRuler.y + 5.5 * viewInvZoom}
-                    stroke="rgba(255,181,71,0.96)"
+                    stroke={C.sraf}
                     strokeWidth={1.2}
                     vectorEffect="non-scaling-stroke"
                   />
@@ -2764,7 +2807,7 @@ export function Viewport(props: {
                       x1={maskRuler.x1}
                       y={maskRuler.y}
                       axis={rulerAxis}
-                      color="#cc2d64"
+                      color={C.rulerMask}
                       label={`Mask ${Math.abs(maskRuler.x1 - maskRuler.x0).toFixed(1)} nm`}
                       labelDy={-14}
                       zoomScale={scale}
@@ -2783,7 +2826,7 @@ export function Viewport(props: {
                       x1={contourRuler.x1}
                       y={contourRuler.y}
                       axis={rulerAxis}
-                      color="#d6e0f2"
+                      color={C.rulerContour}
                       label={`Contour ${Math.abs(contourRuler.x1 - contourRuler.x0).toFixed(1)} nm`}
                       labelDy={22}
                       zoomScale={scale}
@@ -2799,10 +2842,33 @@ export function Viewport(props: {
                 </>
               )}
             </g>
+              {(() => {
+                // Scale bar: a round number of nanometres that spans about 15% of the stage at the current zoom.
+                const target = (fovNm * 0.15) / Math.max(scale, 1e-6);
+                const nice = [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000];
+                const barNm = nice.reduce((best, v) => (Math.abs(v - target) < Math.abs(best - target) ? v : best), nice[0]);
+                const lenUnits = barNm * scale;
+                const pad = fovNm * 0.035;
+                const y = fovNm - pad;
+                const fontUnits = fovNm / 62;
+                return (
+                  <g key={`scalebar-${Math.round(fovNm)}`} className="lt-scalebar" aria-hidden="true" pointerEvents="none">
+                    <line x1={pad} y1={y} x2={pad + lenUnits} y2={y} stroke={C.print} strokeWidth={1.6} vectorEffect="non-scaling-stroke" strokeLinecap="round" />
+                    <line x1={pad} y1={y - fontUnits * 0.45} x2={pad} y2={y + fontUnits * 0.45} stroke={C.print} strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
+                    <line x1={pad + lenUnits} y1={y - fontUnits * 0.45} x2={pad + lenUnits} y2={y + fontUnits * 0.45} stroke={C.print} strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
+                    <text x={pad} y={y - fontUnits * 0.75} fill={C.print} fontSize={fontUnits} fontWeight={600} fontFamily="Manrope, sans-serif">
+                      {barNm} nm
+                    </text>
+                    <text x={pad} y={y + fontUnits * 1.65} fill={C.target} fontSize={fontUnits * 0.78} fontWeight={600} fontFamily="Manrope, sans-serif">
+                      {`field ${Math.round(fovNm)} nm`}
+                    </text>
+                  </g>
+                );
+              })()}
           </svg>
         </div>
           {overlayPanelsMounted && (
-            <div className={`viewport-overlay-panels ${isCanvasLayout ? "viewport-overlay-panels-canvas" : "viewport-overlay-panels-studio"}`}>
+            <div className={`viewport-overlay-panels ${isCanvasLayout ? "viewport-overlay-panels-canvas" : "viewport-overlay-panels-studio"}`} onMouseLeave={onOverlayPointerLeave}>
               {renderRightRailPanels()}
             </div>
           )}
@@ -3153,6 +3219,7 @@ function drawSurface3D(
     colormapThreshold?: number;
     colormapOpacity?: number;
     contourStyle?: "CLASSIC" | "NEON" | "GOLD" | "MINIMAL";
+    theme?: "light" | "dark";
     epeContours?: Array<Array<{ p: { x: number; y: number }; dist: number; nearest: { x: number; y: number } }>> | null;
     epeMode?: "COLOR" | "ARROWS" | "BOTH" | "NONE";
   }
@@ -3222,17 +3289,20 @@ function drawSurface3D(
   };
 
   const bgGrad = ctx.createLinearGradient(0, 0, 0, hPx);
-  bgGrad.addColorStop(0, "#070e17");
-  bgGrad.addColorStop(0.5, "#0c1725");
-  bgGrad.addColorStop(1, "#0b1421");
+  const lightStage = opts.theme === "light";
+  bgGrad.addColorStop(0, lightStage ? "#ffffff" : "#1c1c1c");
+  bgGrad.addColorStop(0.5, lightStage ? "#f4f4f4" : "#151515");
+  bgGrad.addColorStop(1, lightStage ? "#ededed" : "#0f0f0f");
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, wPx, hPx);
   const backBloom = ctx.createRadialGradient(wPx * 0.52, hPx * 0.44, hPx * 0.08, wPx * 0.52, hPx * 0.44, hPx * 0.82);
   backBloom.addColorStop(0, "rgba(196,224,255,0.2)");
   backBloom.addColorStop(0.35, "rgba(148,188,240,0.08)");
   backBloom.addColorStop(1, "rgba(76,118,188,0)");
-  ctx.fillStyle = backBloom;
-  ctx.fillRect(0, 0, wPx, hPx);
+  if (!lightStage) {
+    ctx.fillStyle = backBloom;
+    ctx.fillRect(0, 0, wPx, hPx);
+  }
 
   function intensityAt(ix: number, iy: number, src: number[]) {
     const sy = Math.max(0, Math.min(h - 1, iy));
@@ -3678,10 +3748,10 @@ function drawSurface3D(
   // Vignette and frame finish
   const v = ctx.createRadialGradient(wPx * 0.5, hPx * 0.5, hPx * 0.25, wPx * 0.5, hPx * 0.5, hPx * 0.9);
   v.addColorStop(0, "rgba(0,0,0,0)");
-  v.addColorStop(1, "rgba(4,10,18,0.32)");
+  v.addColorStop(1, lightStage ? "rgba(0,0,0,0.05)" : "rgba(0,0,0,0.32)");
   ctx.fillStyle = v;
   ctx.fillRect(0, 0, wPx, hPx);
-  ctx.strokeStyle = "rgba(210,224,242,0.38)";
+  ctx.strokeStyle = lightStage ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.12)";
   ctx.lineWidth = 1;
   ctx.strokeRect(0.5, 0.5, wPx - 1, hPx - 1);
 }
@@ -4607,15 +4677,8 @@ function CdRuler(props: {
   const invZoom = 1 / Math.max(0.25, Math.min(16, zoomScale || 1));
   const tick = 6 * invZoom;
   const centerPrimary = (x0 + x1) * 0.5;
-  const fontSize = (selected ? 23 : 20) * invZoom;
-  const labelColor =
-    handlePrefix === "contour"
-      ? selected
-        ? "rgba(238,244,255,0.96)"
-        : "rgba(224,234,248,0.92)"
-      : selected
-        ? "rgba(255,132,184,0.98)"
-        : "rgba(246,119,174,0.94)";
+  const fontSize = (selected ? 13 : 12) * invZoom;
+  const labelColor = color;
   const startTarget = `${handlePrefix}-start` as
     | "mask-start"
     | "mask-end"
@@ -4665,7 +4728,7 @@ function CdRuler(props: {
         stroke={color}
         strokeWidth={(selected ? 2.2 : 1.7) * invZoom}
         style={{ cursor: "move" }}
-        onMouseDown={(e) => {
+        onPointerDown={(e) => {
           e.stopPropagation();
           onGrab(lineTarget, { x: e.clientX, y: e.clientY });
         }}
@@ -4678,7 +4741,7 @@ function CdRuler(props: {
         r={(selected ? 5 : 4.2) * invZoom}
         fill={color}
         style={{ cursor: isH ? "ew-resize" : "ns-resize" }}
-        onMouseDown={(e) => {
+        onPointerDown={(e) => {
           e.stopPropagation();
           onGrab(startTarget, { x: e.clientX, y: e.clientY });
         }}
@@ -4689,7 +4752,7 @@ function CdRuler(props: {
         r={(selected ? 5 : 4.2) * invZoom}
         fill={color}
         style={{ cursor: isH ? "ew-resize" : "ns-resize" }}
-        onMouseDown={(e) => {
+        onPointerDown={(e) => {
           e.stopPropagation();
           onGrab(endTarget, { x: e.clientX, y: e.clientY });
         }}
@@ -4699,7 +4762,7 @@ function CdRuler(props: {
         y={labelY}
         fill={labelColor}
         fontSize={fontSize}
-        fontWeight={selected ? 610 : 560}
+        fontWeight={600}
         textAnchor={labelAnchor}
         style={{ letterSpacing: 0.02, opacity: selected ? 1 : 0.92 }}
       >

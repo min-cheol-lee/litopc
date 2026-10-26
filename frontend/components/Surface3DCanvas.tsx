@@ -24,6 +24,15 @@ const HEIGHT_PER_DEPTH = 0.021;
 const FLOOR_Z = -0.115;
 let areaLightInitialized = false;
 
+/** Stage-dependent colours. No theme keeps the legacy navy studio exactly; "light" is the landing hero's
+ * slate wafer and grey target (lib/marketing-hero-scenes.ts); "dark" sits on a neutral grey stage, so the
+ * slate goes a step darker. The gradients mirror --lt-stage-3d in app/simulator-theme.css for PNG export. */
+const STAGES = {
+  legacy: { wafer: 0x1e2f42, target: 0x8dbebc, targetOpacity: .75, gradient: null },
+  light: { wafer: 0x6f7f92, target: 0x8f8f8f, targetOpacity: .9, gradient: ["#ffffff", "#ededed"] },
+  dark: { wafer: 0x3b4452, target: 0x9a9a9a, targetOpacity: .9, gradient: ["#1c1c1c", "#0f0f0f"] },
+} as const;
+
 const LEGACY_COLORS: Record<string, number[][]> = {
   plasma: [[13,8,135],[126,3,168],[203,71,120],[248,149,64],[240,249,33]],
   viridis: [[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]],
@@ -382,6 +391,19 @@ function updateIntensityOpacity(surface: THREE.Group, showAerial: boolean, value
   });
 }
 
+/** Paint the CSS stage gradient under a transparent render, so an exported PNG matches the panel. */
+function paintStage(source: HTMLCanvasElement, size: number, gradient: readonly [string, string]) {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  const fill = context.createLinearGradient(0, 0, 0, size);
+  fill.addColorStop(0, gradient[0]); fill.addColorStop(1, gradient[1]);
+  context.fillStyle = fill; context.fillRect(0, 0, size, size);
+  context.drawImage(source, 0, 0, size, size);
+  return canvas;
+}
+
 function contourLine(contour:ContourSet, props:Surface3DProps, iv:IntensityCache|null, color:number|THREE.Color, dashed=false, epe?:EpePoint[], fixedZ?:number, opacity=1) {
   const positions:number[]=[], colors:number[]=[];
   const points=contour.points_nm, useEpe=epe?.length===points.length;
@@ -408,6 +430,17 @@ const SceneInner=React.forwardRef<Surface3DHandle,Surface3DProps & { onDprChange
   const desiredDpr = getSurfacePixelRatio(size.width, size.height, typeof window === "undefined" ? 1 : window.devicePixelRatio || 1, props.qualityMode);
   const budget = getSurfaceRenderBudget(size.width, size.height, desiredDpr, props.qualityMode);
   const resolution = budget.maskTextureSize === 1024 ? 512 : 1024;
+  // A themed (or explicitly transparent) stage is painted by CSS behind the canvas.
+  const transparentStage = !!props.transparent || props.theme !== undefined;
+  const stage = STAGES[props.theme ?? "legacy"];
+  // Reflections and the studio settle over the first frames; report the third
+  // drawn frame so a host can fade the live canvas in (demand mode stays).
+  const drawnFrames=useRef(0);
+  useFrame(()=>{
+    if(drawnFrames.current>=3)return;
+    drawnFrames.current++;
+    if(drawnFrames.current<3)invalidate();else props.onFirstFrame?.();
+  });
 
   useEffect(() => {
     props.onDprChange(desiredDpr);
@@ -415,6 +448,7 @@ const SceneInner=React.forwardRef<Surface3DHandle,Surface3DProps & { onDprChange
 
   useEffect(()=>{
     gl.toneMapping=THREE.ACESFilmicToneMapping; gl.toneMappingExposure=1.02;gl.outputColorSpace=THREE.SRGBColorSpace;
+    if(transparentStage){scene.background=null;invalidate();return;}
     scene.background=new THREE.Color(0x03070c);
     const backdrop=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.ShaderMaterial({
       vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
@@ -425,7 +459,7 @@ const SceneInner=React.forwardRef<Surface3DHandle,Surface3DProps & { onDprChange
     }));
     backdrop.position.z=-6;backdrop.renderOrder=-100;scene.add(backdrop);
     return()=>{scene.remove(backdrop);backdrop.geometry.dispose();(backdrop.material as THREE.Material).dispose();};
-  },[gl,scene]);
+  },[gl,scene,transparentStage,invalidate]);
 
   useEffect(()=>{
     if(!outer.current)return;
@@ -477,7 +511,7 @@ const SceneInner=React.forwardRef<Surface3DHandle,Surface3DProps & { onDprChange
     const add=(sets:ContourSet[],c:number|THREE.Color,dashed=false,epe?:EpePoint[][]|null,fixedZ?:number,alpha=opacity)=>sets.forEach((set,i)=>contours.add(contourLine(set,props,iv,c,dashed,epe?.[i],fixedZ,alpha)));
     const colorEpe = !!props.epeContours && (props.epeMode === "COLOR" || props.epeMode === "BOTH");
     if(props.showMainContour || colorEpe)add(props.contours,color,false,colorEpe?props.epeContours:null,undefined,colorEpe ? 1 : opacity);
-    if(props.showTargetOverlay)add(props.targetContours,0x8dbebc,true,null,undefined,.75);
+    if(props.showTargetOverlay)add(props.targetContours,props.targetColor??stage.target,true,null,undefined,transparentStage?.9:stage.targetOpacity);
     if(props.compareActive){add(props.compareAContours,0x91b6dc,true);add(props.compareBContours,0xc9abc9,true);}
     for (const set of props.sweepContourSets) {
       let fixedZ: number | undefined;
@@ -521,7 +555,7 @@ const SceneInner=React.forwardRef<Surface3DHandle,Surface3DProps & { onDprChange
       contours.add(vectors);
     }
     invalidate();
-  },[props.contours,props.targetContours,props.finalMaskContours,props.showMainContour,props.showTargetOverlay,props.compareActive,props.compareAContours,props.compareBContours,props.sweepContourSets,props.epeContours,props.epeMode,props.fovNm,props.intensityData,props.depthScale,props.showAerial,props.contourStyle,props.zoomScale,size.height,camera,contours,invalidate]);
+  },[props.contours,props.targetContours,props.finalMaskContours,props.showMainContour,props.showTargetOverlay,props.compareActive,props.compareAContours,props.compareBContours,props.sweepContourSets,props.epeContours,props.epeMode,props.fovNm,props.intensityData,props.depthScale,props.showAerial,props.contourStyle,props.zoomScale,size.height,camera,contours,invalidate,props.targetColor,props.theme,props.transparent]);
 
   useEffect(()=>{
     mask.traverse((child)=>{if(child instanceof Reflector)reflections.delete(child);});disposeGroup(mask);
@@ -545,14 +579,14 @@ const SceneInner=React.forwardRef<Surface3DHandle,Surface3DProps & { onDprChange
   }, [budget.lightSteps, props.maskAddRects, props.maskSubtractRects, props.fovNm, props.showLightEffect, props.wavelengthNm, props.depthScale, beams, invalidate]);
   useEffect(()=>{
     ground.traverse((child)=>{if(child instanceof Reflector)reflections.delete(child);});disposeGroup(ground);
-    const silicon=new THREE.Mesh(new THREE.BoxGeometry(1.05,1.05,MASK_DEPTH),new THREE.MeshPhysicalMaterial({color:0x1e2f42,emissive:0x030911,emissiveIntensity:.22,roughness:.09,metalness:.72,clearcoat:.55,clearcoatRoughness:.07,envMapIntensity:.5}));
+    const silicon=new THREE.Mesh(new THREE.BoxGeometry(1.05,1.05,MASK_DEPTH),new THREE.MeshPhysicalMaterial({color:props.waferColor??stage.wafer,emissive:0x030911,emissiveIntensity:.22,roughness:.09,metalness:.72,clearcoat:.55,clearcoatRoughness:.07,envMapIntensity:.5}));
     silicon.name="RenderedSilicon";silicon.position.z=-MASK_DEPTH/2;ground.add(silicon);
     // The aerial surface and its labels are data overlays, not solid wafer
     // geometry. Reflect the mask and lights without duplicating that field.
     const siliconMirror=makeReflection(1.049,1.049,resolution,.24,reflections,undefined,false,[surface,contours]);siliconMirror.name="RenderedSiliconReflection";siliconMirror.position.z=.0004;siliconMirror.renderOrder=-1;ground.add(siliconMirror);
     const floor=makeReflection(5.4,5.4,resolution,.17,reflections,undefined,true);floor.name="RenderedFloorReflection";floor.position.z=FLOOR_Z;floor.renderOrder=0;ground.add(floor);invalidate();
     return()=>{ground.traverse((child)=>{if(child instanceof Reflector)reflections.delete(child);});disposeGroup(ground);};
-  },[ground,reflections,resolution,invalidate]);
+  },[ground,reflections,resolution,invalidate,props.waferColor,props.theme]);
   useEffect(() => {
     reflections.forEach((reflector) => {
       const target = reflector.getRenderTarget();
@@ -629,7 +663,10 @@ const SceneInner=React.forwardRef<Surface3DHandle,Surface3DProps & { onDprChange
         scene.updateMatrixWorld(true);
         gl.render(scene, camera);
         // Snapshot immediately; the live renderer need not preserve its buffer.
-        return await new Promise<Blob | null>((resolve) => gl.domElement.toBlob(resolve, "image/png"));
+        // A transparent stage lives in CSS, so the PNG gets that gradient painted under the render.
+        const gradient = STAGES[props.theme ?? (props.transparent ? "light" : "legacy")].gradient;
+        const composite = gradient ? paintStage(gl.domElement, size, gradient) : null;
+        return await new Promise<Blob | null>((resolve) => (composite ?? gl.domElement).toBlob(resolve, "image/png"));
       } finally {
         restoreTextures.forEach((restore) => restore());
         exportMask?.alpha.dispose(); exportMask?.rim.dispose();
@@ -648,7 +685,7 @@ const SceneInner=React.forwardRef<Surface3DHandle,Surface3DProps & { onDprChange
         invalidate();
       }
     },
-  }), [gl, camera, scene, reflections, invalidate, surface, mask, beams, props.colormapType, props.colormapThreshold, props.maskAddRects, props.maskSubtractRects, props.fovNm, budget.maskTextureSize]);
+  }), [gl, camera, scene, reflections, invalidate, surface, mask, beams, props.colormapType, props.colormapThreshold, props.maskAddRects, props.maskSubtractRects, props.fovNm, budget.maskTextureSize, props.theme, props.transparent]);
 
   return <>
     <ambientLight color={0xb9c9dc} intensity={0.28}/>

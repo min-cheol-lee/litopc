@@ -23,8 +23,15 @@ import type {
 import type { SavedScenario } from "../lib/scenarios";
 import type { UsageStatus } from "../lib/usage";
 import { trackProductEvent } from "../lib/telemetry";
+import { templateLabelFor } from "../lib/pattern-catalog";
+import { sizeWarning } from "../lib/resolution-guide";
 import { isLShapeOpcTemplate } from "../lib/template-variants";
 import { FreeSimulatorAd } from "./FreeSimulatorAd";
+import { PatternPicker } from "./PatternPicker";
+import { PatternParams } from "./PatternParams";
+import type { SimulatorTheme } from "../lib/simulator-theme";
+
+const WELCOME_KEY = "litopc.welcome.v1";
 
 type CustomMaskPreset = {
   id: string;
@@ -41,7 +48,10 @@ type CustomMaskPreset = {
 export function ControlPanel(props: {
   plan: Plan;
   maskMode: "TEMPLATE" | "CUSTOM";
-  onReinitializeTemplate: () => void;
+  onReinitializeTemplate: (nextParams?: Record<string, number>) => void;
+  onLoadCustomExample?: () => void;
+  /** Pattern parameters shape the mask and its target together; the page owns that rule. */
+  onPatternParamsChange?: (next: Record<string, number>) => void;
   onStartBlankWorkspace: () => void;
   activeEditLayer: EditorLayer;
   onSetActiveEditLayer: (v: EditorLayer) => void;
@@ -179,6 +189,8 @@ export function ControlPanel(props: {
   opcBestIterIndex?: number | null;
   opcError?: string | null;
   opcOriginMaskMode?: "TEMPLATE" | "CUSTOM" | null;
+  theme?: SimulatorTheme;
+  onToggleTheme?: () => void;
   onExportOpcGif?: () => void;
   opcGifExporting?: boolean;
 }) {
@@ -188,6 +200,8 @@ export function ControlPanel(props: {
     plan,
     maskMode,
     onReinitializeTemplate,
+    onLoadCustomExample,
+    onPatternParamsChange,
     onStartBlankWorkspace,
     activeEditLayer,
     onSetActiveEditLayer,
@@ -319,11 +333,23 @@ export function ControlPanel(props: {
     opcBestIterIndex = null,
     opcError = null,
     opcOriginMaskMode = null,
+    theme = "light",
+    onToggleTheme,
     onExportOpcGif,
     opcGifExporting = false,
   } = props;
 
   const [maskPresetName, setMaskPresetName] = useState("");
+  const [lockedPattern, setLockedPattern] = useState<TemplateID | null>(null);
+  // First-visit invitation to the How OPC works page; dismissed once per browser.
+  const [welcomeDismissed, setWelcomeDismissed] = useState(true);
+  useEffect(() => {
+    try { setWelcomeDismissed(window.localStorage.getItem(WELCOME_KEY) === "1"); } catch { setWelcomeDismissed(false); }
+  }, []);
+  function dismissWelcome() {
+    setWelcomeDismissed(true);
+    try { window.localStorage.setItem(WELCOME_KEY, "1"); } catch { /* ignore */ }
+  }
   const [sidebarTab, setSidebarTab] = useState<"SETUP" | "ANALYZE" | "HISTORY">("SETUP");
   const [sweepLogY, setSweepLogY] = useState(false);
   const [sweepSnapshotName, setSweepSnapshotName] = useState("");
@@ -361,6 +387,11 @@ export function ControlPanel(props: {
   const steppedTemplate = templateId === "STAIRCASE" || templateId === "STAIRCASE_OPC";
   const squareTemplate = templateId === "CONTACT_RAW" || templateId === "CONTACT_OPC_SERIF";
   const customShapePromptVisible = plan === "FREE" && customLimitReached;
+  const customWorkspace = maskMode === "CUSTOM" && opcOriginMaskMode !== "TEMPLATE";
+  const hasRun = Boolean(currentRunId);
+  const patternSizeWarning = sizeWarning(presetId, maskShapes);
+  // Which of the three steps is the natural next click: it alone gets the gradient button.
+  const flowState: "initial" | "simulated" | "corrected" = (opcRunning || opcProgress.length > 0) ? "corrected" : hasRun ? "simulated" : "initial";
   const sweepPromptVisible = sidebarTab === "ANALYZE" && sweepLocked;
   const planLabel = plan === "PRO" ? "Pro" : "Free";
   const upgradeLocked = plan === "PRO";
@@ -554,279 +585,156 @@ export function ControlPanel(props: {
             </button>
           ))}
         </div>
-        <a href="/litopc/learn" className="learn-header-btn">
-          <span className="learn-header-btn-icon">
-            <svg viewBox="0 0 14 14" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="7" cy="7" r="5.5" />
-              <path d="M7 4.5v3l1.5 1.5" />
-            </svg>
-          </span>
-          <span className="learn-header-btn-text">How OPC Works</span>
-          <span className="learn-header-btn-arrow">›</span>
-        </a>
         {sidebarTab === "SETUP" && (<>
-        <div className="group-card compact">
-          <div className="plan-row">
-            <span className={`plan-status-pill ${plan === "PRO" ? "is-pro" : "is-free"}`}>
-              {planLabel}
-            </span>
+        <div className="lt-plan-line">
+          <span className="lt-plan-left">
+            <span className={`plan-status-pill ${plan === "PRO" ? "is-pro" : "is-free"}`}>{planLabel}</span>
             {usageStatus && (
-              <div className="plan-metrics-inline">
-                <span><b>Runs</b> {usageStatus.usage.runs}/{usageStatus.limits.runs}</span>
-                <span><b>Sweep</b> {usageStatus.usage.sweep_points}/{usageStatus.limits.sweep_points}</span>
-                <span><b>Export</b> {usageStatus.usage.exports}/{usageStatus.limits.exports}</span>
-              </div>
+              <span
+                className="lt-plan-usage"
+                title={`Runs ${usageStatus.usage.runs}/${usageStatus.limits.runs} · Sweep points ${usageStatus.usage.sweep_points}/${usageStatus.limits.sweep_points} · Exports ${usageStatus.usage.exports}/${usageStatus.limits.exports}`}
+              >
+                {usageStatus.usage.runs} / {usageStatus.limits.runs} runs
+              </span>
             )}
-          </div>
-          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-            <button
-              className="mini-btn slim plan-action-btn upgrade"
-              onClick={() => (manageBillingVisible ? requestManageBilling("account_panel") : requestUpgrade("account_panel"))}
-              disabled={upgradeLocked && !manageBillingVisible}
-              title={planActionTitle}
-              style={{ flex: 1 }}
-            >
-              {planActionLabel}
-            </button>
-            {accountSignedIn && (
-              <button className="mini-btn slim plan-utility-link" onClick={onSignOutIntent} type="button">
-                Sign out
+          </span>
+          <span className="lt-plan-right">
+            {!(upgradeLocked && !manageBillingVisible) && (
+              <button
+                type="button"
+                className="lt-link"
+                onClick={() => (manageBillingVisible ? requestManageBilling("account_panel") : requestUpgrade("account_panel"))}
+                title={planActionTitle}
+              >
+                {manageBillingVisible ? "Billing" : "Upgrade"}
               </button>
             )}
-            {showInternalLoginLink && (
-              <a href="/litopc/internal-login" className="plan-utility-link" title="Internal tester identity">
-                Tester
-              </a>
-            )}
-          </div>
-        </div>
-
-        <div className="group-card compact run-card">
-          <div className="opc-card-head">
-            <span className="opc-card-title">Lithography Sim</span>
-            <span className="opc-card-tag">aerial image</span>
-          </div>
-          <button className="run-main-btn" onClick={onRun} disabled={loading}>
-            {loading ? "Simulating..." : (
-              <><span className="run-main-label">Simulate</span><span className="run-main-sub">Mask → Contour</span></>
-            )}
-          </button>
-        </div>
-
-        {/* ── OPC Auto-Correction ── */}
-        {onRunOpcCorrection && (targetShapes.length > 0 || maskMode === "CUSTOM") && (
-          <div className="group-card compact run-card opc-card">
-
-            {/* Header row */}
-            <div className="opc-card-head">
-              <span className="opc-card-title">OPC Auto-Correct</span>
-              <span className="opc-card-tag">model-based</span>
-            </div>
-
-            {/* Idle: show run button + description */}
-            {opcProgress.length === 0 && !opcRunning && (
-              <>
-                <button
-                  className="opc-card-run-btn"
-                  onClick={onRunOpcCorrection}
-                  disabled={loading || targetShapes.length === 0}
-                  title={targetShapes.length === 0 ? "Add a target shape in the Target layer first" : undefined}
-                >
-                  <span className="run-main-label">Correct</span><span className="opc-card-run-sub">OPC · {opcIterations} iter</span>
-                </button>
-                {targetShapes.length === 0 && (
-                  <p className="opc-no-target-note">Set a target shape in the Target layer to enable OPC.</p>
-                )}
-              </>
-            )}
-
-            {/* Active / done: convergence chart */}
-            {(opcRunning || opcProgress.length > 0) && (() => {
-              const maxEpe = Math.max(...opcProgress.map(r => r.epeMeanNm), 1);
-              const first = opcProgress[0]?.initialEpeMeanNm ?? null;
-              const selectedIndex = !opcRunning && opcBestIterIndex !== null
-                ? opcBestIterIndex : opcProgress.length - 1;
-              const last = opcProgress[selectedIndex]?.epeMeanNm ?? null;
-              const improved = first !== null && last !== null ? opcImprovementPercent(first, last) : null;
-              // Total iterations run (accumulates across continues)
-              const totalIter = opcProgress.length;
-              // Current batch: last opcIterations entries (or all if first run)
-              const batchDone = opcRunning ? opcProgress.length % opcIterations : (totalIter % opcIterations || opcIterations);
-              const W = 200, H = 44;
-              // Normalise x over total entries so chart always fills width
-              const nPts = Math.max(opcProgress.length, 1);
-              const pts = opcProgress.map((r, i) => {
-                const x = (i / Math.max(nPts - 1, 1)) * (W - 8) + 4;
-                const y = H - 6 - ((r.epeMeanNm / maxEpe) * (H - 12));
-                return `${x.toFixed(1)},${y.toFixed(1)}`;
-              });
-              // Best-iteration marker coordinates (green dot on sparkline).
-              const bestPt = (!opcRunning && opcBestIterIndex !== null && opcBestIterIndex >= 0 && opcBestIterIndex < opcProgress.length)
-                ? pts[opcBestIterIndex]
-                : null;
-              const bestEpeNm = bestPt !== null && opcBestIterIndex !== null
-                ? opcProgress[opcBestIterIndex].epeMeanNm
-                : null;
-              return (
-                <div className="opc-chart-wrap">
-                  {/* Sparkline */}
-                  <svg className="opc-sparkline" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-                    <line x1="0" y1={H/2} x2={W} y2={H/2} stroke="rgba(33,44,64,0.08)" strokeWidth="1"/>
-                    {pts.length >= 2 && (
-                      <polyline
-                        points={`4,${H} ${pts.join(" ")} ${pts[pts.length-1].split(",")[0]},${H}`}
-                        fill="rgba(10,132,255,0.07)" stroke="none"
-                      />
-                    )}
-                    {pts.length >= 2 && (
-                      <polyline points={pts.join(" ")} fill="none" stroke="rgba(10,100,220,0.7)" strokeWidth="1.5" strokeLinejoin="round"/>
-                    )}
-                    {pts.length > 0 && !opcRunning && (
-                      <circle cx={pts[pts.length-1].split(",")[0]} cy={pts[pts.length-1].split(",")[1]}
-                        r="2.5" fill="rgba(10,100,220,0.9)" />
-                    )}
-                    {opcRunning && pts.length > 0 && (
-                      <circle cx={pts[pts.length-1].split(",")[0]} cy={pts[pts.length-1].split(",")[1]}
-                        r="2.5" fill="rgba(10,100,220,0.8)" className="opc-dot-pulse" />
-                    )}
-                    {/* Green dot marks the best-EPE iteration when it differs from the last */}
-                    {bestPt && (
-                      <circle cx={bestPt.split(",")[0]} cy={bestPt.split(",")[1]}
-                        r="3.5" fill="rgba(30,160,80,0.9)" />
-                    )}
-                  </svg>
-
-                  {/* Stats row */}
-                  <div className="opc-stats-row">
-                    <div className="opc-stat">
-                      <span className="opc-stat-label">iter</span>
-                      <span className="opc-stat-val">
-                        {opcRunning
-                          ? `${batchDone}/${opcIterations}`
-                          : totalIter > opcIterations
-                            ? `${totalIter} total`
-                            : `${totalIter}/${opcIterations}`}
-                      </span>
-                    </div>
-                    <div className="opc-stat">
-                      <span className="opc-stat-label">EPE mean</span>
-                      <span className="opc-stat-val">
-                        {bestEpeNm !== null
-                          ? `${bestEpeNm.toFixed(1)} nm`
-                          : last !== null ? `${last.toFixed(1)} nm` : "—"}
-                      </span>
-                    </div>
-                    {bestPt && opcBestIterIndex !== null && (
-                      <div className="opc-stat">
-                        <span className="opc-stat-label">best</span>
-                        <span className="opc-stat-val opc-stat-good">iter {opcBestIterIndex + 1}</span>
-                      </div>
-                    )}
-                    {improved !== null && !opcRunning && !bestPt && (
-                      <div className="opc-stat">
-                        <span className="opc-stat-label">improve</span>
-                        <span className={`opc-stat-val ${improved > 0 ? "opc-stat-good" : "opc-stat-bad"}`}>
-                          {improved > 0 ? "↓" : "↑"}{Math.abs(improved).toFixed(0)}%
-                        </span>
-                      </div>
-                    )}
-                    {opcRunning && (
-                      <div className="opc-stat">
-                        <span className="opc-stat-label">running</span>
-                        <span className="opc-stat-val opc-running-dots">···</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Convergence / divergence notice */}
-                  {!opcRunning && opcBatchStatus && opcBatchStatus !== "improved" && (
-                    <div className={`opc-batch-notice opc-batch-${opcBatchStatus}`}>
-                      {opcBatchStatus === "diverged"
-                        ? "⚠ EPE worsened — consider rolling back."
-                        : "◎ EPE plateaued — further iterations unlikely to help."}
-                    </div>
+            {(accountSignedIn || showInternalLoginLink) && (
+              <details className="lt-plan-more">
+                <summary aria-label="Account options" title="Account">
+                  <span aria-hidden="true">···</span>
+                </summary>
+                <div className="lt-plan-more-menu">
+                  {accountIdentityLabel && <div className="lt-note">{accountIdentityLabel}</div>}
+                  {accountSignedIn && (
+                    <button className="lt-link" onClick={onSignOutIntent} type="button">Sign out</button>
                   )}
-
-                  {/* Action buttons */}
-                  <div className="opc-btn-row">
-                    {opcRunning && (
-                      <button className="opc-btn opc-btn-stop" onClick={onCancelOpcCorrection}>Stop</button>
-                    )}
-                    {!opcRunning && (
-                      <>
-                        <button className="opc-btn opc-btn-apply" onClick={onApplyOpcResult}>
-                          Apply to Mask
-                        </button>
-                        <button
-                          className="opc-btn opc-btn-gif"
-                          onClick={onExportOpcGif}
-                          disabled={opcGifExporting || !onExportOpcGif}
-                          title="Export OPC correction progress as animated GIF">
-                          {opcGifExporting ? "Encoding…" : "Export GIF"}
-                        </button>
-                        <button
-                          className="opc-btn opc-btn-rerun"
-                          onClick={canContinueOpc ? onContinueOpcCorrection : onUpgradeIntent?.bind(null, "opc_continue")}
-                          disabled={loading}
-                          title={canContinueOpc
-                            ? `Run ${opcIterations} more iterations from the current corrected mask`
-                            : "Pro plan required to continue OPC iterations"}>
-                          {canContinueOpc ? `+${opcIterations} iter` : `🔒 +${opcIterations} iter`}
-                        </button>
-                        {opcHasCheckpoint && (
-                          <button className="opc-btn opc-btn-rollback" onClick={onRollbackOpcResult} disabled={loading}
-                            title="Undo the last batch and return to the previous mask">
-                            ↩ Undo
-                          </button>
-                        )}
-                        <button className="opc-btn opc-btn-reset" onClick={onResetOpc ?? onRunOpcCorrection} disabled={loading}
-                          title="Reset mask to original target (discard OPC corrections)">
-                          ↺
-                        </button>
-                      </>
-                    )}
-                  </div>
+                  {showInternalLoginLink && (
+                    <a href="/litopc/internal-login" className="lt-link lt-link-quiet" title="Internal tester identity">Tester login</a>
+                  )}
                 </div>
-              );
-            })()}
-            {opcError && <div className="opc-error-msg" role="alert">{opcError}</div>}
-          </div>
+              </details>
+            )}
+          {onToggleTheme && (
+            <button
+              type="button"
+              className="lt-theme-toggle"
+              onClick={onToggleTheme}
+              aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+              title={theme === "dark" ? "Light theme" : "Dark theme"}
+            >
+              {theme === "dark" ? (
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="8" cy="8" r="3.2" />
+                  <path d="M8 1.6v1.6M8 12.8v1.6M1.6 8h1.6M12.8 8h1.6M3.5 3.5l1.1 1.1M11.4 11.4l1.1 1.1M3.5 12.5l1.1-1.1M11.4 4.6l1.1-1.1" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M13.2 10.1A5.6 5.6 0 0 1 5.9 2.8a5.6 5.6 0 1 0 7.3 7.3Z" />
+                </svg>
+              )}
+            </button>
+          )}
+          </span>
+        </div>
+        {(usageError || accountError) && (
+          <div className="lt-inline-error" role="status">{usageError ?? accountError}</div>
         )}
 
-        <div className="group-card compact">
-          <p className="group-title">Mask Setup</p>
-          <label className="label">Imaging Tool</label>
-          <select value={presetId} onChange={(e) => setPresetId(e.target.value as any)} style={{ width: "100%" }}>
-            {presetOptions.map((preset) => (
-              <option key={preset.id} value={preset.id}>{preset.label}</option>
-            ))}
-          </select>
-          <label className="label" style={{ marginTop: 10 }}>Pattern</label>
-          <select value={maskMode === "CUSTOM" && opcOriginMaskMode !== "TEMPLATE" ? "__custom__" : templateId} onChange={(e) => { if (e.target.value !== "__custom__") setTemplateId(e.target.value as any); }} style={{ width: "100%" }}>
-            {maskMode === "CUSTOM" && opcOriginMaskMode !== "TEMPLATE" && <option value="__custom__">— Custom Layout —</option>}
-            {templateOptions.map((t) => (
-              <option key={t.id} value={t.id}>{t.label}</option>
-            ))}
-          </select>
-          <div className="mask-action-group">
-            <div className="mask-action-row">
-              <button className="mini-btn mask-seed-btn" onClick={maskMode === "CUSTOM" && opcOriginMaskMode !== "TEMPLATE" ? onStartBlankWorkspace : onReinitializeTemplate}>Reinitialize</button>
-              <button className="mini-btn mask-seed-btn secondary" onClick={onStartBlankWorkspace}>Start Blank</button>
+        <div className="lt-flow">
+          {!welcomeDismissed && !hasRun && (
+            <div className="lt-welcome" role="note">
+              <a href="/basics#tour" className="lt-welcome-link">
+                <span className="lt-welcome-copy">
+                  <strong>New to OPC?</strong>
+                  <span>Watch a mask get corrected in four steps</span>
+                </span>
+                <span className="lt-welcome-go" aria-hidden="true">›</span>
+              </a>
+              <button type="button" className="lt-welcome-close" onClick={dismissWelcome} aria-label="Dismiss">×</button>
             </div>
-            <div className="mask-library-file-row">
+          )}
+          <section className="group-card lt-step" aria-label="Pattern">
+            <header className="lt-step-head">
+              <span className="lt-step-n">1</span>
+              <span className="lt-step-t">Pattern</span>
+              <a href="/litopc/learn" className="lt-link lt-step-aside">How OPC works ›</a>
+            </header>
+            <PatternPicker
+              presetId={presetId}
+              plan={plan}
+              value={customWorkspace ? null : templateId}
+              custom={customWorkspace}
+              onSelect={(id) => setTemplateId(id)}
+              onCustom={onStartBlankWorkspace}
+              onLocked={(id) => {
+                setLockedPattern(id);
+                markUpgradePromptViewed("pattern_library", true);
+              }}
+            />
+            {lockedPattern && (
+              <div className="lt-note lt-locked-note" role="status">
+                {templateLabelFor(lockedPattern)} is in the Pro pattern library.{" "}
+                <button type="button" className="lt-link" onClick={() => requestUpgrade("pattern_library")} disabled={upgradeLocked}>
+                  {upgradeRequiresIdentity ? "Sign in to upgrade" : "Upgrade"}
+                </button>
+                {" · "}
+                <button type="button" className="lt-link lt-link-quiet" onClick={() => setLockedPattern(null)}>Dismiss</button>
+              </div>
+            )}
+            {customWorkspace ? (
+              <div className="lt-note lt-custom-hint">
+                Draw your own mask in the Edit panel: Add, then drag on the canvas.
+                {onLoadCustomExample && (
+                  <>
+                    {" "}Or{" "}
+                    <button type="button" className="lt-link" onClick={onLoadCustomExample}>load an example</button>.
+                  </>
+                )}
+              </div>
+            ) : (
+              <PatternParams
+                presetId={presetId}
+                templateId={templateId}
+                params={params}
+                onChange={(next) => {
+                  if (onPatternParamsChange) { onPatternParamsChange(next); return; }
+                  setParams(next);
+                  if (maskMode === "CUSTOM") onReinitializeTemplate(next);
+                }}
+              />
+            )}
+            {!customWorkspace && <div className="lt-note lt-param-note">Sets the mask and its target. Fine-tune single shapes in Edit.</div>}
+            {patternSizeWarning && <div className="lt-note lt-warn" role="status">{patternSizeWarning}</div>}
+            <label className="label lt-field-label" htmlFor="lt-imaging-tool">Imaging tool</label>
+            <select id="lt-imaging-tool" value={presetId} onChange={(e) => setPresetId(e.target.value as any)} style={{ width: "100%" }}>
+              {presetOptions.map((preset) => (
+                <option key={preset.id} value={preset.id}>{preset.label}</option>
+              ))}
+            </select>
+            <div className="lt-file-row" role="group" aria-label="Mask file actions">
+              <button type="button" className="lt-file-btn" onClick={() => (customWorkspace ? onStartBlankWorkspace() : onReinitializeTemplate())} title="Reset the mask to the pattern">Reset</button>
+              <button type="button" className="lt-file-btn" onClick={onStartBlankWorkspace} title="Start an empty custom workspace">Blank</button>
               <button
-                className="mini-btn mask-seed-btn secondary"
+                type="button"
+                className="lt-file-btn"
                 disabled={maskShapes.length === 0}
                 onClick={() => onExportCustomMaskFile(maskPresetName)}
-                title="Export current mask as a file."
+                title="Export the current mask as a file"
               >
                 Export
               </button>
-              <button
-                className="mini-btn mask-seed-btn secondary"
-                onClick={() => maskFileInputRef.current?.click()}
-                title="Import a saved mask file."
-              >
+              <button type="button" className="lt-file-btn" onClick={() => maskFileInputRef.current?.click()} title="Import a saved mask file">
                 Import
               </button>
               <input
@@ -842,16 +750,18 @@ export function ControlPanel(props: {
                 }}
               />
             </div>
+            {customMaskFileStatus && <div className="lt-note">{customMaskFileStatus}</div>}
             {plan === "PRO" && (
               <div className="mask-library-save-row">
                 <input
                   type="text"
-                  placeholder="snapshot name"
+                  placeholder="Snapshot name"
                   value={maskPresetName}
                   onChange={(e) => setMaskPresetName(e.target.value)}
                   style={{ minWidth: 0 }}
                 />
                 <button
+                  type="button"
                   className="mini-btn mask-seed-btn"
                   disabled={!maskPresetName.trim() || maskShapes.length === 0}
                   onClick={() => {
@@ -873,36 +783,225 @@ export function ControlPanel(props: {
                 ))}
               </div>
             )}
-          </div>
+          </section>
+
+          <section className="group-card lt-step lt-dose" aria-label="Exposure">
+            <div className="lt-dose-row">
+              <label className="label lt-field-label" htmlFor="lt-dose" title={dosePolicyText}>Dose</label>
+              <input
+                id="lt-dose"
+                type="range"
+                min={doseMin}
+                max={doseMax}
+                step={doseStep}
+                value={dose}
+                onChange={(e) => setDose(parseFloat(e.target.value))}
+              />
+              <input
+                type="number"
+                aria-label="Dose threshold"
+                min={doseMin}
+                max={doseMax}
+                step={doseStep}
+                value={dose}
+                onChange={(e) => setDose(parseFloat(e.target.value))}
+              />
+            </div>
+          </section>
+          {plan === "FREE" && !usageLoading && <FreeSimulatorAd />}
         </div>
 
-        <div className="group-card compact">
-          <p className="group-title">Exposure</p>
-          <label className="label">Dose (threshold)</label>
-          <div className="row">
-            <input
-              type="range"
-              min={doseMin}
-              max={doseMax}
-              step={doseStep}
-              value={dose}
-              onChange={(e) => setDose(parseFloat(e.target.value))}
-              style={{ flex: 1 }}
-            />
-            <input
-              type="number"
-              min={doseMin}
-              max={doseMax}
-              step={doseStep}
-              value={dose}
-              onChange={(e) => setDose(parseFloat(e.target.value))}
-              style={{ width: 88 }}
-            />
-          </div>
+        <div className={`lt-actions is-${flowState}`}>
+          <section className="lt-step lt-step-sim" aria-label="Simulate">
+            <header className="lt-step-head">
+              <span className="lt-step-n">2</span>
+              <span className="lt-step-t">Simulate</span>
+            </header>
+            <button className={`run-main-btn ${flowState === "initial" ? "is-next" : ""}`} onClick={onRun} disabled={loading}>
+              {loading ? "Simulating…" : hasRun ? "Simulate again" : "Simulate"}
+            </button>
+          </section>
+
+          {/* ── OPC Auto-Correction ── */}
+          {onRunOpcCorrection && (targetShapes.length > 0 || maskMode === "CUSTOM") && (
+            <section className="lt-step lt-step-opc opc-card" aria-label="Correct">
+              <header className="lt-step-head">
+                <span className="lt-step-n">3</span>
+                <span className="lt-step-t">Correct</span>
+                {opcProgress.length === 0 && !opcRunning && <span className="lt-step-aside lt-note">OPC · {opcIterations} iterations</span>}
+              </header>
+
+              {/* Idle: show run button + description */}
+              {opcProgress.length === 0 && !opcRunning && (
+                <>
+                  <button
+                    className={`opc-card-run-btn ${flowState === "simulated" ? "is-next" : ""}`}
+                    onClick={onRunOpcCorrection}
+                    disabled={loading || targetShapes.length === 0}
+                    title={targetShapes.length === 0 ? "Add a target shape in the Target layer first" : undefined}
+                  >
+                    Correct the mask
+                  </button>
+                  {targetShapes.length === 0 && (
+                    <p className="opc-no-target-note">Set a target shape in the Target layer to enable OPC.</p>
+                  )}
+                </>
+              )}
+
+              {/* Active / done: convergence chart */}
+              {(opcRunning || opcProgress.length > 0) && (() => {
+                const maxEpe = Math.max(...opcProgress.map(r => r.epeMeanNm), 1);
+                const first = opcProgress[0]?.initialEpeMeanNm ?? null;
+                const selectedIndex = !opcRunning && opcBestIterIndex !== null
+                  ? opcBestIterIndex : opcProgress.length - 1;
+                const last = opcProgress[selectedIndex]?.epeMeanNm ?? null;
+                const improved = first !== null && last !== null ? opcImprovementPercent(first, last) : null;
+                // Total iterations run (accumulates across continues)
+                const totalIter = opcProgress.length;
+                // Current batch: last opcIterations entries (or all if first run)
+                const batchDone = opcRunning ? opcProgress.length % opcIterations : (totalIter % opcIterations || opcIterations);
+                const W = 200, H = 44;
+                // Normalise x over total entries so chart always fills width
+                const nPts = Math.max(opcProgress.length, 1);
+                const pts = opcProgress.map((r, i) => {
+                  const x = (i / Math.max(nPts - 1, 1)) * (W - 8) + 4;
+                  const y = H - 6 - ((r.epeMeanNm / maxEpe) * (H - 12));
+                  return `${x.toFixed(1)},${y.toFixed(1)}`;
+                });
+                // Best-iteration marker coordinates on the sparkline.
+                const bestPt = (!opcRunning && opcBestIterIndex !== null && opcBestIterIndex >= 0 && opcBestIterIndex < opcProgress.length)
+                  ? pts[opcBestIterIndex]
+                  : null;
+                const bestEpeNm = bestPt !== null && opcBestIterIndex !== null
+                  ? opcProgress[opcBestIterIndex].epeMeanNm
+                  : null;
+                return (
+                  <div className="opc-chart-wrap">
+                    {/* Sparkline */}
+                    <svg className="opc-sparkline" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+                      <line className="opc-spark-base" x1="0" y1={H/2} x2={W} y2={H/2} strokeWidth="1"/>
+                      {pts.length >= 2 && (
+                        <polyline
+                          className="opc-spark-area"
+                          points={`4,${H} ${pts.join(" ")} ${pts[pts.length-1].split(",")[0]},${H}`}
+                          stroke="none"
+                        />
+                      )}
+                      {pts.length >= 2 && (
+                        <polyline className="opc-spark-line" points={pts.join(" ")} fill="none" strokeWidth="1.5" strokeLinejoin="round"/>
+                      )}
+                      {pts.length > 0 && !opcRunning && (
+                        <circle className="opc-spark-dot" cx={pts[pts.length-1].split(",")[0]} cy={pts[pts.length-1].split(",")[1]} r="2.5" />
+                      )}
+                      {opcRunning && pts.length > 0 && (
+                        <circle className="opc-spark-dot opc-dot-pulse" cx={pts[pts.length-1].split(",")[0]} cy={pts[pts.length-1].split(",")[1]} r="2.5" />
+                      )}
+                      {/* Marks the best-EPE iteration when it differs from the last */}
+                      {bestPt && (
+                        <circle className="opc-spark-best" cx={bestPt.split(",")[0]} cy={bestPt.split(",")[1]} r="3.5" />
+                      )}
+                    </svg>
+
+                    {/* Stats row */}
+                    <div className="opc-stats-row">
+                      <div className="opc-stat">
+                        <span className="opc-stat-label">iter</span>
+                        <span className="opc-stat-val">
+                          {opcRunning
+                            ? `${batchDone}/${opcIterations}`
+                            : totalIter > opcIterations
+                              ? `${totalIter} total`
+                              : `${totalIter}/${opcIterations}`}
+                        </span>
+                      </div>
+                      <div className="opc-stat">
+                        <span className="opc-stat-label">EPE mean</span>
+                        <span className="opc-stat-val">
+                          {bestEpeNm !== null
+                            ? `${bestEpeNm.toFixed(1)} nm`
+                            : last !== null ? `${last.toFixed(1)} nm` : "—"}
+                        </span>
+                      </div>
+                      {bestPt && opcBestIterIndex !== null && (
+                        <div className="opc-stat">
+                          <span className="opc-stat-label">best</span>
+                          <span className="opc-stat-val opc-stat-good">iter {opcBestIterIndex + 1}</span>
+                        </div>
+                      )}
+                      {improved !== null && !opcRunning && !bestPt && (
+                        <div className="opc-stat">
+                          <span className="opc-stat-label">improve</span>
+                          <span className={`opc-stat-val ${improved > 0 ? "opc-stat-good" : "opc-stat-bad"}`}>
+                            {improved > 0 ? "↓" : "↑"}{Math.abs(improved).toFixed(0)}%
+                          </span>
+                        </div>
+                      )}
+                      {opcRunning && (
+                        <div className="opc-stat">
+                          <span className="opc-stat-label">running</span>
+                          <span className="opc-stat-val opc-running-dots">···</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Convergence / divergence notice */}
+                    {!opcRunning && opcBatchStatus && opcBatchStatus !== "improved" && (
+                      <div className={`opc-batch-notice opc-batch-${opcBatchStatus}`}>
+                        {opcBatchStatus === "diverged"
+                          ? "EPE worsened. Consider undoing this batch."
+                          : "EPE plateaued. More iterations are unlikely to help."}
+                      </div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div className="opc-btn-row">
+                      {opcRunning && (
+                        <button className="opc-btn opc-btn-stop" onClick={onCancelOpcCorrection}>Stop</button>
+                      )}
+                      {!opcRunning && (
+                        <>
+                          <button className="opc-btn opc-btn-apply" onClick={onApplyOpcResult}>
+                            Apply
+                          </button>
+                          <button
+                            className="opc-btn opc-btn-rerun"
+                            onClick={canContinueOpc ? onContinueOpcCorrection : onUpgradeIntent?.bind(null, "opc_continue")}
+                            disabled={loading}
+                            title={canContinueOpc
+                              ? `Run ${opcIterations} more iterations from the current corrected mask`
+                              : "Pro plan required to continue OPC iterations"}>
+                            {canContinueOpc ? `+${opcIterations} iter` : `+${opcIterations} iter · Pro`}
+                          </button>
+                          <button
+                            className="opc-btn opc-btn-gif"
+                            onClick={onExportOpcGif}
+                            disabled={opcGifExporting || !onExportOpcGif}
+                            title="Export OPC correction progress as animated GIF">
+                            {opcGifExporting ? "Encoding…" : "GIF"}
+                          </button>
+                          {opcHasCheckpoint && (
+                            <button className="opc-btn opc-btn-rollback" onClick={onRollbackOpcResult} disabled={loading}
+                              title="Undo the last batch and return to the previous mask">
+                              Undo
+                            </button>
+                          )}
+                          <button className="opc-btn opc-btn-reset" onClick={onResetOpc ?? onRunOpcCorrection} disabled={loading}
+                            title="Reset mask to original target (discard OPC corrections)">
+                            Reset
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+              {opcError && <div className="opc-error-msg" role="alert">{opcError}</div>}
+            </section>
+          )}
         </div>
         </>)}
 
-        {sidebarTab === "ANALYZE" && (<>
+        {sidebarTab === "ANALYZE" && (<div className="lt-flow">
         <div className="group-card compact">
           <div className="opc-card-head">
             <span className="opc-card-title">A/B Compare</span>
@@ -911,6 +1010,11 @@ export function ControlPanel(props: {
               <input type="checkbox" checked={compareEnabled} onChange={(e) => onSetCompareEnabled(e.target.checked)} />
             </label>
           </div>
+          <p className="lt-card-sub">
+            {runHistory.length < 2
+              ? "Overlay the printed contours of two runs. Simulate at least twice, then pick A and B."
+              : "Overlay the printed contours of two runs to see what changed."}
+          </p>
           <div className="analysis-panel">
             <div className="row">
               <span className="tiny-label">A</span>
@@ -951,6 +1055,7 @@ export function ControlPanel(props: {
               : <span className="opc-card-tag">batch</span>
             }
           </div>
+          <p className="lt-card-sub">Step one parameter across a range and chart how the printed CD responds.</p>
           <div className="analysis-panel">
                 <div className="row sweep-scale-row">
                   <div className="small-note tiny-note">Y scale</div>
@@ -1138,9 +1243,10 @@ export function ControlPanel(props: {
                 </div>
           </div>
         </div>
-        </>)}
+        {plan === "FREE" && !usageLoading && <FreeSimulatorAd />}
+        </div>)}
 
-        {sidebarTab === "HISTORY" && (<>
+        {sidebarTab === "HISTORY" && (<div className="lt-flow">
         <div className="group-card compact history-panel-card">
           <div className="opc-card-head">
             <span className="opc-card-title">History</span>
@@ -1150,7 +1256,7 @@ export function ControlPanel(props: {
             </div>
           </div>
           <div className="analysis-list history-panel-list">
-            {runHistory.length === 0 && <div className="small-note tiny-note analysis-empty-card">No runs yet.</div>}
+            {runHistory.length === 0 && <div className="small-note tiny-note analysis-empty-card">No runs yet. Each Simulate adds a run here; pick two as A and B to compare them.</div>}
             {orderedHistory.map((h) => (
               <div
                 key={h.id}
@@ -1160,6 +1266,11 @@ export function ControlPanel(props: {
                 <div className="analysis-item-title history-item-head">
                   <span>{h.label}</span>
                   {h.id === currentRunId && <span className="history-current-badge">Current</span>}
+                </div>
+                <div className="lt-note history-item-meta">
+                  {h.response.metrics?.cd_nm != null ? `CD ${h.response.metrics.cd_nm.toFixed(1)} nm` : "No CD"}
+                  {` · grid ${h.response.grid_used}`}
+                  {` · ${new Date(h.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
                 </div>
                 <div className="analysis-actions">
                   <button className="mini-btn slim" onClick={() => onLoadHistoryRun(h.id)}>View</button>
@@ -1233,9 +1344,8 @@ export function ControlPanel(props: {
             Educational approximation. Not calibrated for sign-off.
           </p>
         </div>
-        </>)}
-
         {plan === "FREE" && !usageLoading && <FreeSimulatorAd />}
+        </div>)}
       </div>
     </div>
   );

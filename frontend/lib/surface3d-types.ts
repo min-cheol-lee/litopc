@@ -31,6 +31,8 @@ export type ContourStyle = "CLASSIC" | "NEON" | "GOLD" | "MINIMAL";
 export type QualityMode = "FAST" | "FULL";
 export type EpeMode = "COLOR" | "ARROWS" | "BOTH";
 export type MaskOpacityPreset = "BALANCED" | "REVEAL";
+/** Neutral stage behind a transparent canvas (2026-10-25 simulator theme). Unset keeps the legacy navy studio. */
+export type Surface3DTheme = "light" | "dark";
 
 export interface Surface3DProps {
   // A regular prop survives next/dynamic's loadable wrapper, which does not forward refs.
@@ -87,6 +89,18 @@ export interface Surface3DProps {
   // Light effect
   showLightEffect?: boolean;
   wavelengthNm?: number;
+
+  // Stage. The landing hero mounts this same renderer transparently over its light pane.
+  /** Drops the navy backdrop so the CSS stage shows through, and picks that stage's slate wafer and grey target. */
+  theme?: Surface3DTheme;
+  /** Leave the canvas transparent (no scene background, no backdrop plane) without choosing a theme. */
+  transparent?: boolean;
+  /** Wafer (silicon) body color; default 0x1e2f42 legacy, 0x6f7f92 light, 0x3b4452 dark. */
+  waferColor?: number;
+  /** Dashed target overlay color; default 0x8dbebc legacy, 0x8f8f8f light, 0x9a9a9a dark. */
+  targetColor?: number;
+  /** Called once the first frames are drawn, so a host can fade the live canvas in. */
+  onFirstFrame?: () => void;
 }
 
 export interface Surface3DHandle {

@@ -140,13 +140,13 @@ function attachExportBackdrop(svg: SVGSVGElement, vbW: number, vbH: number, bgTh
   lg.setAttribute("y2", "1");
   const s1 = document.createElementNS(ns, "stop");
   s1.setAttribute("offset", "0%");
-  s1.setAttribute("stop-color", bgTheme === "LIGHT" ? "#f0f4fa" : "#223958");
+  s1.setAttribute("stop-color", bgTheme === "LIGHT" ? "#ffffff" : "#1c1c1c");
   const s2 = document.createElementNS(ns, "stop");
   s2.setAttribute("offset", "44%");
-  s2.setAttribute("stop-color", bgTheme === "LIGHT" ? "#e8edf5" : "#16293f");
+  s2.setAttribute("stop-color", bgTheme === "LIGHT" ? "#f5f5f5" : "#151515");
   const s3 = document.createElementNS(ns, "stop");
   s3.setAttribute("offset", "100%");
-  s3.setAttribute("stop-color", bgTheme === "LIGHT" ? "#dce4f0" : "#0a1628");
+  s3.setAttribute("stop-color", bgTheme === "LIGHT" ? "#ededed" : "#0f0f0f");
   lg.appendChild(s1);
   lg.appendChild(s2);
   lg.appendChild(s3);
@@ -159,7 +159,7 @@ function attachExportBackdrop(svg: SVGSVGElement, vbW: number, vbH: number, bgTh
   rg.setAttribute("r", "66%");
   const r1 = document.createElementNS(ns, "stop");
   r1.setAttribute("offset", "0%");
-  r1.setAttribute("stop-color", "rgba(174,208,255,0.12)");
+  r1.setAttribute("stop-color", "rgba(255,255,255,0)");
   const r2 = document.createElementNS(ns, "stop");
   r2.setAttribute("offset", "100%");
   r2.setAttribute("stop-color", "rgba(100,140,200,0)");
@@ -175,7 +175,7 @@ function attachExportBackdrop(svg: SVGSVGElement, vbW: number, vbH: number, bgTh
   const path = document.createElementNS(ns, "path");
   path.setAttribute("d", "M 72 0 L 0 0 0 72");
   path.setAttribute("fill", "none");
-  path.setAttribute("stroke", "rgba(170,194,230,0.07)");
+  path.setAttribute("stroke", "rgba(128,128,128,0.06)");
   path.setAttribute("stroke-width", "1");
   pattern.appendChild(path);
   defs.appendChild(pattern);

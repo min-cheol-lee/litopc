@@ -1,7 +1,13 @@
 ﻿"use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import "../simulator-theme.css";
+import "../simulator-ui.css";
+import "../simulator-patterns.css";
 import { ControlPanel } from "../../components/ControlPanel";
+import { useSimulatorTheme } from "../../lib/simulator-theme";
+import { PRO_ONLY_TEMPLATE_IDS, paramsFromFeature, templateLabelFor } from "../../lib/pattern-catalog";
+import { explainOpcFailure, PRESET_SHORT_NAME } from "../../lib/resolution-guide";
 import { EditStudioDock } from "../../components/EditStudioDock";
 import { Viewport } from "../../components/Viewport";
 import {
@@ -76,28 +82,22 @@ import {
   getCompatibleEnabledPresetId,
 } from "../../lib/preset-availability";
 
-import { templateParamDefaults } from "../../lib/template-defaults";
+import { FOV_NM_BY_FAMILY, templateParamDefaults } from "../../lib/template-defaults";
 
 const API_BASE = getApiBase();
+// Pattern library (2026-10-25): the first four catalog patterns are Free, the rest are Pro.
+// Line-end templates stay buildable for saved history but are no longer offered.
 const FREE_TEMPLATES_BASE: Array<NonNullable<SimRequest["mask"]["template_id"]>> = [
   "ISO_LINE_DUV",
   "ISO_LINE_EUV",
   "DENSE_LS",
   "CONTACT_RAW",
-  "LINE_END_RAW_DUV",
-  "LINE_END_RAW_EUV",
   "L_CORNER_RAW_DUV",
   "L_CORNER_RAW_EUV",
 ];
 const PRO_TEMPLATES_BASE: Array<NonNullable<SimRequest["mask"]["template_id"]>> = [
-  "ISO_LINE_DUV",
-  "ISO_LINE_EUV",
-  "DENSE_LS",
-  "CONTACT_RAW",
-  "LINE_END_RAW_DUV",
-  "LINE_END_RAW_EUV",
-  "L_CORNER_RAW_DUV",
-  "L_CORNER_RAW_EUV",
+  ...FREE_TEMPLATES_BASE,
+  ...PRO_ONLY_TEMPLATE_IDS,
 ];
 const FREE_DOSE_MIN = 0.3;
 const FREE_DOSE_MAX = 0.8;
@@ -262,6 +262,7 @@ export default function Page() {
 
   const [dose, setDose] = useState(0.5);
   const [params, setParams] = useState<Record<string, number>>(DEFAULT_PARAMS);
+  const paramsState = params;
 
   const [sim, setSim] = useState<SimResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -317,12 +318,37 @@ export default function Page() {
   const [opcBestIterIndex, setOpcBestIterIndex] = useState<number | null>(null);
   const [opcOriginMaskMode, setOpcOriginMaskMode] = useState<"TEMPLATE" | "CUSTOM" | null>(null);
   const [opcMaskGenerated, setOpcMaskGenerated] = useState(false);
+  // Shapes the OPC routine produced: they are not manual edits and never count against the Free limit.
+  const [opcShapeBaseline, setOpcShapeBaseline] = useState(0);
+  const [theme, setTheme] = useSimulatorTheme();
   const [authState, setAuthState] = useState(() => getRuntimeAuthState());
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("STUDIO");
   const [focusControlsVisible, setFocusControlsVisible] = useState(true);
   const [focusEditVisible, setFocusEditVisible] = useState(true);
   const [focusSurfaceVisible, setFocusSurfaceVisible] = useState(true);
+  // Focus mode: a hovered edge tab reveals its panel until the pointer leaves it; a click pins it.
+  const [focusPeek, setFocusPeek] = useState<"setup" | "edit" | "3d" | null>(null);
+  const [surfaceIsMain, setSurfaceIsMain] = useState(false);
+  // Phones: Focus is the only layout; panels become bottom sheets behind a tab bar.
+  const [isPhone, setIsPhone] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia("(max-width: 760px)");
+    const apply = () => setIsPhone(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+  useEffect(() => {
+    if (!isPhone) return;
+    setFocusControlsVisible(false);
+    setFocusEditVisible(false);
+    setFocusSurfaceVisible(false);
+    setFocusPeek(null);
+    setWorkspaceMode("FOCUS");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPhone]);
   const [studioEditVisible, setStudioEditVisible] = useState(true);
   const [studioSurfaceVisible, setStudioSurfaceVisible] = useState(true);
   const [workspaceScale, setWorkspaceScale] = useState(1);
@@ -461,6 +487,8 @@ export default function Page() {
     ? editableShapes.length
     : maskMode === "TEMPLATE"
     ? presetEditShapes.length + presetFeatureOverrides.length
+    : opcMaskGenerated
+    ? Math.max(0, editableShapes.length - opcShapeBaseline)
     : editableShapes.length;
   const customLimitReached = activeManualShapeCount >= customShapeLimit;
 
@@ -630,7 +658,7 @@ export default function Page() {
 
     if (maskMode === "TEMPLATE") {
       templatePresetFamilyRef.current = nextFamily;
-      const nextParams = { ...params, ...templateParamDefaults(nextTemplateId, presetId) };
+      const nextParams = { ...params, fov_nm: FOV_NM_BY_FAMILY[nextFamily], ...templateParamDefaults(nextTemplateId, presetId) };
       const nextTargetParams = templateTargetParamDefaults(nextTemplateId, nextParams);
       const seededTargetShapes = cloneMaskShapes(getPresetTargetGuide(nextTemplateId, presetId, nextTargetParams).targetShapes);
       setTemplateId(nextTemplateId);
@@ -1161,7 +1189,7 @@ export default function Page() {
   function handleTemplateSelection(nextTemplateId: NonNullable<SimRequest["mask"]["template_id"]>) {
     discardOpcCorrection();
     const normalizedNextTemplateId = normalizeTemplateId(nextTemplateId) ?? "ISO_LINE_DUV";
-    const nextParams = { ...params, ...templateParamDefaults(normalizedNextTemplateId, presetId) };
+    const nextParams = { ...params, fov_nm: FOV_NM_BY_FAMILY[presetFamilyForPreset(presetId)], ...templateParamDefaults(normalizedNextTemplateId, presetId) };
     const nextTargetParams = templateTargetParamDefaults(normalizedNextTemplateId, nextParams);
     const seededTargetShapes = cloneMaskShapes(getPresetTargetGuide(normalizedNextTemplateId, presetId, nextTargetParams).targetShapes);
     setMaskMode("TEMPLATE");
@@ -1182,9 +1210,12 @@ export default function Page() {
     setEditorTool("SELECT");
   }
 
-  function reinitializeFromTemplate() {
+  function reinitializeFromTemplate(nextParamsOverride?: Record<string, number>) {
     const nextTemplateId = normalizeTemplateId(templateId) ?? null;
     if (!nextTemplateId) return;
+    // Callers that just changed a parameter pass it in: React state is not updated yet.
+    const params = nextParamsOverride ?? paramsState;
+    if (nextParamsOverride) setParams(nextParamsOverride);
     discardOpcCorrection();
     const nextTargetParams = templateTargetParamDefaults(nextTemplateId, params);
     setMaskMode("TEMPLATE");
@@ -1204,6 +1235,59 @@ export default function Page() {
     setSim(null);
     setCurrentRunId("");
     setCustomLimitNotice("Mask geometry reinitialized from the selected pattern.");
+  }
+
+  /**
+   * Pattern parameters describe the design, so they regenerate the mask and, while the
+   * target still follows the same pattern, the target too. Per-shape edits live in Edit.
+   */
+  function applyPatternParams(next: Record<string, number>) {
+    if (maskMode === "CUSTOM") {
+      reinitializeFromTemplate(next);
+      return;
+    }
+    setParams(next);
+    if (normalizedTemplateId && normalizedTargetTemplateId === normalizedTemplateId) {
+      const nextTargetParams = templateTargetParamDefaults(normalizedTemplateId, next);
+      setTargetPresetParams(nextTargetParams);
+      setTargetShapes(cloneMaskShapes(getPresetTargetGuide(normalizedTemplateId, presetId, nextTargetParams).targetShapes));
+      setPresetTargetOverrides([]);
+    }
+  }
+
+  /** The Edit panel resized a pattern feature (M1, M2...): express it as a parameter change when possible. */
+  function resizePatternFeature(index: number, rect: Extract<MaskShape, { type: "rect" }>): boolean {
+    if (maskMode !== "TEMPLATE" || !normalizedTemplateId) return false;
+    const next = paramsFromFeature(normalizedTemplateId, index, rect, params);
+    if (!next) return false;
+    setPresetFeatureOverrides([]);
+    applyPatternParams(next);
+    return true;
+  }
+
+  /** A ready-made custom workspace: the L-shape as editable mask and target shapes. */
+  function loadCustomExample() {
+    discardOpcCorrection();
+    const exampleId = presetFamilyForPreset(presetId) === "EUV" ? "L_CORNER_RAW_EUV" : "L_CORNER_RAW_DUV";
+    const exampleParams = { ...DEFAULT_PARAMS, fov_nm: FOV_NM_BY_FAMILY[presetFamilyForPreset(presetId)], ...templateParamDefaults(exampleId, presetId) };
+    const shapes = buildTemplateBaseShapes(exampleId, exampleParams);
+    setMaskMode("CUSTOM");
+    setMaskSeedTemplateId(null);
+    setParams(exampleParams);
+    setCustomShapes(cloneMaskShapes(shapes));
+    setPresetEditShapes([]);
+    setPresetFeatureOverrides([]);
+    setPresetTargetOverrides([]);
+    setTargetPresetParams({ ...exampleParams, sraf_on: 0 });
+    setTargetShapes(cloneMaskShapes(shapes));
+    setCustomTargetTemplateId(null);
+    setActiveEditLayer("MASK");
+    clearSelection();
+    setSelectedPresetAnchorIndex(-1);
+    setEditorTool("SELECT");
+    setSim(null);
+    setCurrentRunId("");
+    setCustomLimitNotice(null);
   }
 
   function startBlankWorkspace() {
@@ -1330,6 +1414,20 @@ export default function Page() {
       const withoutCurrent = prev.filter((entry) => entry.anchorIndex !== safe);
       if (rectsNearlyEqual(base, clamped)) return withoutCurrent;
       return [...withoutCurrent, { anchorIndex: safe, rect: clamped }];
+    });
+  }
+
+  /** Edit a template feature by index (the shapes table edits rows without selecting first). */
+  function updatePresetFeatureRectAt(index: number, nextRect: Extract<MaskShape, { type: "rect" }>) {
+    if (activeEditLayer === "TARGET") return;
+    const anchorShapes = presetMaskAnchorShapes;
+    const base = anchorShapes[index];
+    if (!base) return;
+    const clamped = clampRectToFov(nextRect, params.fov_nm ?? 1100);
+    setPresetFeatureOverrides((prev) => {
+      const withoutCurrent = prev.filter((entry) => entry.anchorIndex !== index);
+      if (rectsNearlyEqual(base, clamped)) return withoutCurrent;
+      return [...withoutCurrent, { anchorIndex: index, rect: clamped }];
     });
   }
 
@@ -1603,10 +1701,10 @@ export default function Page() {
       const record: RunRecord = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         created_at: new Date().toISOString(),
-        label: `${presetId} / ${maskMode === "TEMPLATE"
+        label: `${maskMode === "TEMPLATE"
           ? templateLabel(normalizedTemplateId)
-          : (maskSeedTemplateId ? `${templateLabel(maskSeedTemplateId)} Workspace` : "Blank Workspace")
-        } / dose ${dose.toFixed(2)}`,
+          : (maskSeedTemplateId ? `${templateLabel(maskSeedTemplateId)} (custom)` : "Custom")
+        } · ${PRESET_SHORT_NAME[presetId]} · dose ${dose.toFixed(2)}`,
         request: req,
         response: data,
       };
@@ -1724,6 +1822,7 @@ export default function Page() {
         (result) => {
           setOpcProgress((prev) => [...prev, result]);
           setCustomShapes(cloneMaskShapes(result.maskShapes));
+          setOpcShapeBaseline(result.maskShapes.length);
           setSim(result.simResult);
 
           batchInitialEpe ??= result.initialEpeMeanNm;
@@ -1757,7 +1856,7 @@ export default function Page() {
     } catch (err) {
       console.error("[OPC correction]", err);
       if (!abort.signal.aborted) {
-        setOpcError(err instanceof Error ? err.message : String(err));
+        setOpcError(explainOpcFailure(err instanceof Error ? err.message : String(err), presetId, targetShapes, dose));
       }
     } finally {
       // A new template/reset owns the workspace now; don't restore the old run.
@@ -2239,11 +2338,11 @@ export default function Page() {
 
   const isFocusMode = workspaceMode === "FOCUS";
   const isStudioMode = workspaceMode === "STUDIO";
-  const sidebarVisible = isFocusMode ? focusControlsVisible : sidebarExpanded;
-  const editPanelVisible = isFocusMode ? focusEditVisible : studioEditVisible;
-  const surfacePanelVisible = isFocusMode ? focusSurfaceVisible : studioSurfaceVisible;
+  const sidebarVisible = isFocusMode ? (focusControlsVisible || focusPeek === "setup") : sidebarExpanded;
+  const editPanelVisible = isFocusMode ? (focusEditVisible || focusPeek === "edit") : studioEditVisible;
+  const surfacePanelVisible = isFocusMode ? (focusSurfaceVisible || focusPeek === "3d") : studioSurfaceVisible;
   const surfacePanelActive = surfacePanelVisible;
-  const effectiveWorkspaceScale = isFocusMode ? workspaceScale : Math.min(workspaceScale, 1);
+  const effectiveWorkspaceScale = isPhone ? 1 : isFocusMode ? workspaceScale : Math.min(workspaceScale, 1);
   const inverseSidebarScale = Number((100 / effectiveWorkspaceScale).toFixed(3));
   const sidebarScaleStyle = {
     zoom: effectiveWorkspaceScale,
@@ -2287,7 +2386,7 @@ export default function Page() {
     setStudioSurfaceVisible((v) => !v);
   };
 
-  const canvasLeftInset = isFocusMode && sidebarVisible ? 382 : 0;
+  const canvasLeftInset = isFocusMode && sidebarVisible && !isPhone ? 382 : 0;
 
   useEffect(() => {
     if (isFocusMode) {
@@ -2343,6 +2442,67 @@ export default function Page() {
     ? { left: `${studioEditToggleLeft}px`, right: "auto", transform: "translate(-50%, -50%)" as const }
     : undefined;
 
+  function enterFocusMode() {
+    // Panels start folded to their edge tabs; hovering peeks, clicking pins.
+    setFocusControlsVisible(false);
+    setFocusEditVisible(false);
+    // A 3D stage that is already the main view stays the main view in Focus.
+    setFocusSurfaceVisible(surfaceIsMain);
+    setFocusPeek(null);
+    setWorkspaceMode("FOCUS");
+  }
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
+      if (e.key === "f" || e.key === "F") {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        e.preventDefault();
+        if (workspaceMode === "FOCUS") setWorkspaceMode("STUDIO");
+        else enterFocusMode();
+      } else if (e.key === "Escape" && workspaceMode === "FOCUS") {
+        setFocusPeek(null);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceMode]);
+  const focusEdgeTabs = isFocusMode ? (
+    <>
+      <div className="lt-edge-tabs lt-edge-tabs-left" onMouseLeave={() => setFocusPeek((p) => (p === "setup" ? null : p))}>
+        <button
+          type="button"
+          className={`lt-edge-tab ${focusControlsVisible ? "is-pinned" : ""} ${focusPeek === "setup" ? "is-peek" : ""}`}
+          onMouseEnter={() => { if (!isPhone) setFocusPeek("setup"); }}
+          onClick={() => { setFocusControlsVisible((v) => !v); if (isPhone) { setFocusEditVisible(false); setFocusSurfaceVisible(false); } }}
+          title={focusControlsVisible ? "Unpin the set-up panel" : "Pin the set-up panel"}
+        >
+          Set-up
+        </button>
+      </div>
+      <div className="lt-edge-tabs lt-edge-tabs-right" onMouseLeave={() => setFocusPeek((p) => (p === "edit" || p === "3d" ? null : p))}>
+        <button
+          type="button"
+          className={`lt-edge-tab ${focusEditVisible ? "is-pinned" : ""} ${focusPeek === "edit" ? "is-peek" : ""}`}
+          onMouseEnter={() => { if (!isPhone) setFocusPeek("edit"); }}
+          onClick={() => { setFocusEditVisible((v) => !v); if (isPhone) { setFocusControlsVisible(false); setFocusSurfaceVisible(false); } }}
+          title={focusEditVisible ? "Unpin the edit panel" : "Pin the edit panel"}
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          className={`lt-edge-tab ${focusSurfaceVisible ? "is-pinned" : ""} ${focusPeek === "3d" ? "is-peek" : ""}`}
+          onMouseEnter={() => { if (!isPhone) setFocusPeek("3d"); }}
+          onClick={() => { setFocusSurfaceVisible((v) => !v); if (isPhone) { setFocusControlsVisible(false); setFocusEditVisible(false); } }}
+          title={focusSurfaceVisible ? "Unpin the 3D panel" : "Pin the 3D panel"}
+        >
+          3D
+        </button>
+      </div>
+    </>
+  ) : null;
   const canvasModeHud = (
     <div className="canvas-mode-strip" role="toolbar" aria-label="Workspace and overlay panels">
       <div className="workspace-mode-switch" role="group" aria-label="Workspace mode">
@@ -2356,9 +2516,10 @@ export default function Page() {
         <button
           type="button"
           className={`workspace-mode-chip ${workspaceMode === "FOCUS" ? "is-active" : ""}`}
-          onClick={() => setWorkspaceMode("FOCUS")}
+          onClick={() => enterFocusMode()}
+          title="Focus: the canvas fills the window, panels slide in from the edges (F)"
         >
-          Canvas
+          Focus
         </button>
       </div>
       <div className="workspace-mode-switch workspace-panel-switch" role="group" aria-label="Panel visibility">
@@ -2394,7 +2555,7 @@ export default function Page() {
   );
 
   return (
-    <div ref={shellWrapRef} className={`litopc-shell-wrap ${sidebarVisible ? "" : "sidebar-collapsed"} ${editPanelVisible ? "" : "edit-collapsed"} ${surfacePanelActive ? "surface-visible" : ""} ${isFocusMode ? "is-focus-mode" : ""}`}>
+    <div ref={shellWrapRef} className={`litopc-shell-wrap ${isPhone ? "is-phone" : ""} ${sidebarVisible ? "" : "sidebar-collapsed"} ${editPanelVisible ? "" : "edit-collapsed"} ${surfacePanelActive ? "surface-visible" : ""} ${isFocusMode ? "is-focus-mode" : ""}`}>
       <button
         type="button"
         className="shell-sidebar-toggle"
@@ -2422,9 +2583,11 @@ export default function Page() {
         </span>
         <span className="sr-only">{editPanelVisible ? "Hide Edit Panel" : "Show Edit Panel"}</span>
       </button>
+      {focusEdgeTabs}
       <div className={`litopc-shell ${isFocusMode || !sidebarExpanded ? "shell-sidebar-collapsed" : ""} ${isFocusMode ? "shell-focus-mode" : ""}`}>
         <div
-          className={`litopc-sidebar ${isFocusMode ? "focus-overlay-sidebar" : ""} ${sidebarVisible ? "" : "is-hidden"}`}
+          className={`litopc-sidebar ${isFocusMode ? "focus-overlay-sidebar" : ""} ${sidebarVisible ? "" : "is-hidden"} ${isFocusMode && !focusControlsVisible && focusPeek === "setup" ? "is-peek" : ""}`}
+          onMouseLeave={() => { if (isFocusMode) setFocusPeek((p) => (p === "setup" ? null : p)); }}
           onTouchStart={onScaleTouchStart}
           onTouchMove={onScaleTouchMove}
           onTouchEnd={onScaleTouchEnd}
@@ -2436,6 +2599,8 @@ export default function Page() {
               maskMode={maskMode}
               onReinitializeTemplate={reinitializeFromTemplate}
               onStartBlankWorkspace={startBlankWorkspace}
+              onLoadCustomExample={loadCustomExample}
+              onPatternParamsChange={applyPatternParams}
               activeEditLayer={activeEditLayer}
               onSetActiveEditLayer={setTargetLayer}
               editorTool={editorTool}
@@ -2575,6 +2740,8 @@ export default function Page() {
               onManageBillingIntent={(source) => { void openBillingPortal(source); }}
               onSignOutIntent={() => { void signOutCurrentUser(); }}
               showBrand={!isStudioMode}
+              theme={theme}
+              onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
             />
           </div>
         </div>
@@ -2620,6 +2787,8 @@ export default function Page() {
                   currentPresetFeatureRect={currentPresetFeatureRect}
                   presetFeatureOverrideActive={(activeEditLayer === "TARGET" ? presetTargetOverrides : presetFeatureOverrides).some((entry) => entry.anchorIndex === selectedPresetAnchorIndex)}
                   onUpdatePresetFeatureRect={updatePresetFeatureRect}
+                  onUpdatePresetFeatureRectAt={updatePresetFeatureRectAt}
+                  onPatternFeatureResize={resizePatternFeature}
                   onResetPresetFeatureRect={resetPresetFeatureRect}
                   selectedPresetAnchorIndex={selectedPresetAnchorIndex}
                   onSetSelectedPresetAnchorIndex={selectPresetAnchor}
@@ -2643,11 +2812,13 @@ export default function Page() {
                   proCustomShapeLimit={PRO_CUSTOM_SHAPE_LIMIT}
                   customLimitReached={customLimitReached}
                   customLimitNotice={customLimitNotice}
+                  manualShapeCount={activeManualShapeCount}
                   onCopyTargetToMask={copyTargetToMask}
                   onCopyMaskToTarget={copyMaskToTarget}
                   onClearTargetLayer={clearTargetLayer}
                   onUpgradeIntent={(source) => { void startUpgradeCheckout(source); }}
                   onReinitWithParams={maskMode === "CUSTOM" ? reinitializeFromTemplate : undefined}
+                  onLoadCustomExample={loadCustomExample}
                 />
               )}
               resolvedMaskShapes={maskMode === "TEMPLATE" ? resolvedMaskShapes : undefined}
@@ -2687,6 +2858,10 @@ export default function Page() {
               canvasModeHud={canvasModeHud}
               canvasLeftInset={canvasLeftInset}
               onUsageConsumed={() => { void refreshUsageStatus(plan); }}
+              onOverlayPointerLeave={() => { if (isFocusMode) setFocusPeek((p) => (p === "edit" || p === "3d" ? null : p)); }}
+              onSurfaceMainChange={setSurfaceIsMain}
+              theme={theme}
+              onThemeChange={setTheme}
             />
           </div>
         </div>
@@ -2732,41 +2907,8 @@ function findEntitlementMismatch(res: EntitlementsResponse): string | null {
 }
 
 function templateLabel(id: NonNullable<SimRequest["mask"]["template_id"]>): string {
-  const normalizedId = normalizeTemplateId(id) ?? id;
-  switch (normalizedId) {
-    case "ISO_LINE_DUV":
-      return "Iso Line (DUV)";
-    case "ISO_LINE_EUV":
-      return "Iso Line (EUV)";
-    case "DENSE_LS":
-      return "Dense L/S";
-    case "CONTACT_RAW":
-      return "Square (DUV)";
-    case "CONTACT_OPC_SERIF":
-      return "Square OPC (DUV)";
-    case "STAIRCASE":
-      return "Stepped Interconnect";
-    case "STAIRCASE_OPC":
-      return "Stepped Interconnect OPC";
-    case "LINE_END_RAW_DUV":
-      return "Line-End (DUV)";
-    case "LINE_END_RAW_EUV":
-      return "Line-End (EUV)";
-    case "LINE_END_RAW":
-      return "Line-End";
-    case "LINE_END_OPC_HAMMER":
-      return "Line-End OPC";
-    case "L_CORNER_RAW_DUV":
-      return "L-Shape (DUV)";
-    case "L_CORNER_OPC_DUV":
-      return "L-Shape OPC (DUV)";
-    case "L_CORNER_RAW_EUV":
-      return "L-Shape (EUV)";
-    case "L_CORNER_OPC_EUV":
-      return "L-Shape OPC (EUV)";
-    default:
-      return normalizedId;
-  }
+  // Labels live in the pattern catalog so the picker, history and exports agree.
+  return templateLabelFor(id);
 }
 
 function isSquareTemplate(id: SimRequest["mask"]["template_id"] | undefined): boolean {

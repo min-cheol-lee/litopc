@@ -1,0 +1,2204 @@
+/* litopc simulator UI (2026-10-25 redesign). Reads the tokens in simulator-theme.css and
+   restyles the shell, sidebar flow, canvas chrome, 3D panel, edit dock and menus on top of
+   globals.css. Rules are scoped to .litopc-shell-wrap so marketing pages are untouched.
+   Light and dark differ only through the tokens; a few rules below adjust dark explicitly. */
+
+/* ------------------------------------------------------------------ shell */
+.litopc-shell-wrap {
+  --litopc-shell-pad: 10px;
+  --litopc-shell-gap: 10px;
+  font-family: var(--lt-font);
+  color: var(--lt-text);
+  background: var(--lt-bg);
+}
+.litopc-shell-wrap button,
+.litopc-shell-wrap input,
+.litopc-shell-wrap select,
+.litopc-shell-wrap textarea {
+  font-family: var(--lt-font);
+}
+body:has(> div > .litopc-shell-wrap),
+body:has(.litopc-shell-wrap) {
+  background: var(--lt-bg);
+}
+.litopc-shell-wrap .shell-sidebar-toggle,
+.litopc-shell-wrap .shell-edit-toggle {
+  width: 22px;
+  min-height: 22px;
+  border-radius: 999px;
+  border: 1px solid var(--lt-line);
+  background: var(--lt-card);
+  color: var(--lt-faint);
+  box-shadow: var(--lt-shadow);
+  opacity: 0.85;
+}
+.litopc-shell-wrap .shell-sidebar-toggle:hover,
+.litopc-shell-wrap .shell-edit-toggle:hover {
+  opacity: 1;
+  color: var(--lt-ink);
+  border-color: var(--lt-line-strong);
+}
+.litopc-shell-wrap .shell-sidebar-toggle-label {
+  display: none;
+}
+.litopc-shell-wrap .shell-sidebar-toggle-glyph {
+  font-size: 10px;
+}
+
+/* ---------------------------------------------------------------- sidebar */
+.litopc-shell-wrap .litopc-panel.control-panel-shell {
+  background: var(--lt-bg);
+  border: 0;
+  border-right: 1px solid var(--lt-line);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  color: var(--lt-text);
+}
+.litopc-shell-wrap .control-panel-shell .panel-brand-head {
+  min-height: 52px;
+  padding: 12px 16px 6px;
+  border-bottom: 0;
+  justify-content: flex-start;
+}
+.litopc-shell-wrap .panel-brand-wordmark-retixel {
+  color: var(--lt-ink);
+  font-size: 24px;
+  letter-spacing: -0.03em;
+}
+.litopc-shell-wrap .control-panel-shell .panel-body-compact {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 8px 14px 12px;
+  gap: 10px;
+  overflow: hidden;
+}
+.litopc-shell-wrap .sidebar-tab-bar {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  margin: 0;
+  border-radius: 999px;
+  border: 1px solid var(--lt-line);
+  background: var(--lt-track);
+  flex: none;
+}
+.litopc-shell-wrap .sidebar-tab-btn {
+  flex: 1;
+  min-height: 30px;
+  border-radius: 999px;
+  border: 0;
+  background: transparent;
+  color: var(--lt-muted);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.litopc-shell-wrap .sidebar-tab-btn:hover:not(.active) {
+  background: transparent;
+  color: var(--lt-ink);
+}
+.litopc-shell-wrap .sidebar-tab-btn.active {
+  background: var(--lt-card);
+  color: var(--lt-ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+/* plan line */
+.litopc-shell-wrap .lt-plan-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px;
+  font-size: 12px;
+  color: var(--lt-faint);
+  flex: none;
+  min-width: 0;
+}
+.litopc-shell-wrap .lt-plan-line .plan-status-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  min-height: 0;
+  border: 1px solid var(--lt-line-strong);
+  border-radius: 999px;
+  background: var(--lt-card);
+  color: var(--lt-ink);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  box-shadow: none;
+}
+.litopc-shell-wrap .lt-plan-line .plan-status-pill.is-pro {
+  border-color: var(--lt-accent-line);
+  color: var(--lt-accent-ink);
+  background: var(--lt-accent-soft);
+}
+.litopc-shell-wrap .lt-plan-usage {
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--lt-muted);
+}
+.litopc-shell-wrap .lt-plan-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.litopc-shell-wrap .lt-link {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--lt-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--lt-line-strong);
+  text-underline-offset: 3px;
+  cursor: pointer;
+  box-shadow: none;
+  line-height: 1.3;
+}
+.litopc-shell-wrap .lt-link:hover {
+  background: transparent;
+  border-color: transparent;
+  text-decoration-color: var(--lt-ink);
+}
+.litopc-shell-wrap .lt-link:disabled {
+  color: var(--lt-faint);
+  cursor: default;
+  text-decoration: none;
+}
+.litopc-shell-wrap .lt-link-quiet {
+  color: var(--lt-faint);
+  font-weight: 500;
+}
+.litopc-shell-wrap .lt-theme-toggle {
+  flex: none;
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--lt-line);
+  background: var(--lt-card);
+  color: var(--lt-muted);
+  box-shadow: none;
+}
+.litopc-shell-wrap .lt-theme-toggle:hover {
+  color: var(--lt-ink);
+  border-color: var(--lt-line-strong);
+  background: var(--lt-card);
+}
+.litopc-shell-wrap .lt-inline-error {
+  padding: 6px 10px;
+  border-radius: var(--lt-radius-xs);
+  background: rgba(255, 69, 58, 0.08);
+  color: var(--lt-warn);
+  font-size: 12px;
+  line-height: 1.4;
+  flex: none;
+}
+
+/* the scrolling middle and the fixed actions */
+.litopc-shell-wrap .lt-flow {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 1px 2px 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--lt-line-strong) transparent;
+}
+.litopc-shell-wrap .lt-flow::-webkit-scrollbar {
+  width: 6px;
+}
+.litopc-shell-wrap .lt-flow::-webkit-scrollbar-thumb {
+  background: var(--lt-line-strong);
+  border-radius: 999px;
+}
+.litopc-shell-wrap .lt-flow::-webkit-scrollbar-track {
+  background: transparent;
+}
+.litopc-shell-wrap .lt-flow > * {
+  flex: none;
+}
+.litopc-shell-wrap .lt-actions {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 2px 0;
+  border-top: 1px solid var(--lt-line);
+}
+
+/* step cards */
+.litopc-shell-wrap .litopc-panel.panel-compact.control-panel-shell .group-card,
+.litopc-shell-wrap .litopc-panel.panel-compact.control-panel-shell .group-card.compact,
+.litopc-shell-wrap .litopc-panel.panel-compact.control-panel-shell .run-card,
+.litopc-shell-wrap .litopc-panel.panel-compact.control-panel-shell .opc-card {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--lt-line);
+  border-radius: 18px;
+  background: var(--lt-panel);
+  box-shadow: none;
+}
+.litopc-shell-wrap .lt-actions .lt-step {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+}
+.litopc-shell-wrap .lt-step-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  min-height: 20px;
+}
+.litopc-shell-wrap .lt-step-n {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--lt-accent-soft);
+  color: var(--lt-accent-ink);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.litopc-shell-wrap .lt-step-t {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--lt-ink);
+}
+.litopc-shell-wrap .lt-step-aside {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lt-muted);
+}
+.litopc-shell-wrap .lt-note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--lt-faint);
+}
+.litopc-shell-wrap .lt-step .label,
+.litopc-shell-wrap .lt-field-label {
+  margin: 10px 0 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--lt-muted);
+}
+.litopc-shell-wrap .control-panel-shell select,
+.litopc-shell-wrap .control-panel-shell input[type="number"],
+.litopc-shell-wrap .control-panel-shell input[type="text"] {
+  min-height: 36px;
+  border: 1px solid var(--lt-line-strong);
+  border-radius: var(--lt-radius-sm);
+  background: var(--lt-card);
+  color: var(--lt-ink);
+  font-size: 13.5px;
+  box-shadow: none;
+}
+.litopc-shell-wrap .control-panel-shell select:focus,
+.litopc-shell-wrap .control-panel-shell input:focus {
+  border-color: var(--lt-accent);
+  box-shadow: 0 0 0 3px var(--lt-accent-soft);
+}
+.litopc-shell-wrap input[type="range"] {
+  accent-color: var(--lt-accent);
+}
+.litopc-shell-wrap .lt-file-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 10px;
+}
+.litopc-shell-wrap .mask-library-save-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.litopc-shell-wrap .lt-dose-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 72px;
+  align-items: center;
+  gap: 10px;
+}
+.litopc-shell-wrap .lt-dose-row .label {
+  margin: 0;
+}
+.litopc-shell-wrap .lt-dose-row input[type="range"] {
+  width: 100%;
+  margin: 0;
+}
+.litopc-shell-wrap .lt-dose-row input[type="number"] {
+  min-height: 32px;
+  width: 72px;
+  padding: 4px 8px;
+}
+.litopc-shell-wrap .control-panel-shell .lt-dose {
+  padding: 10px 14px;
+}
+
+/* the primary actions: only the natural next click carries the gradient */
+.litopc-shell-wrap .run-main-btn,
+.litopc-shell-wrap .opc-card-run-btn {
+  width: 100%;
+  min-height: 46px;
+  border-radius: 999px;
+  border: 1px solid var(--lt-line-strong);
+  background: var(--lt-card);
+  color: var(--lt-ink);
+  box-shadow: none;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-shadow: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease, opacity 160ms ease;
+}
+.litopc-shell-wrap .run-main-btn:hover:not(:disabled),
+.litopc-shell-wrap .opc-card-run-btn:hover:not(:disabled) {
+  background: var(--lt-panel);
+  border-color: var(--lt-ink);
+  box-shadow: none;
+}
+.litopc-shell-wrap .run-main-btn.is-next,
+.litopc-shell-wrap .opc-card-run-btn.is-next {
+  background: var(--lt-cta);
+  border-color: transparent;
+  color: var(--lt-cta-text);
+}
+.litopc-shell-wrap .run-main-btn.is-next:hover:not(:disabled),
+.litopc-shell-wrap .opc-card-run-btn.is-next:hover:not(:disabled) {
+  background: var(--lt-cta);
+  border-color: transparent;
+  filter: brightness(1.06);
+}
+.litopc-shell-wrap .run-main-btn:disabled,
+.litopc-shell-wrap .opc-card-run-btn:disabled {
+  opacity: 0.5;
+  background: var(--lt-card);
+  color: var(--lt-muted);
+  border-color: var(--lt-line);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.litopc-shell-wrap .lt-actions.is-initial .opc-card-run-btn {
+  opacity: 0.55;
+}
+.litopc-shell-wrap .lt-actions.is-simulated .opc-card-run-btn.is-next {
+  animation: lt-pulse 2.4s ease-out 0.8s infinite;
+}
+@keyframes lt-pulse {
+  0% { box-shadow: 0 0 0 0 var(--lt-pulse); }
+  70% { box-shadow: 0 0 0 10px rgba(0, 0, 0, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .litopc-shell-wrap .lt-actions.is-simulated .opc-card-run-btn.is-next {
+    animation: none;
+    box-shadow: 0 0 0 4px var(--lt-accent-soft);
+  }
+}
+.litopc-shell-wrap .opc-no-target-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--lt-faint);
+}
+
+/* OPC result block */
+.litopc-shell-wrap .opc-chart-wrap {
+  margin-top: 0;
+}
+.litopc-shell-wrap .opc-sparkline {
+  width: 100%;
+  height: 44px;
+  display: block;
+  border-radius: 10px;
+  border: 1px solid var(--lt-line);
+  background: var(--lt-card);
+}
+.litopc-shell-wrap .opc-spark-base { stroke: var(--lt-line); }
+.litopc-shell-wrap .opc-spark-area { fill: var(--lt-accent-soft); }
+.litopc-shell-wrap .opc-spark-line { stroke: var(--lt-accent); }
+.litopc-shell-wrap .opc-spark-dot { fill: var(--lt-accent); }
+.litopc-shell-wrap .opc-spark-best { fill: var(--lt-accent-2); }
+.litopc-shell-wrap .opc-stat-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--lt-faint);
+}
+.litopc-shell-wrap .opc-stat-val {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--lt-ink);
+  font-variant-numeric: tabular-nums;
+}
+.litopc-shell-wrap .opc-stat-good { color: var(--lt-accent-ink) !important; }
+.litopc-shell-wrap .opc-stat-bad { color: var(--lt-warn) !important; }
+.litopc-shell-wrap .opc-batch-notice {
+  padding: 6px 10px;
+  border-radius: var(--lt-radius-xs);
+  border: 1px solid var(--lt-line);
+  background: var(--lt-card);
+  color: var(--lt-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.litopc-shell-wrap .opc-btn-row {
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.litopc-shell-wrap .opc-btn {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--lt-line-strong);
+  background: var(--lt-card);
+  color: var(--lt-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: none;
+  white-space: nowrap;
+}
+.litopc-shell-wrap .opc-btn:hover:not(:disabled) {
+  background: var(--lt-panel);
+  border-color: var(--lt-ink);
+}
+.litopc-shell-wrap .opc-btn-apply {
+  background: var(--lt-accent);
+  border-color: var(--lt-accent);
+  color: #fff;
+}
+.litopc-shell-wrap .opc-btn-apply:hover:not(:disabled) {
+  background: var(--lt-accent);
+  border-color: var(--lt-accent);
+  filter: brightness(1.08);
+}
+.litopc-shell-wrap .opc-btn-stop {
+  color: var(--lt-warn);
+}
+.litopc-shell-wrap .opc-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.litopc-shell-wrap .opc-error-msg {
+  margin-top: 8px;
+  border-radius: var(--lt-radius-xs);
+  border: 1px solid rgba(255, 69, 58, 0.3);
+  background: rgba(255, 69, 58, 0.08);
+  color: var(--lt-warn);
+  font-size: 12px;
+}
+
+/* cards shared by the Analyze and History tabs */
+.litopc-shell-wrap .group-title,
+.litopc-shell-wrap .opc-card-title,
+.litopc-shell-wrap .group-title-inline {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lt-faint);
+}
+.litopc-shell-wrap .opc-card-head {
+  margin-bottom: 8px;
+}
+.litopc-shell-wrap .opc-card-tag {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--lt-muted);
+  background: transparent;
+  border: 1px solid var(--lt-line-strong);
+  opacity: 1;
+  padding: 2px 8px;
+}
+.litopc-shell-wrap .small-note,
+.litopc-shell-wrap .tiny-note,
+.litopc-shell-wrap .tiny-label {
+  color: var(--lt-faint);
+  font-size: 12px;
+}
+.litopc-shell-wrap .analysis-panel,
+.litopc-shell-wrap .analysis-list,
+.litopc-shell-wrap .tiny-card,
+.litopc-shell-wrap .sweep-controls-card {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+.litopc-shell-wrap .analysis-item {
+  background: var(--lt-card);
+  border: 1px solid var(--lt-line);
+  border-radius: 12px;
+  color: var(--lt-text);
+}
+.litopc-shell-wrap .analysis-item-title {
+  color: var(--lt-ink);
+}
+.litopc-shell-wrap .analysis-seg {
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--lt-line);
+  background: var(--lt-track);
+}
+.litopc-shell-wrap .analysis-seg button {
+  border-radius: 999px;
+  border: 0;
+  background: transparent;
+  color: var(--lt-muted);
+  font-weight: 600;
+  box-shadow: none;
+}
+.litopc-shell-wrap .analysis-seg button.active {
+  background: var(--lt-card);
+  color: var(--lt-ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.litopc-shell-wrap .litopc-panel.panel-compact .mini-btn,
+.litopc-shell-wrap .mini-btn,
+.litopc-shell-wrap .mask-seed-btn {
+  min-height: 30px;
+  border-radius: 999px;
+  border: 1px solid var(--lt-line-strong);
+  background: var(--lt-card);
+  color: var(--lt-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: none;
+}
+.litopc-shell-wrap .mini-btn:hover:not(:disabled) {
+  background: var(--lt-panel);
+  border-color: var(--lt-ink);
+}
+.litopc-shell-wrap .mini-btn.slim.danger {
+  color: var(--lt-muted);
+}
+.litopc-shell-wrap .mini-btn.active,
+.litopc-shell-wrap .run-sweep-btn {
+  background: var(--lt-accent);
+  border-color: var(--lt-accent);
+  color: #fff;
+}
+.litopc-shell-wrap .run-sweep-btn:hover:not(:disabled) {
+  background: var(--lt-accent);
+  border-color: var(--lt-accent);
+  filter: brightness(1.08);
+}
+.litopc-shell-wrap .history-current-badge {
+  border: 1px solid var(--lt-accent-line);
+  background: var(--lt-accent-soft);
+  color: var(--lt-accent-ink);
+  border-radius: 999px;
+}
+.litopc-shell-wrap .mask-snapshot-chip,
+.litopc-shell-wrap .shape-chip {
+  background: var(--lt-card);
+  border: 1px solid var(--lt-line);
+  border-radius: 999px;
+  color: var(--lt-ink);
+}
+.litopc-shell-wrap .mask-snapshot-load,
+.litopc-shell-wrap .mask-snapshot-del {
+  background: transparent;
+  border: 0;
+  color: var(--lt-ink);
+  box-shadow: none;
+}
+.litopc-shell-wrap .resource-link-card {
+  background: var(--lt-card);
+  border: 1px solid var(--lt-line);
+  border-radius: 14px;
+  box-shadow: none;
+  color: var(--lt-ink);
+}
+.litopc-shell-wrap .resource-link-card:hover {
+  border-color: var(--lt-line-strong);
+  background: var(--lt-card);
+}
+.litopc-shell-wrap .resource-link-card strong {
+  color: var(--lt-ink);
+}
+.litopc-shell-wrap .resource-link-card small {
+  color: var(--lt-faint);
+}
+.litopc-shell-wrap .resource-link-card-accent {
+  background: var(--lt-panel);
+}
+.litopc-shell-wrap .resource-link-icon {
+  color: var(--lt-accent-ink);
+  background: var(--lt-accent-soft);
+  border: 0;
+}
+.litopc-shell-wrap .creator-profile-card {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--lt-line);
+  border-radius: 0;
+  box-shadow: none;
+}
+.litopc-shell-wrap .creator-profile-eyebrow {
+  color: var(--lt-faint);
+}
+.litopc-shell-wrap .creator-profile-name {
+  color: var(--lt-ink);
+}
+.litopc-shell-wrap .creator-profile-links a {
+  background: var(--lt-card);
+  border: 1px solid var(--lt-line);
+  color: var(--lt-muted);
+}
+.litopc-shell-wrap .creator-profile-links a:hover {
+  color: var(--lt-ink);
+  border-color: var(--lt-line-strong);
+}
+.litopc-shell-wrap .simulator-ad-card {
+  background: var(--lt-panel);
+  border: 1px solid var(--lt-line);
+}
+.litopc-shell-wrap .simulator-ad-label {
+  color: var(--lt-faint);
+}
+
+/* -------------------------------------------------------------- workspace */
+.litopc-shell-wrap .litopc-workspace-inner,
+.litopc-shell-wrap .viewport-frame {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.litopc-shell-wrap .viewport-panel-shell-2d {
+  background: var(--lt-stage);
+  border: 1px solid var(--lt-stage-line);
+  border-radius: var(--lt-radius);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.08);
+}
+.litopc-shell-wrap .viewport-panel-shell-2d.is-canvas {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.litopc-shell-wrap .viewport-panel-shell-2d.is-mini {
+  border-radius: 16px;
+  box-shadow: var(--lt-shadow-pop);
+}
+html[data-theme="dark"] .litopc-shell-wrap .viewport-panel-shell-2d {
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.35);
+}
+
+/* command strip */
+.litopc-shell-wrap .canvas-command-logo {
+  color: var(--lt-ink);
+  text-shadow: none;
+}
+.litopc-shell-wrap .canvas-command-logo-lit,
+.litopc-shell-wrap .canvas-command-logo-opc {
+  font-size: 24px;
+  letter-spacing: -0.03em;
+}
+.litopc-shell-wrap .canvas-command-primary {
+  gap: 8px;
+}
+.litopc-shell-wrap .workspace-mode-switch {
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--lt-pill-line);
+  background: var(--lt-pill-bg);
+  box-shadow: none;
+  backdrop-filter: blur(10px);
+}
+.litopc-shell-wrap .workspace-mode-chip {
+  min-height: 28px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: var(--lt-canvas-text);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  box-shadow: none;
+  white-space: nowrap;
+}
+.litopc-shell-wrap .workspace-mode-chip:hover {
+  background: transparent;
+  border-color: transparent;
+  color: var(--lt-ink);
+}
+.litopc-shell-wrap .workspace-mode-chip.is-active {
+  background: var(--lt-accent);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: none;
+}
+.litopc-shell-wrap .workspace-panel-switch .workspace-mode-chip {
+  min-width: 0;
+  color: var(--lt-faint);
+}
+.litopc-shell-wrap .workspace-panel-switch .workspace-mode-chip.is-active {
+  background: transparent;
+  color: var(--lt-canvas-text);
+}
+.litopc-shell-wrap .workspace-panel-switch .workspace-mode-chip.is-active::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--lt-accent);
+  vertical-align: 1px;
+}
+.litopc-shell-wrap .canvas-toolbar-group {
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.litopc-shell-wrap .toolbar-pill,
+.litopc-shell-wrap .canvas-toolbar-inline .toolbar-pill,
+.litopc-shell-wrap .ruler-floating-group .toolbar-pill {
+  min-height: 34px;
+  border: 1px solid var(--lt-pill-line);
+  background: var(--lt-pill-bg);
+  color: var(--lt-canvas-text);
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  backdrop-filter: blur(10px);
+}
+.litopc-shell-wrap .canvas-toolbar-inline .toolbar-pill:hover,
+.litopc-shell-wrap .ruler-floating-group .toolbar-pill:hover,
+.litopc-shell-wrap .toolbar-pill:hover {
+  background: var(--lt-pill-bg);
+  border-color: var(--lt-line-strong);
+  color: var(--lt-ink);
+}
+.litopc-shell-wrap .canvas-toolbar-inline .toolbar-pill.is-active,
+.litopc-shell-wrap .ruler-floating-group .toolbar-pill.is-active {
+  background: var(--lt-accent);
+  border-color: var(--lt-accent);
+  color: #fff;
+  box-shadow: none;
+}
+.litopc-shell-wrap .canvas-toolbar-inline .toolbar-pill.canvas-icon-pill {
+  width: 34px;
+  min-width: 34px;
+}
+.litopc-shell-wrap .toolbar-pill .toolbar-icon {
+  color: currentColor;
+}
+.litopc-shell-wrap .toolbar-pill svg {
+  stroke: currentColor;
+}
+.litopc-shell-wrap .ruler-floating-group {
+  border: 1px solid var(--lt-pill-line);
+  background: var(--lt-pill-bg);
+  box-shadow: none;
+  backdrop-filter: blur(10px);
+  color: var(--lt-canvas-text);
+}
+.litopc-shell-wrap .ruler-floating-group input {
+  background: var(--lt-card);
+  color: var(--lt-ink);
+  border-color: var(--lt-line-strong);
+}
+
+/* bottom overlays */
+.litopc-shell-wrap .canvas-tech-text {
+  color: var(--lt-faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-shadow: none;
+}
+.litopc-shell-wrap .legend-card.canvas-legend {
+  border: 1px solid var(--lt-pill-line);
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: var(--lt-pill-bg);
+  color: var(--lt-canvas-text);
+  font-size: 12px;
+  box-shadow: none;
+  backdrop-filter: blur(10px);
+}
+.litopc-shell-wrap .viewport-epe-legend i {
+  background: linear-gradient(90deg, #5e5ce6, #bf5af2, #ff453a);
+}
+.litopc-shell-wrap .sweep-inline-status {
+  border: 1px solid var(--lt-pill-line);
+  border-radius: 999px;
+  background: var(--lt-pill-bg);
+  color: var(--lt-canvas-text);
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 600;
+  backdrop-filter: blur(10px);
+}
+.litopc-shell-wrap .metrics-strip {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--lt-line);
+  color: var(--lt-muted);
+  box-shadow: none;
+}
+.litopc-shell-wrap .metrics-strip-value {
+  color: var(--lt-ink);
+}
+
+/* 3D panel: the landing hero's light pane; the canvas itself is transparent */
+.litopc-shell-wrap .viewport-panel-shell-3d {
+  background: var(--lt-stage-3d);
+  border: 1px solid var(--lt-stage-3d-line);
+  border-radius: var(--lt-radius);
+  box-shadow: none;
+}
+.litopc-shell-wrap .viewport-panel-shell-3d.is-main {
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.08);
+}
+.litopc-shell-wrap .viewport-panel-shell-3d.is-canvas {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.litopc-shell-wrap .viewport-panel-shell-3d canvas {
+  border-radius: 0 !important;
+  background: transparent;
+}
+.litopc-shell-wrap .surface-render-loading {
+  background: transparent;
+  color: var(--lt-faint);
+  font-family: var(--lt-font);
+}
+.litopc-shell-wrap .viewport-panel-shell-3d .small-note {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--lt-faint);
+  pointer-events: none;
+}
+.litopc-shell-wrap .panel-mini-control,
+.litopc-shell-wrap .panel-mini-toggle {
+  min-height: 30px;
+  border-radius: 999px;
+  border: 1px solid var(--lt-pill-line);
+  background: var(--lt-pill-bg);
+  color: var(--lt-canvas-text);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  box-shadow: none;
+  backdrop-filter: blur(10px);
+}
+.litopc-shell-wrap .panel-mini-control:hover,
+.litopc-shell-wrap .panel-mini-toggle:hover {
+  color: var(--lt-ink);
+  border-color: var(--lt-line-strong);
+  background: var(--lt-pill-bg);
+}
+.litopc-shell-wrap .panel-mini-toggle.is-active {
+  background: var(--lt-accent);
+  border-color: var(--lt-accent);
+  color: #fff;
+}
+.litopc-shell-wrap .surface-export-status {
+  border-radius: 999px;
+  border: 1px solid var(--lt-pill-line);
+  background: var(--lt-pill-bg);
+  color: var(--lt-canvas-text);
+}
+
+/* edit dock */
+.litopc-shell-wrap .workspace-edit-dock {
+  margin-top: 0;
+  padding: 14px;
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius);
+  background: var(--lt-card);
+  box-shadow: none;
+  color: var(--lt-text);
+}
+.litopc-shell-wrap .workspace-edit-dock-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lt-faint);
+}
+.litopc-shell-wrap .workspace-edit-dock-meta {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--lt-faint);
+}
+.litopc-shell-wrap .workspace-studio-block {
+  padding: 12px 0 0;
+  border: 0;
+  border-top: 1px solid var(--lt-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.litopc-shell-wrap .workspace-layer-block {
+  border-top: 0;
+  padding-top: 4px;
+}
+.litopc-shell-wrap .workspace-mini-head,
+.litopc-shell-wrap .workspace-mini-head span,
+.litopc-shell-wrap .workspace-selection-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--lt-faint);
+}
+.litopc-shell-wrap .workspace-layer-toggle {
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--lt-line);
+  background: var(--lt-track);
+  box-shadow: none;
+}
+.litopc-shell-wrap .workspace-layer-toggle button {
+  min-height: 28px;
+  border-radius: 999px;
+  border: 0;
+  background: transparent;
+  color: var(--lt-muted);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: none;
+}
+.litopc-shell-wrap .workspace-layer-toggle button.is-active,
+.litopc-shell-wrap .workspace-layer-toggle button:disabled {
+  background: var(--lt-card);
+  color: var(--lt-ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  opacity: 1;
+}
+.litopc-shell-wrap .layer-tab-dot {
+  background: var(--lt-accent-2);
+}
+.litopc-shell-wrap .layer-action-btn,
+.litopc-shell-wrap .workspace-tool-button,
+.litopc-shell-wrap .litopc-panel.panel-compact .draw-action,
+.litopc-shell-wrap .workspace-edit-dock .mini-btn {
+  min-height: 30px;
+  border-radius: 999px;
+  border: 1px solid var(--lt-line-strong);
+  background: var(--lt-card);
+  color: var(--lt-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: none;
+}
+.litopc-shell-wrap .layer-action-btn:hover:not(:disabled),
+.litopc-shell-wrap .workspace-tool-button:hover:not(:disabled),
+.litopc-shell-wrap .workspace-edit-dock .mini-btn:hover:not(:disabled) {
+  background: var(--lt-panel);
+  border-color: var(--lt-ink);
+}
+.litopc-shell-wrap .layer-action-btn:disabled,
+.litopc-shell-wrap .workspace-tool-button:disabled {
+  opacity: 0.45;
+}
+.litopc-shell-wrap .layer-action-btn.danger {
+  color: var(--lt-muted);
+}
+.litopc-shell-wrap .layer-action-arrow {
+  color: var(--lt-faint);
+}
+.litopc-shell-wrap .workspace-tool-button.active-draw-btn,
+.litopc-shell-wrap .draw-action.active-draw-btn,
+.litopc-shell-wrap .litopc-panel.panel-compact .draw-action.active-draw-btn {
+  background: var(--lt-accent) !important;
+  border-color: var(--lt-accent) !important;
+  color: #fff;
+}
+.litopc-shell-wrap .workspace-tool-button.active-draw-btn svg {
+  stroke: #fff;
+}
+.litopc-shell-wrap .workspace-edit-dock .label,
+.litopc-shell-wrap .workspace-edit-dock label {
+  font-size: 12px;
+  color: var(--lt-muted);
+}
+.litopc-shell-wrap .workspace-edit-dock input,
+.litopc-shell-wrap .workspace-edit-dock select {
+  border: 1px solid var(--lt-line-strong);
+  border-radius: var(--lt-radius-xs);
+  background: var(--lt-card);
+  color: var(--lt-ink);
+  box-shadow: none;
+}
+.litopc-shell-wrap .workspace-edit-dock .shape-chip,
+.litopc-shell-wrap .workspace-edit-dock .workspace-empty-chip,
+.litopc-shell-wrap .workspace-edit-dock .workspace-chip-reset {
+  border-radius: 999px;
+  border: 1px solid var(--lt-line);
+  background: var(--lt-track);
+  color: var(--lt-ink);
+  font-size: 12px;
+  box-shadow: none;
+}
+.litopc-shell-wrap .shape-chip .mini-btn.slim,
+.litopc-shell-wrap .shape-chip .mini-btn.slim:hover {
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  color: var(--lt-ink);
+  box-shadow: none;
+}
+.litopc-shell-wrap .shape-chip .mini-btn.slim.danger {
+  color: var(--lt-faint);
+}
+.litopc-shell-wrap .workspace-edit-dock .shape-chip.selected {
+  border-color: var(--lt-accent);
+  background: var(--lt-accent-soft);
+  color: var(--lt-accent-ink);
+}
+.litopc-shell-wrap .workspace-assist-icon-btn {
+  border: 1px solid var(--lt-line-strong);
+  background: var(--lt-card);
+  color: var(--lt-muted);
+  box-shadow: none;
+}
+.litopc-shell-wrap .workspace-assist-icon-btn.active {
+  background: var(--lt-accent);
+  border-color: var(--lt-accent);
+  color: #fff;
+}
+.litopc-shell-wrap .upgrade-inline-wrap {
+  border: 1px solid var(--lt-accent-line);
+  background: var(--lt-accent-soft);
+  color: var(--lt-text);
+  border-radius: var(--lt-radius-sm);
+}
+
+/* menus */
+.litopc-shell-wrap .view-menu-panel {
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius);
+  background: var(--lt-card);
+  box-shadow: var(--lt-shadow-pop);
+  color: var(--lt-ink);
+}
+.litopc-shell-wrap .view-menu-panel,
+.litopc-shell-wrap .view-menu-panel * {
+  font-family: var(--lt-font);
+}
+.litopc-shell-wrap .viewport-settings-heading {
+  color: var(--lt-ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+.litopc-shell-wrap .viewport-settings-label,
+.litopc-shell-wrap .viewport-setting-slider,
+.litopc-shell-wrap .viewport-settings-foldout > summary {
+  color: var(--lt-muted);
+  font-size: 12.5px;
+}
+.litopc-shell-wrap .viewport-settings-section + .viewport-settings-section,
+.litopc-shell-wrap .viewport-settings-foldout {
+  border-top: 1px solid var(--lt-line);
+}
+.litopc-shell-wrap .viewport-settings-foldout[open] > summary {
+  color: var(--lt-ink);
+}
+.litopc-shell-wrap .viewport-settings-note,
+.litopc-shell-wrap .view-inline-note {
+  color: var(--lt-faint);
+  font-size: 11.5px;
+}
+.litopc-shell-wrap .viewport-segmented {
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--lt-line);
+  background: var(--lt-track);
+}
+.litopc-shell-wrap .viewport-segmented button {
+  border-radius: 999px;
+  border: 0;
+  background: transparent;
+  color: var(--lt-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: none;
+}
+.litopc-shell-wrap .viewport-segmented button[aria-pressed="true"] {
+  background: var(--lt-card);
+  color: var(--lt-ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.litopc-shell-wrap .view-menu-panel .view-chip {
+  border-radius: 999px;
+  border: 1px solid var(--lt-line-strong);
+  background: var(--lt-card);
+  color: var(--lt-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: none;
+}
+.litopc-shell-wrap .view-menu-panel .view-chip.on,
+.litopc-shell-wrap .view-menu-panel .view-chip[aria-pressed="true"] {
+  background: var(--lt-accent);
+  border-color: var(--lt-accent);
+  color: #fff;
+}
+.litopc-shell-wrap .view-menu-panel .view-chip:disabled {
+  opacity: 0.45;
+}
+.litopc-shell-wrap .view-menu-panel select {
+  border: 1px solid var(--lt-line-strong);
+  border-radius: var(--lt-radius-xs);
+  background: var(--lt-card);
+  color: var(--lt-ink);
+}
+.litopc-shell-wrap .viewport-setting-link {
+  color: var(--lt-accent-ink);
+}
+.litopc-shell-wrap .viewport-view-settings button:focus-visible,
+.litopc-shell-wrap .viewport-view-settings summary:focus-visible {
+  outline-color: var(--lt-accent);
+}
+
+/* canvas mode: both overlays share the stage's 20px corners */
+.litopc-shell-wrap .litopc-sidebar.focus-overlay-sidebar {
+  left: 14px;
+  top: 14px;
+  height: calc(100dvh - 28px);
+  max-height: calc(100dvh - 28px);
+  overflow: hidden;
+  border-radius: var(--lt-radius);
+  border: 1px solid var(--lt-line);
+  background: var(--lt-card);
+  box-shadow: var(--lt-shadow-pop);
+  backdrop-filter: none;
+}
+.litopc-shell-wrap .litopc-sidebar.focus-overlay-sidebar::after {
+  display: none;
+}
+.litopc-shell-wrap .litopc-sidebar.focus-overlay-sidebar .litopc-panel.control-panel-shell {
+  background: transparent;
+  border: 0;
+  height: 100%;
+}
+.litopc-shell-wrap .viewport-overlay-panels {
+  right: 14px;
+  top: 14px;
+  bottom: 14px;
+}
+.litopc-shell-wrap .viewport-overlay-panels .viewport-edit-slot,
+.litopc-shell-wrap .viewport-overlay-panels .viewport-side-stack {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.litopc-shell-wrap .viewport-overlay-panels .workspace-edit-dock,
+.litopc-shell-wrap .viewport-overlay-panels-canvas .viewport-edit-slot > .workspace-edit-dock,
+.litopc-shell-wrap .viewport-overlay-panels-studio .viewport-edit-slot > .workspace-edit-dock {
+  background: var(--lt-card) !important;
+  border: 1px solid var(--lt-line) !important;
+  box-shadow: var(--lt-shadow-pop) !important;
+  color: var(--lt-text);
+}
+.litopc-shell-wrap .viewport-overlay-panels .workspace-edit-dock .label,
+.litopc-shell-wrap .viewport-overlay-panels .workspace-edit-dock label {
+  color: var(--lt-muted) !important;
+}
+.litopc-shell-wrap .viewport-overlay-panels .workspace-edit-dock .workspace-mini-head,
+.litopc-shell-wrap .viewport-overlay-panels .workspace-edit-dock .workspace-mini-head span,
+.litopc-shell-wrap .viewport-overlay-panels .workspace-edit-dock .workspace-edit-dock-eyebrow,
+.litopc-shell-wrap .viewport-overlay-panels .workspace-edit-dock .workspace-edit-dock-meta {
+  color: var(--lt-faint) !important;
+}
+.litopc-shell-wrap .viewport-overlay-panels .workspace-edit-dock .workspace-studio-block,
+.litopc-shell-wrap .viewport-overlay-panels .workspace-edit-dock .workspace-layer-block {
+  background: transparent !important;
+  border-color: var(--lt-line) !important;
+  box-shadow: none !important;
+}
+.litopc-shell-wrap .viewport-overlay-panels .viewport-panel-shell-3d {
+  box-shadow: var(--lt-shadow-pop);
+}
+.litopc-shell-wrap.is-focus-mode .shell-sidebar-toggle,
+.litopc-shell-wrap.is-focus-mode .shell-edit-toggle {
+  display: none;
+}
+
+/* -------------------------------------------------------------- responsive */
+@media (max-width: 760px) {
+  .litopc-shell-wrap .lt-plan-links {
+    gap: 8px;
+  }
+  .litopc-shell-wrap .lt-step-aside {
+    display: none;
+  }
+  .litopc-shell-wrap .canvas-command-logo-lit,
+  .litopc-shell-wrap .canvas-command-logo-opc {
+    font-size: 20px;
+  }
+}
+
+/* ---------------------------------------------------- dark-mode follow-ups */
+.litopc-shell-wrap .viewport-setting-slider output,
+.litopc-shell-wrap .viewport-setting-slider b {
+  color: var(--lt-ink);
+}
+.litopc-shell-wrap .viewport-epe-scale {
+  color: var(--lt-muted);
+}
+.litopc-shell-wrap .viewport-setting-slider input[type="range"],
+.litopc-shell-wrap .sweep-view-slider input[type="range"] {
+  accent-color: var(--lt-accent);
+}
+.litopc-shell-wrap .shape-chip.workspace-feature-chip .mini-btn.slim,
+.litopc-shell-wrap .shape-chip.workspace-feature-chip.selected .mini-btn.slim {
+  color: var(--lt-accent-ink);
+  background: transparent;
+}
+.litopc-shell-wrap .shape-chip.workspace-feature-chip {
+  border-color: var(--lt-accent-line);
+  background: var(--lt-accent-soft);
+}
+.litopc-shell-wrap .workspace-inspector-scope {
+  padding: 3px;
+  border: 1px solid var(--lt-line);
+  background: var(--lt-track);
+  box-shadow: none;
+}
+.litopc-shell-wrap .workspace-inspector-scope button {
+  min-height: 26px;
+  border: 0;
+  background: transparent;
+  color: var(--lt-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  box-shadow: none;
+}
+.litopc-shell-wrap .workspace-inspector-scope button.is-active,
+.litopc-shell-wrap .workspace-inspector-scope button:disabled {
+  background: var(--lt-card);
+  color: var(--lt-ink);
+  border: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  opacity: 1;
+}
+.litopc-shell-wrap .workspace-inspector-scope button:not(:disabled):hover {
+  background: transparent;
+  color: var(--lt-ink);
+}
+.litopc-shell-wrap .workspace-inspector-chip-preset,
+.litopc-shell-wrap .workspace-edit-dock .shape-chip.workspace-inspector-chip-preset {
+  border-color: var(--lt-line-strong);
+  background: var(--lt-card);
+  color: var(--lt-ink);
+}
+.litopc-shell-wrap .litopc-panel.panel-compact .label,
+.litopc-shell-wrap .control-panel-shell .label,
+.litopc-shell-wrap .control-panel-shell label {
+  color: var(--lt-muted);
+}
+.litopc-shell-wrap .control-panel-shell .label b,
+.litopc-shell-wrap .control-panel-shell .lt-step-t {
+  color: var(--lt-ink);
+}
+
+/* ------------------------------------------------ round 2 (2026-10-26) */
+/* plan line: one quiet row */
+.litopc-shell-wrap .lt-plan-line {
+  justify-content: space-between;
+}
+.litopc-shell-wrap .lt-plan-left,
+.litopc-shell-wrap .lt-plan-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.litopc-shell-wrap .lt-plan-left .lt-plan-usage {
+  font-weight: 500;
+  color: var(--lt-faint);
+}
+.litopc-shell-wrap .lt-plan-more {
+  position: relative;
+}
+.litopc-shell-wrap .lt-plan-more > summary {
+  list-style: none;
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--lt-line);
+  background: var(--lt-card);
+  color: var(--lt-muted);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  line-height: 1;
+}
+.litopc-shell-wrap .lt-plan-more > summary::-webkit-details-marker {
+  display: none;
+}
+.litopc-shell-wrap .lt-plan-more[open] > summary {
+  color: var(--lt-ink);
+  border-color: var(--lt-line-strong);
+}
+.litopc-shell-wrap .lt-plan-more-menu {
+  position: absolute;
+  right: 0;
+  top: 34px;
+  z-index: 20;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--lt-radius-sm);
+  border: 1px solid var(--lt-line);
+  background: var(--lt-card);
+  box-shadow: var(--lt-shadow-pop);
+}
+.litopc-shell-wrap .lt-plan-more-menu .lt-note {
+  margin: 0;
+  word-break: break-all;
+}
+
+/* welcome card: the one place that invites first-time visitors to the learn page */
+.litopc-shell-wrap .lt-welcome {
+  position: relative;
+  border-radius: 18px;
+  padding: 1px;
+  background: var(--lt-cta);
+}
+.litopc-shell-wrap .lt-welcome-link {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 10px 10px;
+  border-radius: 17px;
+  background: var(--lt-card);
+  color: var(--lt-ink);
+  text-decoration: none;
+}
+.litopc-shell-wrap .lt-welcome-link:hover {
+  background: var(--lt-panel);
+}
+.litopc-shell-wrap .lt-welcome-art svg {
+  width: 56px;
+  height: 44px;
+  display: block;
+}
+.litopc-shell-wrap .lt-welcome-mask {
+  fill: var(--lt-mask-fill);
+  fill-opacity: var(--lt-mask-fill-a);
+  stroke: var(--lt-mask-stroke);
+  stroke-width: 1;
+}
+.litopc-shell-wrap .lt-welcome-print {
+  fill: none;
+  stroke: var(--lt-print);
+  stroke-width: 1.4;
+}
+.litopc-shell-wrap .lt-welcome-ticks path {
+  stroke: var(--lt-accent-2);
+  stroke-width: 2;
+  stroke-linecap: round;
+  animation: lt-tick-glow 2.2s ease-in-out infinite;
+}
+@keyframes lt-tick-glow {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+.litopc-shell-wrap .lt-welcome-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--lt-muted);
+}
+.litopc-shell-wrap .lt-welcome-copy strong {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--lt-ink);
+}
+.litopc-shell-wrap .lt-welcome-go {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--lt-accent-ink);
+  padding-right: 4px;
+}
+.litopc-shell-wrap .lt-welcome-close {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  min-height: 22px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--lt-line);
+  background: var(--lt-card);
+  color: var(--lt-faint);
+  font-size: 14px;
+  line-height: 1;
+  box-shadow: var(--lt-shadow);
+}
+.litopc-shell-wrap .lt-welcome-close:hover {
+  color: var(--lt-ink);
+}
+
+/* notes */
+.litopc-shell-wrap .lt-warn {
+  color: #b7791f;
+}
+html[data-theme="dark"] .litopc-shell-wrap .lt-warn {
+  color: #ffd60a;
+}
+.litopc-shell-wrap .lt-custom-hint {
+  margin-top: 8px;
+  color: var(--lt-muted);
+  line-height: 1.45;
+}
+
+/* custom tile */
+.litopc-shell-wrap .pat-tile--custom:not(:disabled) {
+  cursor: pointer;
+}
+.litopc-shell-wrap .pat-thumb--custom rect {
+  fill: var(--lt-mask-fill);
+  fill-opacity: var(--lt-mask-fill-a);
+  stroke: var(--lt-mask-stroke);
+  stroke-width: 1;
+  stroke-dasharray: 2.5 2;
+}
+.litopc-shell-wrap .pat-thumb--custom path {
+  fill: var(--lt-accent);
+}
+
+/* edit dock guide for an empty custom workspace */
+.litopc-shell-wrap .workspace-guide {
+  margin: 10px 0 2px;
+  padding: 12px 14px;
+  border-radius: var(--lt-radius-sm);
+  border: 1px solid var(--lt-accent-line);
+  background: var(--lt-accent-soft);
+  color: var(--lt-text);
+}
+.litopc-shell-wrap .workspace-guide-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--lt-ink);
+  margin-bottom: 6px;
+}
+.litopc-shell-wrap .workspace-guide-steps {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--lt-text);
+}
+.litopc-shell-wrap .workspace-guide-steps b {
+  color: var(--lt-ink);
+}
+.litopc-shell-wrap .workspace-guide-example {
+  background: var(--lt-accent);
+  border-color: var(--lt-accent);
+  color: #fff;
+}
+.litopc-shell-wrap .workspace-tips {
+  margin: 6px 0 2px;
+  font-size: 11px;
+  color: var(--lt-faint);
+  letter-spacing: 0.01em;
+}
+
+/* ------------------------------------------------ round 3 (2026-10-26) */
+/* mask file actions as one quiet button group */
+.litopc-shell-wrap .lt-file-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 12px;
+}
+.litopc-shell-wrap .lt-file-btn {
+  min-height: 30px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--lt-line-strong);
+  background: var(--lt-card);
+  color: var(--lt-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  box-shadow: none;
+  white-space: nowrap;
+}
+.litopc-shell-wrap .lt-file-btn:hover:not(:disabled) {
+  color: var(--lt-ink);
+  border-color: var(--lt-ink);
+  background: var(--lt-card);
+}
+.litopc-shell-wrap .lt-file-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* analyze / history */
+.litopc-shell-wrap .lt-card-sub {
+  margin: -2px 0 10px;
+  color: var(--lt-muted);
+  line-height: 1.45;
+}
+.litopc-shell-wrap .history-item-meta {
+  margin: 2px 0 6px;
+  font-variant-numeric: tabular-nums;
+}
+.litopc-shell-wrap .history-item-head span:first-child {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lt-ink);
+}
+/* picker: folded patterns */
+.litopc-shell-wrap .pat-more {
+  margin-top: 6px;
+}
+.litopc-shell-wrap .pat-more-toggle {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 0;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--lt-muted);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: none;
+}
+.litopc-shell-wrap .pat-more-toggle:hover {
+  color: var(--lt-ink);
+  background: transparent;
+}
+.litopc-shell-wrap .pat-more-list {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+}
+.litopc-shell-wrap .pat-more-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 0;
+  padding: 5px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--lt-line);
+  background: var(--lt-card);
+  color: var(--lt-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  box-shadow: none;
+}
+.litopc-shell-wrap .pat-more-item:hover {
+  border-color: var(--lt-line-strong);
+  background: var(--lt-card);
+}
+.litopc-shell-wrap .pat-more-item.is-selected {
+  border-color: var(--lt-select);
+}
+.litopc-shell-wrap .pat-more-thumb {
+  display: block;
+  width: 34px;
+  height: 34px;
+}
+.litopc-shell-wrap .pat-more-thumb .pat-thumb {
+  width: 34px;
+  height: 34px;
+  display: block;
+}
+.litopc-shell-wrap .pat-more-thumb .pat-thumb rect {
+  fill: var(--lt-mask-fill);
+  fill-opacity: var(--lt-mask-fill-a);
+  stroke: var(--lt-mask-stroke);
+  stroke-width: 6;
+  vector-effect: non-scaling-stroke;
+}
+.litopc-shell-wrap .pat-tag--inline {
+  position: static;
+}
+/* 3D: EUV schematic caption */
+.litopc-shell-wrap .surface-euv-note {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  z-index: 9;
+  max-width: 60%;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--lt-faint);
+  text-align: right;
+  pointer-events: auto;
+  cursor: help;
+}
+.litopc-shell-wrap .viewport-panel-shell-3d.is-main .surface-euv-note {
+  bottom: 16px;
+}
+
+/* edit dock: shapes table, foldouts, head layer toggle */
+.litopc-shell-wrap .workspace-edit-dock-head {
+  align-items: center;
+  margin-bottom: 4px;
+}
+.litopc-shell-wrap .workspace-edit-dock-head .workspace-layer-toggle {
+  flex: 0 0 auto;
+  width: 170px;
+}
+.litopc-shell-wrap .workspace-edit-dock-grid {
+  display: block;
+}
+.litopc-shell-wrap .workspace-tools-block {
+  padding-top: 10px;
+}
+.litopc-shell-wrap .ws-shapes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+.litopc-shell-wrap .ws-shape-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 3px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+}
+.litopc-shell-wrap .ws-shape-row.is-selected {
+  border-color: var(--lt-accent-line);
+  background: var(--lt-accent-soft);
+}
+.litopc-shell-wrap .ws-shape-row--head {
+  padding: 0 4px 0 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lt-faint);
+}
+.litopc-shell-wrap .ws-shape-row--head span:nth-child(2),
+.litopc-shell-wrap .ws-shape-row--head span:nth-child(3) {
+  padding-left: 8px;
+}
+.litopc-shell-wrap .ws-shape-name {
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--lt-line-strong);
+  background: var(--lt-card);
+  color: var(--lt-ink);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  box-shadow: none;
+  text-align: center;
+  white-space: nowrap;
+}
+.litopc-shell-wrap .ws-shape-row.is-selected .ws-shape-name {
+  background: var(--lt-accent);
+  border-color: var(--lt-accent);
+  color: #fff;
+}
+.litopc-shell-wrap .workspace-edit-dock input.ws-dim {
+  width: 100%;
+  min-height: 28px;
+  padding: 2px 8px;
+  border-radius: var(--lt-radius-xs);
+  border: 1px solid var(--lt-line-strong);
+  background: var(--lt-card);
+  color: var(--lt-ink);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.litopc-shell-wrap .ws-shape-poly {
+  grid-column: 2 / 4;
+  font-size: 12px;
+  color: var(--lt-faint);
+}
+.litopc-shell-wrap .ws-shape-action {
+  width: 26px;
+  min-height: 26px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--lt-faint);
+  font-size: 14px;
+  line-height: 1;
+  box-shadow: none;
+}
+.litopc-shell-wrap .ws-shape-action:hover {
+  color: var(--lt-ink);
+  border-color: var(--lt-line-strong);
+  background: var(--lt-card);
+}
+.litopc-shell-wrap .ws-shape-action--none {
+  display: block;
+}
+.litopc-shell-wrap .ws-position {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 3px 4px 3px 3px;
+}
+.litopc-shell-wrap .ws-position-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lt-faint);
+  padding-left: 3px;
+}
+.litopc-shell-wrap .ws-position-field {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--lt-faint);
+}
+.litopc-shell-wrap .ws-position-unit {
+  font-size: 11px;
+  color: var(--lt-faint);
+}
+.litopc-shell-wrap .ws-layer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.litopc-shell-wrap .workspace-foldout {
+  margin-top: 10px;
+  border-top: 1px solid var(--lt-line);
+  padding-top: 8px;
+}
+.litopc-shell-wrap .workspace-foldout > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--lt-faint);
+}
+.litopc-shell-wrap .workspace-foldout > summary::-webkit-details-marker {
+  display: none;
+}
+.litopc-shell-wrap .workspace-foldout > summary::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 150ms ease;
+  margin-left: 2px;
+}
+.litopc-shell-wrap .workspace-foldout[open] > summary::before {
+  transform: rotate(45deg);
+}
+.litopc-shell-wrap .workspace-foldout-hint {
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--lt-faint);
+}
+.litopc-shell-wrap .workspace-foldout-body {
+  padding-top: 8px;
+}
+.litopc-shell-wrap .workspace-foldout-body .workspace-tips {
+  margin: 0 0 8px;
+}
+
+/* focus mode: edge tabs reveal the panels */
+.litopc-shell-wrap .lt-edge-tabs {
+  position: fixed;
+  top: 50%;
+  z-index: 180;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transform: translateY(-50%);
+}
+.litopc-shell-wrap .lt-edge-tabs-left {
+  left: 0;
+}
+.litopc-shell-wrap .lt-edge-tabs-right {
+  right: 0;
+}
+.litopc-shell-wrap .lt-edge-tab {
+  writing-mode: vertical-rl;
+  min-height: 0;
+  padding: 12px 6px;
+  border: 1px solid var(--lt-line);
+  background: var(--lt-card);
+  color: var(--lt-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  box-shadow: var(--lt-shadow);
+  cursor: pointer;
+}
+.litopc-shell-wrap .lt-edge-tabs-left .lt-edge-tab {
+  transform: rotate(180deg);
+  border-radius: 10px 0 0 10px;
+  border-left: 0;
+}
+.litopc-shell-wrap .lt-edge-tabs-right .lt-edge-tab {
+  border-radius: 0 10px 10px 0;
+  border-right: 0;
+}
+.litopc-shell-wrap .lt-edge-tab:hover,
+.litopc-shell-wrap .lt-edge-tab.is-peek {
+  color: var(--lt-ink);
+  background: var(--lt-card);
+}
+.litopc-shell-wrap .lt-edge-tab.is-pinned {
+  background: var(--lt-accent);
+  border-color: var(--lt-accent);
+  color: #fff;
+}
+.litopc-shell-wrap .lt-edge-tab.is-pinned::after {
+  content: "";
+}
+.litopc-shell-wrap.is-focus-mode .litopc-sidebar.focus-overlay-sidebar {
+  left: 26px;
+  transition: opacity 180ms ease, transform 220ms ease;
+}
+.litopc-shell-wrap.is-focus-mode .viewport-overlay-panels {
+  right: 26px;
+}
+.litopc-shell-wrap.is-focus-mode .canvas-command-strip {
+  left: calc(26px + var(--canvas-left-inset, 0px));
+}
+.litopc-shell-wrap.is-focus-mode .canvas-command-strip.has-overlay-rail {
+  right: calc(var(--overlay-rail-width, 342px) + 40px);
+}
+.litopc-shell-wrap.is-focus-mode .canvas-tech-text.has-overlay-rail,
+.litopc-shell-wrap.is-focus-mode .canvas-legend.has-overlay-rail {
+  right: calc(var(--overlay-rail-width, 342px) + 40px);
+}
+/* round 4 follow-up: make the text-only welcome card and the analyze copy win over earlier rules */
+.litopc-shell-wrap .lt-welcome .lt-welcome-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px 9px 14px;
+}
+.litopc-shell-wrap .lt-welcome .lt-welcome-copy {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  min-width: 0;
+}
+.litopc-shell-wrap .control-panel-shell p.lt-card-sub {
+  margin: -2px 0 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  font-weight: 500;
+  color: var(--lt-muted);
+}
+.litopc-shell-wrap .viewport-panel-shell-3d.is-main .small-note,
+.litopc-shell-wrap .viewport-panel-shell-3d.is-main.is-canvas .small-note {
+  top: auto !important;
+  bottom: 58px;
+  left: 16px;
+}
+
+/* ------------------------------------------------ round 4 (2026-10-26) */
+.litopc-shell-wrap .lt-welcome .lt-welcome-copy strong {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--lt-ink);
+}
+.litopc-shell-wrap .lt-welcome .lt-welcome-copy span {
+  font-size: 12.5px;
+  color: var(--lt-muted);
+}
+.litopc-shell-wrap .lt-welcome .lt-welcome-go {
+  font-size: 18px;
+  padding-right: 0;
+  color: var(--lt-accent-ink);
+}
+.litopc-shell-wrap .lt-param-note {
+  margin-top: 6px;
+  color: var(--lt-faint);
+}
+.litopc-shell-wrap .lt-scalebar {
+  animation: lt-scalebar-pop 1.4s ease-out;
+  transform-box: fill-box;
+  transform-origin: left center;
+}
+@keyframes lt-scalebar-pop {
+  0% { opacity: 0; transform: scaleX(0.6); }
+  35% { opacity: 1; transform: scaleX(1.06); }
+  100% { opacity: 1; transform: scaleX(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .litopc-shell-wrap .lt-scalebar { animation: none; }
+}
+/* the 2D mini panel (3D as main) is too small for the scale bar */
+.litopc-shell-wrap .viewport-panel-shell-2d.is-mini .lt-scalebar {
+  display: none;
+}
+
+/* panel toggles: a filled tint says "shown", quiet text says "hidden" (no dots) */
+.litopc-shell-wrap .workspace-panel-switch .workspace-mode-chip.is-active::before {
+  display: none;
+}
+.litopc-shell-wrap .workspace-panel-switch .workspace-mode-chip {
+  padding: 0 11px;
+  color: var(--lt-faint);
+  text-decoration: line-through;
+  text-decoration-color: var(--lt-line-strong);
+  text-decoration-thickness: 1px;
+}
+.litopc-shell-wrap .workspace-panel-switch .workspace-mode-chip.is-active {
+  background: var(--lt-accent-soft);
+  color: var(--lt-accent-ink);
+  text-decoration: none;
+}
+.litopc-shell-wrap .workspace-panel-switch .workspace-mode-chip:hover {
+  color: var(--lt-ink);
+}
+.litopc-shell-wrap .workspace-panel-switch .workspace-mode-chip {
+  text-decoration: none;
+}
+
+/* ------------------------------------------------ phones (2026-10-26) */
+@media (max-width: 760px) {
+  .litopc-shell-wrap.is-phone .canvas-command-strip {
+    left: 12px;
+    right: 12px;
+  }
+  .litopc-shell-wrap.is-phone .canvas-command-primary {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  .litopc-shell-wrap.is-phone .canvas-command-logo-lit,
+  .litopc-shell-wrap.is-phone .canvas-command-logo-opc {
+    font-size: 20px;
+  }
+  /* Focus is the only layout on phones: no mode switch, no panel chips (the tab bar does that) */
+  .litopc-shell-wrap.is-phone .canvas-mode-strip {
+    display: none;
+  }
+  .litopc-shell-wrap.is-phone .canvas-toolbar-inline .toolbar-pill {
+    min-height: 32px;
+  }
+  /* edge tabs become a bottom tab bar */
+  .litopc-shell-wrap.is-phone .lt-edge-tabs {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    transform: none;
+    flex-direction: row;
+    gap: 0;
+    z-index: 190;
+    background: var(--lt-card);
+    border-top: 1px solid var(--lt-line);
+    padding: 6px 10px calc(6px + env(safe-area-inset-bottom, 0px));
+  }
+  .litopc-shell-wrap.is-phone .lt-edge-tabs-left {
+    right: 66%;
+  }
+  .litopc-shell-wrap.is-phone .lt-edge-tabs-right {
+    left: 34%;
+    border-left: 0;
+  }
+  .litopc-shell-wrap.is-phone .lt-edge-tab,
+  .litopc-shell-wrap.is-phone .lt-edge-tabs-left .lt-edge-tab,
+  .litopc-shell-wrap.is-phone .lt-edge-tabs-right .lt-edge-tab {
+    writing-mode: horizontal-tb;
+    transform: none;
+    flex: 1;
+    min-height: 40px;
+    padding: 0 10px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    box-shadow: none;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+  }
+  .litopc-shell-wrap.is-phone .lt-edge-tab.is-pinned {
+    background: var(--lt-accent);
+    color: #fff;
+  }
+  /* panels are bottom sheets above the tab bar */
+  .litopc-shell-wrap.is-phone .litopc-sidebar.focus-overlay-sidebar,
+  .litopc-shell-wrap.is-phone .viewport-overlay-panels {
+    position: fixed;
+    left: 0 !important;
+    right: 0 !important;
+    top: auto !important;
+    bottom: calc(52px + env(safe-area-inset-bottom, 0px)) !important;
+    width: 100% !important;
+    height: 72vh;
+    max-height: 72vh;
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -18px 44px rgba(0, 0, 0, 0.14);
+  }
+  .litopc-shell-wrap.is-phone .viewport-overlay-panels {
+    padding: 0;
+    pointer-events: none;
+  }
+  .litopc-shell-wrap.is-phone .viewport-overlay-panels > * {
+    pointer-events: auto;
+  }
+  .litopc-shell-wrap.is-phone .viewport-overlay-panels .viewport-side-stack {
+    width: 100%;
+    max-height: 100%;
+  }
+  .litopc-shell-wrap.is-phone .viewport-overlay-panels .workspace-edit-dock {
+    border-radius: 20px 20px 0 0;
+    max-height: 72vh;
+    overflow: auto;
+  }
+  .litopc-shell-wrap.is-phone .viewport-overlay-panels .viewport-panel-shell-3d {
+    border-radius: 20px 20px 0 0;
+    height: 72vh !important;
+  }
+  /* canvas chrome keeps clear of the tab bar */
+  .litopc-shell-wrap.is-phone .canvas-bottom-right-stack {
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px)) !important;
+    right: 12px !important;
+  }
+  .litopc-shell-wrap.is-phone .legend-card.canvas-legend {
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+  .litopc-shell-wrap.is-phone .lt-scalebar {
+    transform: translateY(-9%);
+  }
+  .litopc-shell-wrap.is-phone .ruler-floating-group {
+    display: none;
+  }
+  /* bigger touch targets in the sheets */
+  .litopc-shell-wrap.is-phone .ws-shape-name,
+  .litopc-shell-wrap.is-phone .workspace-edit-dock input.ws-dim,
+  .litopc-shell-wrap.is-phone .workspace-tool-button,
+  .litopc-shell-wrap.is-phone .layer-action-btn {
+    min-height: 36px;
+  }
+}
+@media (max-width: 760px) {
+  .litopc-shell-wrap.is-phone .canvas-toolbar-inline .toolbar-pill.canvas-icon-pill {
+    display: none;
+  }
+  .litopc-shell-wrap.is-phone .viewport-overlay-panels .viewport-side-stack {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    height: 100%;
+    overflow: auto;
+  }
+  .litopc-shell-wrap.is-phone .viewport-overlay-panels .viewport-edit-slot {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .litopc-shell-wrap.is-phone .viewport-overlay-panels .workspace-edit-dock {
+    max-height: none;
+    height: auto;
+  }
+  .litopc-shell-wrap.is-phone .viewport-overlay-panels.is-3d-only,
+  .litopc-shell-wrap.is-phone .viewport-overlay-panels:has(.viewport-side-stack-no-edit) {
+    height: 46vh;
+    max-height: 46vh;
+  }
+  .litopc-shell-wrap.is-phone .viewport-overlay-panels .viewport-panel-shell-3d {
+    height: 100% !important;
+    flex: 1 1 auto;
+  }
+}
+@media (max-width: 760px) {
+  /* sheets span the full width; the canvas chrome ignores the desktop rail inset */
+  .litopc-shell-wrap.is-phone .viewport-overlay-panels .viewport-side-stack,
+  .litopc-shell-wrap.is-phone .viewport-overlay-panels .viewport-side-stack-overlay {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+  .litopc-shell-wrap.is-phone .canvas-command-strip,
+  .litopc-shell-wrap.is-phone .canvas-command-strip.has-overlay-rail {
+    left: 12px !important;
+    right: 12px !important;
+  }
+  .litopc-shell-wrap.is-phone .canvas-bottom-right-stack {
+    z-index: 6 !important;
+    max-width: calc(100% - 24px) !important;
+  }
+  .litopc-shell-wrap.is-phone .canvas-legend.has-overlay-rail,
+  .litopc-shell-wrap.is-phone .canvas-tech-text.has-overlay-rail {
+    max-width: calc(100% - 24px) !important;
+    right: 0 !important;
+  }
+}

@@ -114,6 +114,9 @@ export function EditStudioDock(props: {
   currentPresetFeatureRect: Extract<MaskShape, { type: "rect" }> | null;
   presetFeatureOverrideActive: boolean;
   onUpdatePresetFeatureRect: (rect: Extract<MaskShape, { type: "rect" }>) => void;
+  onUpdatePresetFeatureRectAt?: (index: number, rect: Extract<MaskShape, { type: "rect" }>) => void;
+  /** Resize a pattern feature through its pattern parameter when one exists; returns false to fall back to an override. */
+  onPatternFeatureResize?: (index: number, rect: Extract<MaskShape, { type: "rect" }>) => boolean;
   onResetPresetFeatureRect: () => void;
   selectedPresetAnchorIndex: number;
   onSetSelectedPresetAnchorIndex: (i: number) => void;
@@ -137,12 +140,15 @@ export function EditStudioDock(props: {
   proCustomShapeLimit: number;
   customLimitReached: boolean;
   customLimitNotice: string | null;
+  /** Shapes that count against the manual-edit limit (OPC output is excluded by the page). */
+  manualShapeCount?: number;
   onCopyTargetToMask: () => void;
   onCopyMaskToTarget: () => void;
   onClearTargetLayer: () => void;
   onUpgradeIntent: (source: string) => void;
   /** Called when the user edits a global mask param while maskMode=CUSTOM; should reinitialise the mask from the template. */
-  onReinitWithParams?: () => void;
+  onReinitWithParams?: (nextParams?: Record<string, number>) => void;
+  onLoadCustomExample?: () => void;
 }) {
   const {
     layout = "full",
@@ -167,6 +173,8 @@ export function EditStudioDock(props: {
     currentPresetFeatureRect,
     presetFeatureOverrideActive,
     onUpdatePresetFeatureRect,
+    onUpdatePresetFeatureRectAt,
+    onPatternFeatureResize,
     onResetPresetFeatureRect,
     selectedPresetAnchorIndex,
     onSetSelectedPresetAnchorIndex,
@@ -190,11 +198,13 @@ export function EditStudioDock(props: {
     proCustomShapeLimit,
     customLimitReached,
     customLimitNotice,
+    manualShapeCount,
     onCopyTargetToMask,
     onCopyMaskToTarget,
     onClearTargetLayer,
     onUpgradeIntent,
     onReinitWithParams,
+    onLoadCustomExample,
   } = props;
 
   const targetEditing = activeEditLayer === "TARGET";
@@ -309,10 +319,11 @@ export function EditStudioDock(props: {
       onSetTargetParams({ ...inspectorParams, [key]: v });
       return;
     }
-    setParams({ ...params, [key]: v });
-    // In CUSTOM mode (e.g. after OPC), a global-inspector param change should reinitialise
-    // the mask from the template so the canvas responds immediately.
-    if (maskMode === "CUSTOM") onReinitWithParams?.();
+    const next = { ...params, [key]: v };
+    setParams(next);
+    // In CUSTOM mode (e.g. after OPC), a global-inspector param change reinitialises
+    // the mask from the template with the new value so the canvas responds immediately.
+    if (maskMode === "CUSTOM") onReinitWithParams?.(next);
   }
 
   function requestUpgrade(source: string) {
@@ -382,7 +393,7 @@ export function EditStudioDock(props: {
       return;
     }
     setParams(next);
-    if (maskMode === "CUSTOM") onReinitWithParams?.();
+    if (maskMode === "CUSTOM") onReinitWithParams?.(next);
   }
 
   function setGlobalHeight(v: number) {
@@ -449,331 +460,239 @@ export function EditStudioDock(props: {
     <div className={`workspace-edit-dock ${layout === "side" ? "workspace-edit-dock-side-layout" : ""}`}>
       <div className="workspace-edit-dock-head">
         <div className="workspace-edit-dock-eyebrow">Edit</div>
-        <div className="workspace-edit-dock-meta">{dockMeta}</div>
+        <div className="workspace-layer-toggle workspace-layer-toggle-inline" role="group" aria-label="Layer">
+          <button
+            className={activeEditLayer === "MASK" ? "is-active" : ""}
+            onClick={() => onSetActiveEditLayer("MASK")}
+            disabled={activeEditLayer === "MASK"}
+          >
+            Mask
+          </button>
+          <button
+            className={activeEditLayer === "TARGET" ? "is-active" : ""}
+            onClick={() => onSetActiveEditLayer("TARGET")}
+            disabled={activeEditLayer === "TARGET"}
+          >
+            Target{targetShapes.length === 0 && activeEditLayer !== "TARGET" && (
+              <span className="layer-tab-dot" aria-hidden="true" />
+            )}
+          </button>
+        </div>
       </div>
 
-      <div className="workspace-edit-dock-grid">
-        <div className="workspace-edit-dock-main">
-          <div className="workspace-studio-block workspace-layer-block">
-            <div className="workspace-layer-inline">
-              <div className="workspace-layer-toggle workspace-layer-toggle-inline">
-                <button
-                  className={activeEditLayer === "MASK" ? "is-active" : ""}
-                  onClick={() => onSetActiveEditLayer("MASK")}
-                  disabled={activeEditLayer === "MASK"}
-                >
-                  Mask
-                </button>
-                <button
-                  className={activeEditLayer === "TARGET" ? "is-active" : ""}
-                  onClick={() => onSetActiveEditLayer("TARGET")}
-                  disabled={activeEditLayer === "TARGET"}
-                >
-                  Target{targetShapes.length === 0 && activeEditLayer !== "TARGET" && (
-                    <span className="layer-tab-dot" aria-hidden="true" />
-                  )}
-                </button>
-              </div>
-            </div>
-            <div className={`workspace-layer-actions${targetShapes.length === 0 ? " no-target" : ""}`}>
-              <button className="layer-action-btn" onClick={onCopyMaskToTarget} title="Copy current mask shapes to Target layer">
-                <span>Mask</span><span className="layer-action-arrow">→</span><span>Target</span>
-              </button>
-              <button className="layer-action-btn" onClick={onCopyTargetToMask} title="Copy target shapes back to Mask layer" disabled={targetShapes.length === 0}>
-                <span>Target</span><span className="layer-action-arrow">→</span><span>Mask</span>
-              </button>
-              <button className="layer-action-btn danger" onClick={onClearTargetLayer} title="Clear all target shapes" disabled={targetShapes.length === 0}>
-                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 2l8 8M10 2l-8 8"/></svg>
-                Clear
-              </button>
-            </div>
-          </div>
-
-          <div className="workspace-edit-dock-row">
-            <div className="workspace-studio-block">
-              <div className="workspace-mini-head">
-                <span>Edit Tools</span>
-                <span>{targetEditing ? "Target editing" : "Mask editing"}</span>
-              </div>
-              <div className="draw-action-row workspace-tool-grid workspace-tool-grid-compact">
-                <button
-                  className={`mini-btn draw-action workspace-tool-button ${editorTool === "SELECT" ? "active-draw-btn" : ""}`}
-                  onClick={() => onSetEditorTool("SELECT")}
-                  title="Select and move features."
-                  aria-label="Select"
-                >
-                  <StudioToolIcon kind="select" />
-                  <span>Select</span>
-                </button>
-                <button
-                  className={`mini-btn draw-action workspace-tool-button ${editorTool === "DRAW_ADD_RECT" ? "active-draw-btn" : ""}`}
-                  onClick={() => onSetEditorTool(editorTool === "DRAW_ADD_RECT" ? "SELECT" : "DRAW_ADD_RECT")}
-                  title="Add a rectangular patch."
-                  aria-label="Add rectangle"
-                >
-                  <StudioToolIcon kind="add" />
-                  <span>Add</span>
-                </button>
-                <button
-                  className={`mini-btn draw-action workspace-tool-button ${editorTool === "DRAW_SUBTRACT_RECT" ? "active-draw-btn" : ""}`}
-                  onClick={() => onSetEditorTool(editorTool === "DRAW_SUBTRACT_RECT" ? "SELECT" : "DRAW_SUBTRACT_RECT")}
-                  disabled={!canUseSubtractTools}
-                  title={canUseSubtractTools ? "Subtract a rectangular patch." : "Target layer is additive only."}
-                  aria-label="Subtract rectangle"
-                >
-                  <StudioToolIcon kind="subtract" />
-                  <span>Sub</span>
-                </button>
-              </div>
-            </div>
-
-            {(presetAnchorAvailable || editableShapes.length > 0 || !targetEditing) && (
-              <div className="workspace-studio-block">
-                <div className="workspace-mini-head">
-                  <span>{targetEditing ? "Target Shapes" : (presetAnchorAvailable ? "Selections" : "Manual Edits")}</span>
-                  <span>
-                    {targetEditing
-                      ? hasManualSelection
-                        ? `${manualSelectionCount} target${manualSelectionCount > 1 ? "s" : ""} selected`
-                        : `${editableShapes.length}/${plan === "FREE" ? freeCustomRectLimit : proCustomShapeLimit} used`
-                      : presetAnchorAvailable
-                      ? hasManualSelection
-                        ? `${manualSelectionCount} edit${manualSelectionCount > 1 ? "s" : ""} selected`
-                        : hasPresetSelection
-                          ? "Feature selected"
-                          : "None selected"
-                      : `${editableShapes.length}/${plan === "FREE" ? freeCustomRectLimit : proCustomShapeLimit} used`}
-                  </span>
-                </div>
-                {presetAnchorAvailable && (
-                  <div className="workspace-selection-section">
-                    <div className="workspace-selection-label">Mask Feature</div>
-                    <div className="shape-chip-list workspace-chip-row">
-                      {presetAnchorShapes.map((_, i) => (
-                        <div
-                          key={`dock-preset-anchor-${i}`}
-                          className={`shape-chip workspace-feature-chip ${hasPresetSelection && selectedPresetAnchorIndex === i ? "selected" : ""} ${presetFeatureOverrideActive && hasPresetSelection && selectedPresetAnchorIndex === i ? "shape-chip-has-reset" : ""}`}
-                        >
-                          <button className="mini-btn slim" onClick={() => onSetSelectedPresetAnchorIndex(i)}>
-                            {`M${i + 1}`}
-                          </button>
-                          {presetFeatureOverrideActive && hasPresetSelection && selectedPresetAnchorIndex === i && (
-                            <button
-                              className="workspace-chip-reset"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onResetPresetFeatureRect();
-                              }}
-                              title="Reset this feature"
-                              aria-label={`Reset M${i + 1}`}
-                            >
-                              R
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {targetEditing ? (
-                  <div className="workspace-selection-section">
-                    <div className="workspace-selection-label">Target Shapes</div>
-                    <div className="shape-chip-list workspace-chip-row">
-                      {editableShapes.length === 0 && (
-                        <div className="workspace-empty-chip">No targets yet</div>
-                      )}
-                      {editableShapes.map((_, i) => (
-                        <div key={`target-shape-${i}`} className={`shape-chip ${isManualShapeSelected(i) ? "selected target" : ""}`}>
-                          <button
-                            className="mini-btn slim"
-                            onClick={(e) => onSelectCustomShapeChip(i, e.shiftKey || e.ctrlKey || e.metaKey)}
-                          >
-                            {`T${i + 1}`}
-                          </button>
-                          <button className="mini-btn slim danger" onClick={() => onDeleteCustomShape(i)} aria-label={`Delete target ${i + 1}`}>×</button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    {(customLimitReached || customLimitNotice) && (
-                      <div className="upgrade-inline-wrap">
-                        <div className="small-note tiny-note">
-                          {customLimitNotice
-                            ? customLimitNotice
-                            : (plan === "FREE"
-                                ? `Free limit: ${freeCustomRectLimit} manual shapes per layer.`
-                                : `Edit capacity reached (${proCustomShapeLimit}).`)}
-                        </div>
-                        {plan === "FREE" && (
-                          <button className="mini-btn slim upgrade-inline-cta" onClick={() => requestUpgrade("custom_shape_limit")}>
-                            Upgrade
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    <div className={`workspace-selection-section ${presetAnchorAvailable ? "workspace-selection-section-split" : ""}`}>
-                      {presetAnchorAvailable && <div className="workspace-selection-label">Manual Edits</div>}
-                      <div className="shape-chip-list workspace-chip-row">
-                        {editableShapes.length === 0 && (
-                          <div className="workspace-empty-chip">No edits yet</div>
-                        )}
-                        {editableShapes.map((shape, i) => {
-                          const label = `${shape.op === "subtract" ? "-" : "+"}R${i + 1}`;
-                          return (
-                            <div key={i} className={`shape-chip ${isManualShapeSelected(i) ? "selected" : ""}`}>
-                              <button
-                                className="mini-btn slim"
-                                onClick={(e) => onSelectCustomShapeChip(i, e.shiftKey || e.ctrlKey || e.metaKey)}
-                              >
-                                {label}
-                              </button>
-                              <button className="mini-btn slim danger" onClick={() => onDeleteCustomShape(i)} aria-label={`Delete edit ${i + 1}`}>×</button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-
-          {!targetEditing && (
-            <div className="workspace-studio-block">
-                <div className="workspace-mini-head">
-                  <span>Assist Setup</span>
-                  <span>{selectedRect ? "Selection ready" : "Pick a feature in 2D"}</span>
-                </div>
-                <div className="workspace-field-grid workspace-field-grid-wide">
-                  <div className="workspace-field">
-                    <label className="label">Hammerhead Edge</label>
-                    <div className="workspace-assist-inline">
-                      <select value={hammerheadEdge} onChange={(e) => onSetHammerheadEdge(e.target.value as EdgeAnchor)} style={{ width: "100%" }}>
-                        <option value="left">Left</option>
-                        <option value="right">Right</option>
-                        <option value="top">Top</option>
-                        <option value="bottom">Bottom</option>
-                      </select>
-                      <button
-                        className="mini-btn slim workspace-assist-icon-btn"
-                        onClick={onAddHammerheadToSelected}
-                        disabled={(maskMode === "CUSTOM" && !selectedRect) || (maskMode === "TEMPLATE" && !presetAnchorAvailable)}
-                        title="Add a hammerhead using the selected edge."
-                        aria-label="Add hammerhead"
-                      >
-                        <AssistActionIcon />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="workspace-field">
-                    <label className="label">Serif Corner</label>
-                    <div className="workspace-assist-inline">
-                      <select value={serifCorner} onChange={(e) => onSetSerifCorner(e.target.value as CornerAnchor)} style={{ width: "100%" }}>
-                        <option value="nw">Top Left</option>
-                        <option value="ne">Top Right</option>
-                        <option value="sw">Bottom Left</option>
-                        <option value="se">Bottom Right</option>
-                      </select>
-                      <button
-                        className="mini-btn slim workspace-assist-icon-btn"
-                        onClick={onAddSerifToSelected}
-                        disabled={(maskMode === "CUSTOM" && !selectedRect) || (maskMode === "TEMPLATE" && !presetAnchorAvailable)}
-                        title="Add a serif at the selected corner."
-                        aria-label="Add serif"
-                      >
-                        <AssistActionIcon />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="workspace-field">
-                    <label className="label">Mousebite Edge</label>
-                    <div className="workspace-assist-inline">
-                      <select value={mousebiteEdge} onChange={(e) => onSetMousebiteEdge(e.target.value as EdgeAnchor)} style={{ width: "100%" }}>
-                        <option value="left">Left</option>
-                        <option value="right">Right</option>
-                        <option value="top">Top</option>
-                        <option value="bottom">Bottom</option>
-                      </select>
-                      <button
-                        className="mini-btn slim workspace-assist-icon-btn"
-                        onClick={onAddMousebiteToSelected}
-                        disabled={(maskMode === "CUSTOM" && !selectedRect) || (maskMode === "TEMPLATE" && !presetAnchorAvailable)}
-                        title="Cut a mousebite on the selected edge."
-                        aria-label="Add mousebite"
-                      >
-                        <AssistActionIcon />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="workspace-field">
-                    <label className="label">SRAF Orientation</label>
-                    <div className="workspace-assist-inline">
-                      <select value={srafOrientation} onChange={(e) => onSetSrafOrientation(e.target.value as SrafOrientation)} style={{ width: "100%" }}>
-                        <option value="horizontal">Horizontal</option>
-                        <option value="vertical">Vertical</option>
-                      </select>
-                      <button
-                        className={`mini-btn slim workspace-assist-icon-btn ${editorTool === "PLACE_SRAF" ? "active" : ""}`}
-                        onClick={() => onSetEditorTool(editorTool === "PLACE_SRAF" ? "SELECT" : "PLACE_SRAF")}
-                        disabled={targetEditing}
-                        title="Place an assist bar using the selected orientation."
-                        aria-label="Place assist bar"
-                      >
-                        <AssistActionIcon />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-            </div>
+      {maskMode === "CUSTOM" && editableShapes.length === 0 && (
+        <div className="workspace-guide" role="note">
+          <div className="workspace-guide-title">Draw your own {targetEditing ? "target" : "mask"}</div>
+          <ol className="workspace-guide-steps">
+            <li>Choose <b>Add</b>, then drag on the canvas to draw a rectangle.</li>
+            <li>Drag a corner to resize, or type a size in the list below. Arrow keys nudge, <b>Delete</b> removes.</li>
+            <li>Switch to <b>Target</b> for the shape you want printed, then Simulate.</li>
+          </ol>
+          {onLoadCustomExample && (
+            <button type="button" className="mini-btn workspace-guide-example" onClick={onLoadCustomExample}>Load an example</button>
           )}
         </div>
+      )}
 
-        <div className="workspace-edit-dock-side">
-          <div className="workspace-studio-block workspace-edit-inspector">
-            <div className="workspace-mini-head">
-              <span>Inspector</span>
-              <span>
-                {globalInspector
-                  ? (targetEditing ? "Target" : "Pattern")
-                  : hasMultiManualSelection
-                    ? "Multi-select"
-                    : selectedRect
-                      ? `${Math.round(selectedRect.w_nm)} × ${Math.round(selectedRect.h_nm)} nm`
-                      : "—"}
-              </span>
+      <div className="workspace-studio-block workspace-tools-block">
+        <div className="draw-action-row workspace-tool-grid workspace-tool-grid-compact">
+          <button
+            className={`mini-btn draw-action workspace-tool-button ${editorTool === "SELECT" ? "active-draw-btn" : ""}`}
+            onClick={() => onSetEditorTool("SELECT")}
+            title="Select and move shapes"
+            aria-label="Select"
+          >
+            <StudioToolIcon kind="select" />
+            <span>Select</span>
+          </button>
+          <button
+            className={`mini-btn draw-action workspace-tool-button ${editorTool === "DRAW_ADD_RECT" ? "active-draw-btn" : ""}`}
+            onClick={() => onSetEditorTool(editorTool === "DRAW_ADD_RECT" ? "SELECT" : "DRAW_ADD_RECT")}
+            title="Draw a rectangle to add"
+            aria-label="Add rectangle"
+          >
+            <StudioToolIcon kind="add" />
+            <span>Add</span>
+          </button>
+          <button
+            className={`mini-btn draw-action workspace-tool-button ${editorTool === "DRAW_SUBTRACT_RECT" ? "active-draw-btn" : ""}`}
+            onClick={() => onSetEditorTool(editorTool === "DRAW_SUBTRACT_RECT" ? "SELECT" : "DRAW_SUBTRACT_RECT")}
+            disabled={!canUseSubtractTools}
+            title={canUseSubtractTools ? "Draw a rectangle to cut out" : "The target layer is additive only"}
+            aria-label="Subtract rectangle"
+          >
+            <StudioToolIcon kind="subtract" />
+            <span>Sub</span>
+          </button>
+        </div>
+        <div className="workspace-tips">Drag on the canvas to draw · drag corners to resize · arrows nudge · Delete removes</div>
+      </div>
+
+      <div className="workspace-studio-block">
+        <div className="workspace-mini-head">
+          <span>{targetEditing ? "Target shapes" : "Mask shapes"}</span>
+          <span>
+            {presetAnchorAvailable
+              ? `${presetAnchorShapes.length} from pattern · ${manualShapeCount ?? editableShapes.length}/${plan === "FREE" ? freeCustomRectLimit : proCustomShapeLimit} edits`
+              : `${manualShapeCount ?? editableShapes.length}/${plan === "FREE" ? freeCustomRectLimit : proCustomShapeLimit} used`}
+          </span>
+        </div>
+        {(customLimitReached || customLimitNotice) && !targetEditing && (
+          <div className="upgrade-inline-wrap">
+            <div className="small-note tiny-note">
+              {customLimitNotice
+                ? customLimitNotice
+                : (plan === "FREE"
+                    ? `Free limit: ${freeCustomRectLimit} manual shapes per layer.`
+                    : `Edit capacity reached (${proCustomShapeLimit}).`)}
             </div>
-            <div className="inspector-meta-row">
-              <div className={`workspace-inspector-chip workspace-inspector-chip-${inspectorChip.kind}`} title={inspectorChip.title}>
-                {inspectorChip.label}
+            {plan === "FREE" && customLimitReached && (
+              <button className="mini-btn slim upgrade-inline-cta" onClick={() => requestUpgrade("custom_shape_limit")}>
+                Upgrade
+              </button>
+            )}
+          </div>
+        )}
+        <div className="ws-shapes" role="list">
+          <div className="ws-shape-row ws-shape-row--head" aria-hidden="true">
+            <span />
+            <span>Width</span>
+            <span>Height</span>
+            <span />
+          </div>
+          {presetAnchorAvailable && presetAnchorShapes.map((rect, i) => {
+            const overridden = presetFeatureOverrideActive && selectedPresetAnchorIndex === i;
+            const selected = hasPresetSelection && selectedPresetAnchorIndex === i;
+            const update = (next: Extract<MaskShape, { type: "rect" }>) => {
+              if (onPatternFeatureResize?.(i, next)) return;
+              if (onUpdatePresetFeatureRectAt) onUpdatePresetFeatureRectAt(i, next);
+              else { onSetSelectedPresetAnchorIndex(i); onUpdatePresetFeatureRect(next); }
+            };
+            return (
+              <div key={`anchor-${i}`} className={`ws-shape-row ${selected ? "is-selected" : ""}`} role="listitem">
+                <button type="button" className="ws-shape-name" onClick={() => onSetSelectedPresetAnchorIndex(i)} title="Pattern feature: select to move it on the canvas">
+                  M{i + 1}
+                </button>
+                <input
+                  type="number"
+                  className="ws-dim"
+                  aria-label={`M${i + 1} width (nm)`}
+                  value={Math.round(rect.w_nm)}
+                  min={1}
+                  max={fovNm}
+                  onChange={(e) => {
+                    const w = clamp(Number(e.target.value) || 1, 1, fovNm);
+                    const cx = rect.x_nm + rect.w_nm / 2;
+                    update({ ...rect, w_nm: w, x_nm: clamp(cx - w / 2, 0, Math.max(0, fovNm - w)) });
+                  }}
+                />
+                <input
+                  type="number"
+                  className="ws-dim"
+                  aria-label={`M${i + 1} height (nm)`}
+                  value={Math.round(rect.h_nm)}
+                  min={1}
+                  max={fovNm}
+                  onChange={(e) => {
+                    const h = clamp(Number(e.target.value) || 1, 1, fovNm);
+                    const cy = rect.y_nm + rect.h_nm / 2;
+                    update({ ...rect, h_nm: h, y_nm: clamp(cy - h / 2, 0, Math.max(0, fovNm - h)) });
+                  }}
+                />
+                {overridden ? (
+                  <button type="button" className="ws-shape-action" onClick={onResetPresetFeatureRect} title="Reset this feature to the pattern" aria-label={`Reset M${i + 1}`}>↺</button>
+                ) : <span className="ws-shape-action ws-shape-action--none" aria-hidden="true" />}
               </div>
-              {canUseGlobalInspector && (
-                <div className="workspace-inspector-scope">
-                  <button
-                    className={inspectorScope === "LOCAL" ? "is-active" : ""}
-                    onClick={() => {
-                      setInspectorScope("LOCAL");
-                      // In CUSTOM mode, auto-select the first shape so local controls appear immediately.
-                      if (maskMode === "CUSTOM" && !hasManualSelection && editableShapes.length > 0) {
-                        onSelectCustomShapeChip(0);
-                      }
-                    }}
-                    disabled={inspectorScope === "LOCAL"}
-                  >Local</button>
-                  <button
-                    className={inspectorScope === "GLOBAL" ? "is-active" : ""}
-                    onClick={() => setInspectorScope("GLOBAL")}
-                    disabled={inspectorScope === "GLOBAL"}
-                  >Global</button>
-                </div>
-              )}
-            </div>
+            );
+          })}
+          {editableShapes.map((shape, i) => {
+            const label = targetEditing ? `T${i + 1}` : `${shape.op === "subtract" ? "−" : "+"}R${i + 1}`;
+            const rect = shape.type === "rect" ? shape : null;
+            return (
+              <div key={`shape-${i}`} className={`ws-shape-row ${isManualShapeSelected(i) ? "is-selected" : ""}`} role="listitem">
+                <button
+                  type="button"
+                  className="ws-shape-name"
+                  onClick={(e) => onSelectCustomShapeChip(i, e.shiftKey || e.ctrlKey || e.metaKey)}
+                  title="Select (shift-click to add to the selection)"
+                >
+                  {label}
+                </button>
+                {rect ? (
+                  <>
+                    <input
+                      type="number"
+                      className="ws-dim"
+                      aria-label={`${label} width (nm)`}
+                      value={Math.round(rect.w_nm)}
+                      min={1}
+                      max={fovNm}
+                      onChange={(e) => {
+                        const w = clamp(Number(e.target.value) || 1, 1, fovNm);
+                        const cx = rect.x_nm + rect.w_nm / 2;
+                        onUpdateCustomShape(i, { ...rect, w_nm: w, x_nm: clamp(cx - w / 2, 0, Math.max(0, fovNm - w)) });
+                      }}
+                    />
+                    <input
+                      type="number"
+                      className="ws-dim"
+                      aria-label={`${label} height (nm)`}
+                      value={Math.round(rect.h_nm)}
+                      min={1}
+                      max={fovNm}
+                      onChange={(e) => {
+                        const h = clamp(Number(e.target.value) || 1, 1, fovNm);
+                        const cy = rect.y_nm + rect.h_nm / 2;
+                        onUpdateCustomShape(i, { ...rect, h_nm: h, y_nm: clamp(cy - h / 2, 0, Math.max(0, fovNm - h)) });
+                      }}
+                    />
+                  </>
+                ) : (
+                  <span className="ws-shape-poly">polygon</span>
+                )}
+                <button type="button" className="ws-shape-action" onClick={() => onDeleteCustomShape(i)} title="Delete" aria-label={`Delete ${label}`}>×</button>
+              </div>
+            );
+          })}
+          {!presetAnchorAvailable && editableShapes.length === 0 && (
+            <div className="workspace-empty-chip">{targetEditing ? "No target shapes yet" : "No shapes yet"}</div>
+          )}
+        </div>
+        {selectedRect && !hasMultiManualSelection && (
+          <div className="ws-position">
+            <span className="ws-position-label">Position</span>
+            <label className="ws-position-field">
+              <span>X</span>
+              <input type="number" className="ws-dim" aria-label="X (nm)" value={Math.round(clamp(selectedRect.x_nm, 0, Math.max(1, maxRectX)))} min={0} max={Math.max(1, maxRectX)} onChange={(e) => setRectAxis("x", Number(e.target.value) || 0)} />
+            </label>
+            <label className="ws-position-field">
+              <span>Y</span>
+              <input type="number" className="ws-dim" aria-label="Y (nm)" value={Math.round(clamp(selectedRect.y_nm, 0, Math.max(1, maxRectY)))} min={0} max={Math.max(1, maxRectY)} onChange={(e) => setRectAxis("y", Number(e.target.value) || 0)} />
+            </label>
+            <span className="ws-position-unit">nm</span>
+          </div>
+        )}
+        {hasMultiManualSelection && (
+          <div className="workspace-tips">Several shapes selected: drag or use the arrow keys to move them together.</div>
+        )}
+        <div className="workspace-layer-actions ws-layer-actions">
+          <button className="layer-action-btn" onClick={onCopyMaskToTarget} title="Copy the mask shapes into the Target layer">
+            <span>Mask</span><span className="layer-action-arrow">→</span><span>Target</span>
+          </button>
+          <button className="layer-action-btn" onClick={onCopyTargetToMask} title="Copy the target shapes back into the Mask layer" disabled={targetShapes.length === 0}>
+            <span>Target</span><span className="layer-action-arrow">→</span><span>Mask</span>
+          </button>
+          <button className="layer-action-btn danger" onClick={onClearTargetLayer} title="Remove every target shape" disabled={targetShapes.length === 0}>
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 2l8 8M10 2l-8 8"/></svg>
+            Clear target
+          </button>
+        </div>
+      </div>
 
-            {globalInspector ? (
-              <>
+      {targetEditing && targetCanUseGlobalInspector && (
+        <details className="workspace-foldout" open>
+          <summary>Target pattern <span className="workspace-foldout-hint">regenerates every target shape</span></summary>
+          <div className="workspace-foldout-body">
                 {!targetEditing && maskMode === "CUSTOM" && (
                   <div className="small-note tiny-note workspace-inspector-note" style={{ marginBottom: 6 }}>
                     Template dims — changes apply on Reinitialize.
@@ -887,56 +806,98 @@ export function EditStudioDock(props: {
                   5,
                   120,
                 )}
-              </>
-            ) : hasMultiManualSelection ? (
-              <div className="small-note tiny-note workspace-inspector-note">
-                Multi-selection is move-only. Use a single selected feature to adjust geometry.
-              </div>
-            ) : selectedRect ? (
-              <>
-                {renderInspectorControl(
-                  "X (nm)",
-                  clamp(selectedRect.x_nm, 0, Math.max(1, maxRectX)),
-                  (next) => setRectAxis("x", next),
-                  0,
-                  Math.max(1, maxRectX),
-                )}
-                {renderInspectorControl(
-                  "Y (nm)",
-                  clamp(selectedRect.y_nm, 0, Math.max(1, maxRectY)),
-                  (next) => setRectAxis("y", next),
-                  0,
-                  Math.max(1, maxRectY),
-                )}
-              </>
-            ) : (
-              <div className="small-note tiny-note workspace-inspector-note">
-                {targetEditing
-                  ? "Select a target shape to edit locally, or switch to Global for pattern-wide tuning."
-                  : maskMode === "CUSTOM"
-                    ? "Select a mask rect to edit locally, or switch to Global to view/adjust template dims."
-                    : "Select a feature to edit locally, or switch to Global for pattern-wide tuning."}
-              </div>
-            )}
-
-            {!globalInspector && !hasMultiManualSelection && selectedRect && renderInspectorControl(
-              "Width (nm)",
-              selectedRect.w_nm,
-              (next) => setCd(next),
-              1,
-              900,
-            )}
-
-            {!globalInspector && !hasMultiManualSelection && selectedRect && renderInspectorControl(
-              steppedTemplate ? "Step Height (nm)" : "Height (nm)",
-              selectedRect.h_nm,
-              (next) => setHeight(next),
-              10,
-              900,
-            )}
           </div>
-        </div>
-      </div>
+        </details>
+      )}
+
+      {!targetEditing && (
+        <details className="workspace-foldout">
+          <summary>Assist shapes <span className="workspace-foldout-hint">hammerhead · serif · mousebite · SRAF</span></summary>
+          <div className="workspace-foldout-body">
+            <div className="workspace-tips">Select a mask shape first, then add the assist to its edge or corner.</div>
+                <div className="workspace-field-grid workspace-field-grid-wide">
+                  <div className="workspace-field">
+                    <label className="label">Hammerhead Edge</label>
+                    <div className="workspace-assist-inline">
+                      <select value={hammerheadEdge} onChange={(e) => onSetHammerheadEdge(e.target.value as EdgeAnchor)} style={{ width: "100%" }}>
+                        <option value="left">Left</option>
+                        <option value="right">Right</option>
+                        <option value="top">Top</option>
+                        <option value="bottom">Bottom</option>
+                      </select>
+                      <button
+                        className="mini-btn slim workspace-assist-icon-btn"
+                        onClick={onAddHammerheadToSelected}
+                        disabled={(maskMode === "CUSTOM" && !selectedRect) || (maskMode === "TEMPLATE" && !presetAnchorAvailable)}
+                        title="Add a hammerhead using the selected edge."
+                        aria-label="Add hammerhead"
+                      >
+                        <AssistActionIcon />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="workspace-field">
+                    <label className="label">Serif Corner</label>
+                    <div className="workspace-assist-inline">
+                      <select value={serifCorner} onChange={(e) => onSetSerifCorner(e.target.value as CornerAnchor)} style={{ width: "100%" }}>
+                        <option value="nw">Top Left</option>
+                        <option value="ne">Top Right</option>
+                        <option value="sw">Bottom Left</option>
+                        <option value="se">Bottom Right</option>
+                      </select>
+                      <button
+                        className="mini-btn slim workspace-assist-icon-btn"
+                        onClick={onAddSerifToSelected}
+                        disabled={(maskMode === "CUSTOM" && !selectedRect) || (maskMode === "TEMPLATE" && !presetAnchorAvailable)}
+                        title="Add a serif at the selected corner."
+                        aria-label="Add serif"
+                      >
+                        <AssistActionIcon />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="workspace-field">
+                    <label className="label">Mousebite Edge</label>
+                    <div className="workspace-assist-inline">
+                      <select value={mousebiteEdge} onChange={(e) => onSetMousebiteEdge(e.target.value as EdgeAnchor)} style={{ width: "100%" }}>
+                        <option value="left">Left</option>
+                        <option value="right">Right</option>
+                        <option value="top">Top</option>
+                        <option value="bottom">Bottom</option>
+                      </select>
+                      <button
+                        className="mini-btn slim workspace-assist-icon-btn"
+                        onClick={onAddMousebiteToSelected}
+                        disabled={(maskMode === "CUSTOM" && !selectedRect) || (maskMode === "TEMPLATE" && !presetAnchorAvailable)}
+                        title="Cut a mousebite on the selected edge."
+                        aria-label="Add mousebite"
+                      >
+                        <AssistActionIcon />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="workspace-field">
+                    <label className="label">SRAF Orientation</label>
+                    <div className="workspace-assist-inline">
+                      <select value={srafOrientation} onChange={(e) => onSetSrafOrientation(e.target.value as SrafOrientation)} style={{ width: "100%" }}>
+                        <option value="horizontal">Horizontal</option>
+                        <option value="vertical">Vertical</option>
+                      </select>
+                      <button
+                        className={`mini-btn slim workspace-assist-icon-btn ${editorTool === "PLACE_SRAF" ? "active" : ""}`}
+                        onClick={() => onSetEditorTool(editorTool === "PLACE_SRAF" ? "SELECT" : "PLACE_SRAF")}
+                        disabled={targetEditing}
+                        title="Place an assist bar using the selected orientation."
+                        aria-label="Place assist bar"
+                      >
+                        <AssistActionIcon />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+          </div>
+        </details>
+      )}
     </div>
   );
 }

@@ -1,0 +1,242 @@
+/* litopc simulator pattern picker + parameter editor (2026-10-25).
+   Components: components/PatternPicker.tsx, components/PatternParams.tsx.
+   Every colour, radius and font comes from the --lt-* tokens in simulator-theme.css,
+   so light and dark themes need no overrides here. */
+
+/* ---------- pattern picker ---------- */
+
+.pat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 6px;
+  font-family: var(--lt-font);
+}
+
+.pat-tile {
+  appearance: none;
+  background: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--lt-muted);
+  text-align: center;
+}
+
+.pat-tile:focus-visible {
+  outline: 2px solid var(--lt-accent);
+  outline-offset: 2px;
+  border-radius: var(--lt-radius-xs);
+}
+
+.pat-tile-frame {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  box-sizing: border-box;
+  background: var(--lt-card);
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-xs);
+  overflow: hidden;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.pat-tile:hover .pat-tile-frame {
+  border-color: var(--lt-line-strong);
+}
+
+.pat-tile.is-selected .pat-tile-frame,
+.pat-tile[aria-pressed="true"] .pat-tile-frame {
+  border-color: var(--lt-select);
+  box-shadow: 0 0 0 2px var(--lt-select);
+}
+
+.pat-tile.is-selected .pat-tile-label,
+.pat-tile[aria-pressed="true"] .pat-tile-label {
+  color: var(--lt-ink);
+}
+
+.pat-thumb {
+  position: absolute;
+  inset: 6px;
+  width: calc(100% - 12px);
+  height: calc(100% - 12px);
+  display: block;
+  overflow: visible;
+}
+
+.pat-thumb rect {
+  fill: var(--lt-mask-fill);
+  fill-opacity: var(--lt-mask-fill-a);
+  stroke: var(--lt-mask-stroke);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+.pat-tag {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 3px 6px;
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-radius: 999px;
+  background: var(--lt-accent-soft);
+  color: var(--lt-accent-ink);
+  pointer-events: none;
+}
+
+.pat-tile-label {
+  font-size: 10.5px;
+  line-height: 1.15;
+  color: var(--lt-muted);
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  transition: color 120ms ease;
+}
+
+/* "Custom" tile: a selected state indicator, not an action. */
+.pat-tile--custom:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.pat-tile-frame--dashed {
+  background: var(--lt-panel);
+}
+
+.pat-tile-frame--dashed::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border: 1px dashed var(--lt-faint);
+  border-radius: 4px;
+}
+
+/* ---------- parameter editor ---------- */
+
+.pat-params {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--lt-font);
+}
+
+.pat-param-row {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr) 64px 18px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pat-param-label {
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--lt-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pat-param-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  height: 16px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.pat-param-range:focus-visible {
+  outline: none;
+}
+
+.pat-param-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--lt-track);
+}
+
+.pat-param-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--lt-card);
+  border: 2px solid var(--lt-accent);
+  box-sizing: border-box;
+  transition: box-shadow 120ms ease;
+}
+
+.pat-param-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px var(--lt-accent-soft);
+}
+
+.pat-param-range::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--lt-track);
+}
+
+.pat-param-range::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--lt-card);
+  border: 2px solid var(--lt-accent);
+  box-sizing: border-box;
+}
+
+.pat-param-range:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 3px var(--lt-accent-soft);
+}
+
+.pat-param-number {
+  width: 64px;
+  height: 26px;
+  box-sizing: border-box;
+  padding: 0 6px;
+  font-family: var(--lt-font);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--lt-ink);
+  background: var(--lt-card);
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-xs);
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.pat-param-number::-webkit-outer-spin-button,
+.pat-param-number::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.pat-param-number:focus-visible {
+  outline: none;
+  border-color: var(--lt-accent);
+  box-shadow: 0 0 0 2px var(--lt-accent-soft);
+}
+
+.pat-param-unit {
+  font-size: 10px;
+  line-height: 1;
+  color: var(--lt-faint);
+}

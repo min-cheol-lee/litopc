@@ -116,9 +116,9 @@ export function ViewportViewSettings(props: {
         </details>
       </section>
       <details className="viewport-settings-foldout viewport-2d-settings">
-        <summary>2D appearance</summary>
-        <div className="viewport-segmented" role="group" aria-label="2D background">
-          {(["DARK", "LIGHT"] as const).map(theme => <button key={theme} type="button" aria-pressed={props.background === theme} onClick={() => props.onBackground(theme)}>{theme === "DARK" ? "Dark" : "Light"}</button>)}
+        <summary>Appearance</summary>
+        <div className="viewport-segmented" role="group" aria-label="Theme">
+          {(["LIGHT", "DARK"] as const).map(theme => <button key={theme} type="button" aria-pressed={props.background === theme} onClick={() => props.onBackground(theme)}>{theme === "DARK" ? "Dark" : "Light"}</button>)}
         </div>
         {layer("Rulers", props.rulers)}
       </details>
