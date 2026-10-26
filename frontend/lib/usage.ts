@@ -35,6 +35,8 @@ export type PlanEntitlements = {
   /** Optional until every backend serves the 2026-10-24 entitlements. */
   csv_export_enabled?: boolean;
   ads_enabled?: boolean;
+  /** Template IDs the plan cannot run (empty for PRO). Optional until every backend serves the 2026-10-25 payload. */
+  pro_only_templates?: string[];
   updated_at_utc: string;
 };
 
@@ -57,6 +59,7 @@ export type CurrentEntitlementResponse = {
   high_res_export_enabled: boolean;
   csv_export_enabled?: boolean;
   ads_enabled?: boolean;
+  pro_only_templates?: string[];
   updated_at_utc: string;
 };
 

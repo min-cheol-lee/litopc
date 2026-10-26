@@ -1,4 +1,10 @@
-import { L_SHAPE_RAW_DEFAULTS } from "./template-defaults";
+import {
+  CONTACT_ARRAY_DEFAULTS,
+  L_SHAPE_RAW_DEFAULTS,
+  TIP_TO_SIDE_DEFAULTS,
+  TIP_TO_TIP_DEFAULTS,
+  TOUCHING_CORNERS_DEFAULTS,
+} from "./template-defaults";
 import type { MaskShape, RectMaskShape, ShapeOp, TemplateID } from "./types";
 import { normalizeTemplateId } from "./template-variants";
 
@@ -117,6 +123,55 @@ function appendSteppedInterconnectOpc(rects: RectNm[], p: Record<string, number>
   pushRect(rects, x0 + run + run - thick + 8, y0 - rise - rise + thick - serif * 0.55, serif, serif);
 }
 
+// The shared pattern builders fall back to DUV dimensions, like the backend
+// `template_to_shapes`; EUV callers pass `templateParamDefaults(id, presetId)`.
+
+function appendTipToTip(rects: RectNm[], p: Record<string, number>, cx: number, cy: number) {
+  const d = TIP_TO_TIP_DEFAULTS.DUV;
+  const cd = p.cd_nm ?? d.cd_nm;
+  const length = p.length_nm ?? d.length_nm;
+  const gap = p.gap_nm ?? d.gap_nm;
+  const x = cx - cd / 2;
+  pushRect(rects, x, cy - gap / 2 - length, cd, length);
+  pushRect(rects, x, cy + gap / 2, cd, length);
+}
+
+function appendTipToSide(rects: RectNm[], p: Record<string, number>, cx: number, cy: number) {
+  const d = TIP_TO_SIDE_DEFAULTS.DUV;
+  const cd = p.cd_nm ?? d.cd_nm;
+  const length = p.length_nm ?? d.length_nm;
+  const attacker = p.attacker_nm ?? d.attacker_nm;
+  const gap = p.gap_nm ?? d.gap_nm;
+  const lineLeft = cx - cd / 2;
+  pushRect(rects, lineLeft, cy - length / 2, cd, length);
+  pushRect(rects, lineLeft - gap - attacker, cy - cd / 2, attacker, cd);
+}
+
+function appendTouchingCorners(rects: RectNm[], p: Record<string, number>, cx: number, cy: number) {
+  const d = TOUCHING_CORNERS_DEFAULTS.DUV;
+  const w = p.w_nm ?? d.w_nm;
+  const h = p.h_nm ?? d.h_nm;
+  const gapX = p.gap_x_nm ?? d.gap_x_nm;
+  const gapY = p.gap_y_nm ?? d.gap_y_nm;
+  pushRect(rects, cx - gapX / 2 - w, cy - gapY / 2 - h, w, h);
+  pushRect(rects, cx + gapX / 2, cy + gapY / 2, w, h);
+}
+
+function appendContactArray(rects: RectNm[], p: Record<string, number>, cx: number, cy: number, fov: number) {
+  const d = CONTACT_ARRAY_DEFAULTS.DUV;
+  const w = p.w_nm ?? d.w_nm;
+  const pitch = p.pitch_nm ?? d.pitch_nm;
+  const nRows = fitDenseLineCountInFov(w, pitch, Math.floor(p.n_rows ?? d.n_rows), fov);
+  const nCols = fitDenseLineCountInFov(w, pitch, Math.floor(p.n_cols ?? d.n_cols), fov);
+  const startX = cx - ((nCols - 1) * pitch) / 2;
+  const startY = cy - ((nRows - 1) * pitch) / 2;
+  for (let r = 0; r < nRows; r++) {
+    for (let c = 0; c < nCols; c++) {
+      pushRect(rects, startX + c * pitch - w / 2, startY + r * pitch - w / 2, w, w);
+    }
+  }
+}
+
 function rectsToShapes(rects: RectNm[]): RectMaskShape[] {
   return rects.map((item) => rect(item.x, item.y, item.w, item.h, item.op ?? "add"));
 }
@@ -141,7 +196,7 @@ export function buildTemplateBaseShapes(templateId: TemplateID, params: Record<s
     pushRect(rects, cx - cd / 2, cy - h / 2, cd, h);
   } else if (normalizedTemplateId === "ISO_LINE_EUV") {
     const cd = params.cd_nm ?? 24;
-    const h = params.length_nm ?? 500;
+    const h = params.length_nm ?? 300;
     pushRect(rects, cx - cd / 2, cy - h / 2, cd, h);
   } else if (normalizedTemplateId === "DENSE_LS") {
     const cd = params.cd_nm ?? 150;
@@ -199,6 +254,14 @@ export function buildTemplateBaseShapes(templateId: TemplateID, params: Record<s
     appendSteppedInterconnectRaw(rects, params, cx, cy);
   } else if (normalizedTemplateId === "STAIRCASE_OPC") {
     appendSteppedInterconnectOpc(rects, params, cx, cy);
+  } else if (normalizedTemplateId === "TIP_TO_TIP") {
+    appendTipToTip(rects, params, cx, cy);
+  } else if (normalizedTemplateId === "TIP_TO_SIDE") {
+    appendTipToSide(rects, params, cx, cy);
+  } else if (normalizedTemplateId === "TOUCHING_CORNERS") {
+    appendTouchingCorners(rects, params, cx, cy);
+  } else if (normalizedTemplateId === "CONTACT_ARRAY") {
+    appendContactArray(rects, params, cx, cy, fov);
   } else {
     const w = params.w_nm ?? params.cd_nm ?? 160;
     pushRect(rects, cx - w / 2, cy - w / 2, w, w);

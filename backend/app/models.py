@@ -44,6 +44,11 @@ TemplateID = Literal[
     "L_CORNER_OPC_EUV",
     "L_CORNER_RAW",
     "L_CORNER_OPC_SERIF",
+    # Shared DUV/EUV pattern templates (2026-10-25); the last four are Pro-only.
+    "TIP_TO_TIP",
+    "TIP_TO_SIDE",
+    "TOUCHING_CORNERS",
+    "CONTACT_ARRAY",
 ]
 
 ShapeType = Literal["rect", "polygon"]
@@ -200,6 +205,8 @@ class PlanEntitlements(BaseModel):
     high_res_export_enabled: bool
     csv_export_enabled: bool
     ads_enabled: bool
+    # Template IDs the plan cannot run (empty for PRO).
+    pro_only_templates: List[str] = Field(default_factory=list)
     updated_at_utc: str
 
 
@@ -312,6 +319,7 @@ class CurrentEntitlementResponse(BaseModel):
     high_res_export_enabled: bool
     csv_export_enabled: bool
     ads_enabled: bool
+    pro_only_templates: List[str] = Field(default_factory=list)
     updated_at_utc: str
 
 

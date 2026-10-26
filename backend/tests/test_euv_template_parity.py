@@ -42,7 +42,9 @@ class EuvTemplateParityTests(unittest.TestCase):
                 self.assertEqual(source.mask.params_nm, {})
 
     def test_other_disabled_or_wrong_family_templates_stay_blocked(self):
-        for template in ("L_CORNER_OPC_EUV", "CONTACT_RAW", "STAIRCASE", "STAIRCASE_OPC", "L_CORNER_RAW_DUV", "L_CORNER_RAW"):
+        # CONTACT_RAW (Square) is shared by both families since the 2026-10-25 library;
+        # LINE_END_RAW_EUV is kept as an ID for saved history but no longer exposed.
+        for template in ("L_CORNER_OPC_EUV", "LINE_END_RAW_EUV", "STAIRCASE", "STAIRCASE_OPC", "L_CORNER_RAW_DUV", "L_CORNER_RAW"):
             with self.subTest(template=template):
                 with self.assertRaises(HTTPException) as caught:
                     _apply_request_policy(template_request(template))
@@ -140,7 +142,7 @@ class EuvTemplateHttpTests(unittest.TestCase):
         self.assertEqual(actual, expected)
 
     def test_disabled_euv_opc_and_other_patterns_remain_403(self):
-        for template in ("L_CORNER_OPC_EUV", "CONTACT_RAW", "STAIRCASE"):
+        for template in ("L_CORNER_OPC_EUV", "LINE_END_RAW_EUV", "STAIRCASE"):
             with self.subTest(template=template):
                 status, response = self.post(template_request(template).model_dump())
                 self.assertEqual(status, 403, response)

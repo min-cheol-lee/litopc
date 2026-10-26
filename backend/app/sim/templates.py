@@ -3,19 +3,43 @@ from typing import Dict, List, Tuple
 from ..models import PresetID, RectShape, TemplateID
 
 
+# Shared template IDs serve both optical families. The geometry builder keeps
+# DUV-scale fallbacks; EUV presets resolve omitted dimensions from this table
+# (the frontend `templateParamDefaults` mirrors these numbers).
+SHARED_TEMPLATE_DUV_DEFAULTS: Dict[str, Dict[str, float]] = {
+    "TIP_TO_TIP": {"cd_nm": 100.0, "length_nm": 380.0, "gap_nm": 120.0},
+    "TIP_TO_SIDE": {"cd_nm": 100.0, "length_nm": 800.0, "attacker_nm": 380.0, "gap_nm": 110.0},
+    "TOUCHING_CORNERS": {"w_nm": 260.0, "h_nm": 260.0, "gap_x_nm": 60.0, "gap_y_nm": 60.0, "cd_nm": 260.0},
+    "CONTACT_ARRAY": {"w_nm": 120.0, "pitch_nm": 240.0, "n_rows": 3.0, "n_cols": 3.0, "cd_nm": 120.0},
+}
+
+SHARED_TEMPLATE_EUV_DEFAULTS: Dict[str, Dict[str, float]] = {
+    "DENSE_LS": {"cd_nm": 24.0, "pitch_nm": 48.0, "n_lines": 4.0, "length_nm": 320.0},
+    "CONTACT_RAW": {"cd_nm": 60.0, "w_nm": 60.0},
+    "TIP_TO_TIP": {"cd_nm": 24.0, "length_nm": 150.0, "gap_nm": 32.0},
+    "TIP_TO_SIDE": {"cd_nm": 24.0, "length_nm": 300.0, "attacker_nm": 140.0, "gap_nm": 30.0},
+    "TOUCHING_CORNERS": {"w_nm": 90.0, "h_nm": 90.0, "gap_x_nm": 20.0, "gap_y_nm": 20.0, "cd_nm": 90.0},
+    "CONTACT_ARRAY": {"w_nm": 30.0, "pitch_nm": 64.0, "n_rows": 3.0, "n_cols": 3.0, "cd_nm": 30.0},
+}
+
+
 def template_params_for_preset(
     template_id: TemplateID | None,
     params: Dict[str, float],
     preset_id: PresetID,
 ) -> Dict[str, float]:
-    """Resolve omitted EUV dense-line dimensions without changing explicit inputs.
+    """Resolve omitted EUV dimensions of shared templates without changing explicit inputs.
 
-    The same DENSE_LS template ID serves both optical families. The API resolves
-    its preset before applying these defaults; the geometry builder keeps its
-    existing two-argument contract and historical DUV fallbacks.
+    The same DENSE_LS / CONTACT_RAW / TIP_TO_TIP / TIP_TO_SIDE / TOUCHING_CORNERS /
+    CONTACT_ARRAY IDs serve both optical families. The API resolves its preset
+    before applying these defaults; the geometry builder keeps its existing
+    two-argument contract and historical DUV fallbacks.
     """
-    if template_id == "DENSE_LS" and preset_id in {"EUV_LNA", "EUV_HNA"}:
-        return {"cd_nm": 24.0, "pitch_nm": 48.0, "n_lines": 4.0, "length_nm": 320.0, **params}
+    if template_id is None:
+        return dict(params)
+    normalized = _normalize_template_id(template_id)
+    if preset_id in {"EUV_LNA", "EUV_HNA"} and normalized in SHARED_TEMPLATE_EUV_DEFAULTS:
+        return {**SHARED_TEMPLATE_EUV_DEFAULTS[normalized], **params}
     return dict(params)
 
 
@@ -26,6 +50,8 @@ def _normalize_template_id(template_id: TemplateID) -> TemplateID:
         return "L_CORNER_OPC_DUV"
     if template_id == "ISO_LINE":
         return "ISO_LINE_DUV"
+    # Shared IDs (DENSE_LS, CONTACT_RAW, TIP_TO_TIP, TIP_TO_SIDE,
+    # TOUCHING_CORNERS, CONTACT_ARRAY, ...) pass through unchanged.
     return template_id
 
 
@@ -44,6 +70,54 @@ def _fit_dense_line_count_in_fov(cd_nm: float, pitch_nm: float, requested_n: int
 
 def _append_rect(shapes: List[RectShape], *, x_nm: float, y_nm: float, w_nm: float, h_nm: float) -> None:
     shapes.append(RectShape(x_nm=x_nm, y_nm=y_nm, w_nm=w_nm, h_nm=h_nm))
+
+
+def _append_tip_to_tip(shapes: List[RectShape], p: Dict[str, float], cx: float, cy: float) -> None:
+    """Two collinear vertical lines; the gap between their tips is centred on the FOV."""
+    d = SHARED_TEMPLATE_DUV_DEFAULTS["TIP_TO_TIP"]
+    cd = float(p.get("cd_nm", d["cd_nm"]))
+    length = float(p.get("length_nm", d["length_nm"]))
+    gap = float(p.get("gap_nm", d["gap_nm"]))
+    x = cx - cd / 2
+    _append_rect(shapes, x_nm=x, y_nm=cy - gap / 2 - length, w_nm=cd, h_nm=length)
+    _append_rect(shapes, x_nm=x, y_nm=cy + gap / 2, w_nm=cd, h_nm=length)
+
+
+def _append_tip_to_side(shapes: List[RectShape], p: Dict[str, float], cx: float, cy: float) -> None:
+    """A centred vertical line and a horizontal attacker whose tip stops gap_nm short of its left edge."""
+    d = SHARED_TEMPLATE_DUV_DEFAULTS["TIP_TO_SIDE"]
+    cd = float(p.get("cd_nm", d["cd_nm"]))
+    length = float(p.get("length_nm", d["length_nm"]))
+    attacker = float(p.get("attacker_nm", d["attacker_nm"]))
+    gap = float(p.get("gap_nm", d["gap_nm"]))
+    line_left = cx - cd / 2
+    _append_rect(shapes, x_nm=line_left, y_nm=cy - length / 2, w_nm=cd, h_nm=length)
+    _append_rect(shapes, x_nm=line_left - gap - attacker, y_nm=cy - cd / 2, w_nm=attacker, h_nm=cd)
+
+
+def _append_touching_corners(shapes: List[RectShape], p: Dict[str, float], cx: float, cy: float) -> None:
+    """Two rectangles placed diagonally; A's top-right and B's bottom-left corners face each other."""
+    d = SHARED_TEMPLATE_DUV_DEFAULTS["TOUCHING_CORNERS"]
+    w = float(p.get("w_nm", d["w_nm"]))
+    h = float(p.get("h_nm", d["h_nm"]))
+    gap_x = float(p.get("gap_x_nm", d["gap_x_nm"]))
+    gap_y = float(p.get("gap_y_nm", d["gap_y_nm"]))
+    _append_rect(shapes, x_nm=cx - gap_x / 2 - w, y_nm=cy - gap_y / 2 - h, w_nm=w, h_nm=h)
+    _append_rect(shapes, x_nm=cx + gap_x / 2, y_nm=cy + gap_y / 2, w_nm=w, h_nm=h)
+
+
+def _append_contact_array(shapes: List[RectShape], p: Dict[str, float], cx: float, cy: float, fov_nm: float) -> None:
+    """n_rows x n_cols grid of squares centred on the FOV (counts clamped to fit, row-major bottom-up)."""
+    d = SHARED_TEMPLATE_DUV_DEFAULTS["CONTACT_ARRAY"]
+    w = float(p.get("w_nm", d["w_nm"]))
+    pitch = float(p.get("pitch_nm", d["pitch_nm"]))
+    n_rows = _fit_dense_line_count_in_fov(w, pitch, int(p.get("n_rows", d["n_rows"])), fov_nm)
+    n_cols = _fit_dense_line_count_in_fov(w, pitch, int(p.get("n_cols", d["n_cols"])), fov_nm)
+    start_x = cx - (n_cols - 1) * pitch / 2
+    start_y = cy - (n_rows - 1) * pitch / 2
+    for r in range(n_rows):
+        for c in range(n_cols):
+            _append_rect(shapes, x_nm=start_x + c * pitch - w / 2, y_nm=start_y + r * pitch - w / 2, w_nm=w, h_nm=w)
 
 
 def _append_l_shape_raw(
@@ -218,9 +292,9 @@ def template_to_shapes(template_id: TemplateID, p: Dict[str, float]) -> Tuple[Li
 
     elif template_id == "ISO_LINE_EUV":
         # EUV 13.5 nm LNA: cd=24 nm ≈ 2× Rayleigh floor (NA 0.33, floor ≈12 nm).
-        # Shows real EUV proximity narrowing; 500 nm length fits in the 1100 nm FOV.
+        # Shows real EUV proximity narrowing; 300 nm length fits in the 360 nm EUV FOV.
         cd = float(p.get("cd_nm", 24.0))
-        h = float(p.get("length_nm", 500.0))
+        h = float(p.get("length_nm", 300.0))
         shapes.append(RectShape(x_nm=cx - cd / 2, y_nm=cy - h / 2, w_nm=cd, h_nm=h))
 
     elif template_id == "DENSE_LS":
@@ -299,6 +373,18 @@ def template_to_shapes(template_id: TemplateID, p: Dict[str, float]) -> Tuple[Li
 
     elif template_id == "STAIRCASE_OPC":
         _append_stepped_interconnect_opc(shapes, p, cx, cy)
+
+    elif template_id == "TIP_TO_TIP":
+        _append_tip_to_tip(shapes, p, cx, cy)
+
+    elif template_id == "TIP_TO_SIDE":
+        _append_tip_to_side(shapes, p, cx, cy)
+
+    elif template_id == "TOUCHING_CORNERS":
+        _append_touching_corners(shapes, p, cx, cy)
+
+    elif template_id == "CONTACT_ARRAY":
+        _append_contact_array(shapes, p, cx, cy, fov_nm)
     else:
         # fallback: simple contact
         w = float(p.get("w_nm", p.get("cd_nm", 200.0)))

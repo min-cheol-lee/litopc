@@ -18,7 +18,12 @@ export type TemplateID =
   | "L_CORNER_RAW"
   | "L_CORNER_OPC_SERIF"
   | "STAIRCASE"
-  | "STAIRCASE_OPC";
+  | "STAIRCASE_OPC"
+  // Shared DUV/EUV pattern templates (2026-10-25); Pro-only on the FREE plan.
+  | "TIP_TO_TIP"
+  | "TIP_TO_SIDE"
+  | "TOUCHING_CORNERS"
+  | "CONTACT_ARRAY";
 
 export type ShapeOp = "add" | "subtract";
 export type RectMaskShape = { type: "rect"; op?: ShapeOp; x_nm: number; y_nm: number; w_nm: number; h_nm: number };

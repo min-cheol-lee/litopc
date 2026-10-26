@@ -1,6 +1,7 @@
 import { L_SHAPE_RAW_DEFAULTS } from "./template-defaults";
 import type { MaskShape, PresetID, RectMaskShape, ShapeOp, SimResponse, TemplateID } from "./types";
-import { isLineEndRawTemplate, isLShapeOpcTemplate, isLShapeRawTemplate, normalizeTemplateId } from "./template-variants";
+import { buildTemplateBaseShapes } from "./template-mask";
+import { isLineEndRawTemplate, isLShapeOpcTemplate, isLShapeRawTemplate, isSharedPatternTemplate, normalizeTemplateId } from "./template-variants";
 
 export type EditorLayer = "MASK" | "TARGET";
 export type EditorTool = "SELECT" | "DRAW_ADD_RECT" | "DRAW_SUBTRACT_RECT" | "PLACE_SRAF";
@@ -92,7 +93,7 @@ function templateRawShapes(templateId: TemplateID, params: Record<string, number
 
   if (normalizedTemplateId === "ISO_LINE_EUV") {
     const cd = params.cd_nm ?? 24;
-    const h = params.length_nm ?? 500;
+    const h = params.length_nm ?? 300;
     return [rect(cx - cd / 2, cy - h / 2, cd, h)];
   }
 
@@ -148,6 +149,12 @@ function templateRawShapes(templateId: TemplateID, params: Record<string, number
       rect(cx - 116, cy + 90 - rise - rise, thickness, rise + thickness),
       rect(cx - 116, cy + 90 - rise - rise, run + 30, thickness),
     ];
+  }
+
+  if (isSharedPatternTemplate(normalizedTemplateId)) {
+    // Tip-to-tip, tip-to-side, touching corners, contact array: the target is
+    // the mask geometry itself (same builder as the mask preview, without SRAFs).
+    return buildTemplateBaseShapes(normalizedTemplateId, { ...params, sraf_on: 0 });
   }
 
   const fallback = params.w_nm ?? params.cd_nm ?? 100;
@@ -410,6 +417,60 @@ function presetTargetGuide(templateId: TemplateID, presetId: PresetID, params: R
       objective: "Hold line width and pitch without bridging neighboring lines.",
       hint: "Keep edits symmetric and watch dense-space hotspots before adding small features.",
       hotspotThresholdNm: 18,
+      baselineShapeCount: 0,
+      targetShapes: rawShapes,
+      targetContours: rectContours(rawShapes),
+    };
+  }
+
+  const isEuvPreset = presetId === "EUV_LNA" || presetId === "EUV_HNA";
+
+  if (normalizedTemplateId === "TIP_TO_TIP") {
+    return {
+      title: "Tip-to-Tip Target",
+      subtitle,
+      objective: "Hold both line ends at the design gap without bridging the two tips.",
+      hint: "Line-end pullback opens the gap; hammerheads close it but can short the tips if they grow too far.",
+      hotspotThresholdNm: isEuvPreset ? 8 : 18,
+      baselineShapeCount: 0,
+      targetShapes: rawShapes,
+      targetContours: rectContours(rawShapes),
+    };
+  }
+
+  if (normalizedTemplateId === "TIP_TO_SIDE") {
+    return {
+      title: "Tip-to-Side Target",
+      subtitle,
+      objective: "Keep the attacker tip at its gap from the vertical line without necking the line.",
+      hint: "The attacker tip pulls back while the facing line edge bows inward. Correct the tip first, then the edge.",
+      hotspotThresholdNm: isEuvPreset ? 8 : 18,
+      baselineShapeCount: 0,
+      targetShapes: rawShapes,
+      targetContours: rectContours(rawShapes),
+    };
+  }
+
+  if (normalizedTemplateId === "TOUCHING_CORNERS") {
+    return {
+      title: "Touching Corners Target",
+      subtitle,
+      objective: "Hold both facing corners without rounding them into a bridge or a pinched neck.",
+      hint: "Corner rounding is worst where two corners face each other. Small serifs recover the corners; large ones bridge them.",
+      hotspotThresholdNm: isEuvPreset ? 8 : 20,
+      baselineShapeCount: 0,
+      targetShapes: rawShapes,
+      targetContours: rectContours(rawShapes),
+    };
+  }
+
+  if (normalizedTemplateId === "CONTACT_ARRAY") {
+    return {
+      title: "Contact Array Target",
+      subtitle,
+      objective: "Print every contact at the design size with edge contacts matching the inner ones.",
+      hint: "Inner contacts get proximity support from neighbours; edge and corner contacts print smaller and need more bias.",
+      hotspotThresholdNm: isEuvPreset ? 6 : 16,
       baselineShapeCount: 0,
       targetShapes: rawShapes,
       targetContours: rectContours(rawShapes),

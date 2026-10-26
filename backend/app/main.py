@@ -91,6 +91,10 @@ DISABLED_TEMPLATES = {
     "L_CORNER",
 }
 
+# Pattern library (2026-10-25): Iso line, Dense L/S, Square, L-shape are Free;
+# Tip to tip, Tip to side, Touching corners, Contact array are Pro-only.
+# LINE_END_RAW_DUV / LINE_END_RAW_EUV stay in the TemplateID literal for saved
+# history but are no longer exposed to clients.
 ENABLED_TEMPLATES_BY_PRESET_FAMILY = {
     "DUV": {
         "ISO_LINE",
@@ -98,9 +102,6 @@ ENABLED_TEMPLATES_BY_PRESET_FAMILY = {
         "DENSE_LS",
         "CONTACT_RAW",
         "CONTACT_OPC_SERIF",
-        "LINE_END_RAW",
-        "LINE_END_RAW_DUV",
-        "LINE_END_OPC_HAMMER",
         # Keep DUV staircase presets disabled for now.
         # Re-enable later by adding them back here.
         "L_CORNER_RAW_DUV",
@@ -108,17 +109,29 @@ ENABLED_TEMPLATES_BY_PRESET_FAMILY = {
         "L_CORNER_RAW",
         "L_CORNER_OPC_SERIF",
         "L_CORNER",
+        "TIP_TO_TIP",
+        "TIP_TO_SIDE",
+        "TOUCHING_CORNERS",
+        "CONTACT_ARRAY",
     },
     "EUV": {
         "ISO_LINE",
         "ISO_LINE_EUV",
         "DENSE_LS",
-        "LINE_END_RAW_EUV",
+        "CONTACT_RAW",
         "L_CORNER_RAW_EUV",
-        # Keep EUV-specific square, OPC L-shape, and stepped presets disabled for now.
+        "TIP_TO_TIP",
+        "TIP_TO_SIDE",
+        "TOUCHING_CORNERS",
+        "CONTACT_ARRAY",
+        # Keep EUV OPC L-shape and stepped presets disabled for now.
         # Re-enable later by adding their canonical IDs here.
     },
 }
+
+# Templates that require the PRO plan; FREE requests get HTTP 403.
+PRO_ONLY_TEMPLATES = {"TIP_TO_TIP", "TIP_TO_SIDE", "TOUCHING_CORNERS", "CONTACT_ARRAY"}
+PRO_ONLY_TEMPLATE_DETAIL = "This pattern is available on Pro."
 
 ENABLED_PRESETS_BY_PLAN = {
     "FREE": (
@@ -150,7 +163,7 @@ PRO_RUNS_PER_DAY = 2000
 PRO_SWEEP_POINTS_PER_DAY = 12000
 PRO_EXPORTS_PER_DAY = 600
 FREE_SCENARIO_LIMIT = 8
-ENTITLEMENT_VERSION = "2026-10-24"
+ENTITLEMENT_VERSION = "2026-10-25"
 POLICY_AUDIT_MAX_ROWS = 2000
 PRODUCT_EVENT_MAX_ROWS = 6000
 TRUST_BENCHMARK_ARTIFACT_DIR = Path(__file__).resolve().parent.parent / "trust" / "artifacts"
@@ -348,6 +361,10 @@ def _validate_template_access(req: SimRequest) -> None:
     family = "EUV" if req.preset_id in {"EUV_LNA", "EUV_HNA"} else "DUV"
     if req.mask.template_id not in ENABLED_TEMPLATES_BY_PRESET_FAMILY[family]:
         raise HTTPException(status_code=403, detail=f"{family} preset currently does not expose this pattern.")
+    # req.plan is the effective (server-resolved) plan: /simulate and
+    # /simulate/batch overwrite the client-supplied plan before policy runs.
+    if req.plan == "FREE" and req.mask.template_id in PRO_ONLY_TEMPLATES:
+        raise HTTPException(status_code=403, detail=PRO_ONLY_TEMPLATE_DETAIL)
 
 def _normalize_enabled_preset(req: SimRequest) -> None:
     enabled = ENABLED_PRESETS_BY_PLAN[req.plan]
@@ -1067,8 +1084,15 @@ def _plan_entitlements(plan: Plan) -> PlanEntitlements:
         high_res_export_enabled=plan == "PRO",
         csv_export_enabled=plan == "PRO",
         ads_enabled=plan == "FREE",
+        pro_only_templates=_pro_only_templates_for_plan(plan),
         updated_at_utc=_now_utc_iso(),
     )
+
+def _pro_only_templates_for_plan(plan: Plan) -> list[str]:
+    """Template IDs the plan cannot run; empty for PRO so clients can gate on membership."""
+    if plan == "PRO":
+        return []
+    return sorted(PRO_ONLY_TEMPLATES)
 
 def _current_entitlement_for_user(user_id: str) -> CurrentEntitlementResponse:
     plan = _effective_plan_for_user(user_id)
@@ -1090,6 +1114,7 @@ def _current_entitlement_for_user(user_id: str) -> CurrentEntitlementResponse:
         high_res_export_enabled=base.high_res_export_enabled,
         csv_export_enabled=base.csv_export_enabled,
         ads_enabled=base.ads_enabled,
+        pro_only_templates=base.pro_only_templates,
         updated_at_utc=base.updated_at_utc,
     )
 

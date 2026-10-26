@@ -7,6 +7,38 @@ export const L_SHAPE_RAW_DEFAULTS = {
   EUV: { cd_nm: 24, length_nm: 160, arm_nm: 160, elbow_x_offset_nm: 80, elbow_y_offset_nm: 80 },
 } as const;
 
+// Shared pattern templates (2026-10-25). Mirrored by the backend
+// SHARED_TEMPLATE_DUV_DEFAULTS / SHARED_TEMPLATE_EUV_DEFAULTS in sim/templates.py.
+// cd_nm is always present: the app treats it as the generic "feature size".
+export const TIP_TO_TIP_DEFAULTS = {
+  DUV: { cd_nm: 100, length_nm: 380, gap_nm: 120 },
+  EUV: { cd_nm: 24, length_nm: 150, gap_nm: 32 },
+} as const;
+
+export const TIP_TO_SIDE_DEFAULTS = {
+  DUV: { cd_nm: 100, length_nm: 800, attacker_nm: 380, gap_nm: 110 },
+  EUV: { cd_nm: 24, length_nm: 300, attacker_nm: 140, gap_nm: 30 },
+} as const;
+
+export const TOUCHING_CORNERS_DEFAULTS = {
+  DUV: { w_nm: 260, h_nm: 260, gap_x_nm: 60, gap_y_nm: 60, cd_nm: 260 },
+  EUV: { w_nm: 90, h_nm: 90, gap_x_nm: 20, gap_y_nm: 20, cd_nm: 90 },
+} as const;
+
+export const CONTACT_ARRAY_DEFAULTS = {
+  DUV: { w_nm: 120, pitch_nm: 240, n_rows: 3, n_cols: 3, cd_nm: 120 },
+  EUV: { w_nm: 30, pitch_nm: 64, n_rows: 3, n_cols: 3, cd_nm: 30 },
+} as const;
+
+export const CONTACT_RAW_DEFAULTS = {
+  DUV: { cd_nm: 200, w_nm: 200, serif_nm: 28 },
+  EUV: { cd_nm: 60, w_nm: 60, serif_nm: 10 },
+} as const;
+
+/** Field of view per imaging family. EUV features are 4 to 5 times smaller, so a
+ *  smaller field keeps them legible in 2D and 3D and spends the grid where it matters. */
+export const FOV_NM_BY_FAMILY = { DUV: 1100, EUV: 360 } as const;
+
 export function templateParamDefaults(id: TemplateID, presetId: PresetID): Record<string, number> {
   const normalizedId = normalizeTemplateId(id) ?? id;
   switch (normalizedId) {
@@ -19,7 +51,7 @@ export function templateParamDefaults(id: TemplateID, presetId: PresetID): Recor
     case "ISO_LINE_EUV":
       // EUV 13.5 nm LNA: cd=24 nm ≈ 2× Rayleigh floor (~12 nm).
       // Shows real EUV proximity effects; 500 nm length fits well in the 1100 nm FOV.
-      return { cd_nm: 24, length_nm: 500 };
+      return { cd_nm: 24, length_nm: 300 };
     case "DENSE_LS":
       return presetFamilyForPreset(presetId) === "EUV"
         ? { cd_nm: 24, length_nm: 320, pitch_nm: 48, n_lines: 4 }
@@ -29,11 +61,15 @@ export function templateParamDefaults(id: TemplateID, presetId: PresetID): Recor
     case "LINE_END_RAW_EUV":
       return { cd_nm: 24, length_nm: 160 };
     case "CONTACT_RAW":
-      return {
-        cd_nm: 200,
-        w_nm: 200,
-        serif_nm: 28,
-      };
+      return { ...CONTACT_RAW_DEFAULTS[presetFamilyForPreset(presetId)] };
+    case "TIP_TO_TIP":
+      return { ...TIP_TO_TIP_DEFAULTS[presetFamilyForPreset(presetId)] };
+    case "TIP_TO_SIDE":
+      return { ...TIP_TO_SIDE_DEFAULTS[presetFamilyForPreset(presetId)] };
+    case "TOUCHING_CORNERS":
+      return { ...TOUCHING_CORNERS_DEFAULTS[presetFamilyForPreset(presetId)] };
+    case "CONTACT_ARRAY":
+      return { ...CONTACT_ARRAY_DEFAULTS[presetFamilyForPreset(presetId)] };
     case "CONTACT_OPC_SERIF":
       return {
         cd_nm: 170,

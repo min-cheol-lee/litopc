@@ -2,19 +2,29 @@ import type { PresetID, TemplateID } from "./types";
 
 export type TemplatePresetFamily = "DUV" | "EUV";
 
+/** Shared pattern templates added 2026-10-25 (one ID per pattern, family-scaled defaults). */
+export const SHARED_PATTERN_TEMPLATE_IDS: ReadonlyArray<TemplateID> = [
+  "TIP_TO_TIP",
+  "TIP_TO_SIDE",
+  "TOUCHING_CORNERS",
+  "CONTACT_ARRAY",
+];
+
 const SHARED_TEMPLATE_IDS: ReadonlyArray<TemplateID> = [
   "DENSE_LS",
+  "CONTACT_RAW",
   // LINE_END_RAW / LINE_END_OPC_HAMMER: legacy shared IDs kept for normalisation only.
-  // Active variants are LINE_END_RAW_DUV (DUV_ONLY) and LINE_END_RAW_EUV (EUV_ONLY).
+  // LINE_END_RAW_DUV / LINE_END_RAW_EUV remain valid IDs for saved history but are
+  // no longer in the enabled lists (the library replaced them on 2026-10-25).
   "LINE_END_RAW",
   "LINE_END_OPC_HAMMER",
   "STAIRCASE",
   "STAIRCASE_OPC",
+  ...SHARED_PATTERN_TEMPLATE_IDS,
 ];
 
 const DUV_ONLY_TEMPLATE_IDS: ReadonlyArray<TemplateID> = [
   "ISO_LINE_DUV",
-  "CONTACT_RAW",
   "CONTACT_OPC_SERIF",
   "LINE_END_RAW_DUV",
   "L_CORNER_RAW_DUV",
@@ -28,24 +38,37 @@ const EUV_ONLY_TEMPLATE_IDS: ReadonlyArray<TemplateID> = [
   "L_CORNER_OPC_EUV",
 ];
 
+// Final pattern library order: Iso line, Dense L/S, Square, L-shape (Free),
+// Tip to tip, Tip to side, Touching corners, Contact array (Pro).
 const ENABLED_TEMPLATE_IDS_BY_FAMILY: Record<TemplatePresetFamily, ReadonlyArray<TemplateID>> = {
   DUV: [
     "ISO_LINE_DUV",
     "DENSE_LS",
     "CONTACT_RAW",
-    "LINE_END_RAW_DUV",
     "L_CORNER_RAW_DUV",
+    "TIP_TO_TIP",
+    "TIP_TO_SIDE",
+    "TOUCHING_CORNERS",
+    "CONTACT_ARRAY",
     // OPC preset templates (CONTACT_OPC_SERIF, L_CORNER_OPC_DUV) disabled:
     // auto-correct now generates corrections directly from the RAW targets.
   ],
   EUV: [
     "ISO_LINE_EUV",
     "DENSE_LS",
-    "LINE_END_RAW_EUV",
+    "CONTACT_RAW",
     "L_CORNER_RAW_EUV",
+    "TIP_TO_TIP",
+    "TIP_TO_SIDE",
+    "TOUCHING_CORNERS",
+    "CONTACT_ARRAY",
     // OPC preset templates disabled; stepped presets kept for later.
   ],
 };
+
+export function enabledTemplateIdsForPreset(presetId: PresetID): ReadonlyArray<TemplateID> {
+  return ENABLED_TEMPLATE_IDS_BY_FAMILY[presetFamilyForPreset(presetId)];
+}
 
 export function presetFamilyForPreset(presetId: PresetID): TemplatePresetFamily {
   return presetId === "EUV_LNA" || presetId === "EUV_HNA" ? "EUV" : "DUV";
@@ -78,10 +101,19 @@ export function normalizeTemplateId(templateId: TemplateID | string | null | und
     case "L_CORNER_OPC_EUV":
     case "STAIRCASE":
     case "STAIRCASE_OPC":
+    case "TIP_TO_TIP":
+    case "TIP_TO_SIDE":
+    case "TOUCHING_CORNERS":
+    case "CONTACT_ARRAY":
       return templateId;
     default:
       return null;
   }
+}
+
+export function isSharedPatternTemplate(templateId: TemplateID | string | null | undefined): boolean {
+  const normalized = normalizeTemplateId(templateId);
+  return normalized != null && SHARED_PATTERN_TEMPLATE_IDS.includes(normalized);
 }
 
 export function isLShapeRawTemplate(templateId: TemplateID | string | null | undefined): boolean {
