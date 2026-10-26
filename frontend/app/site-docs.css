@@ -1685,3 +1685,116 @@
   font-weight: 500;
   line-height: 1.5;
 }
+
+/* ---- One "On this page" for the three guides (2026-10-25) ----
+   Wide: the sticky rail of the technical guides, with the section being read in ink and a
+   spectrum stroke on the hairline. The plain-language guide now uses the same grid
+   (200 px rail, 760 px text column) so the rail sits in the same place on every guide.
+   Narrow: one swipeable row of pills on every guide. */
+.pa-doc-contents a {
+  position: relative;
+}
+@media (min-width: 1001px) {
+  .pa-doc-technical .pa-doc-contents a.is-current::before {
+    content: "";
+    position: absolute;
+    left: -17px;
+    top: 1px;
+    bottom: 1px;
+    width: 2px;
+    border-radius: 2px;
+    background: linear-gradient(180deg, #5e5ce6 0%, #bf5af2 100%);
+  }
+
+  .pa-doc-centered .pa-doc-layout {
+    grid-template-columns: 200px minmax(0, 760px);
+    column-gap: 64px;
+    row-gap: 0;
+  }
+  .pa-doc-centered .pa-doc-layout > .pa-doc-header {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .pa-doc-centered .pa-doc-layout > .pa-doc-opening {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .pa-doc-centered .pa-doc-layout > .pa-doc-contents {
+    grid-column: 1;
+    grid-row: 3;
+    position: sticky;
+    top: calc(var(--pa-header) + 28px);
+    align-self: start;
+    display: grid;
+    gap: 10px;
+    justify-content: normal;
+    max-width: none;
+    margin: 72px 0 0;
+    padding: 0 0 0 16px;
+    border-left: 1px solid var(--pa-line);
+    overflow: visible;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  .pa-doc-centered .pa-doc-layout > .pa-doc-contents .pa-doc-contents-head {
+    display: block;
+    flex-basis: auto;
+    margin: 0 0 4px;
+    text-align: left;
+  }
+  .pa-mono .pa-doc-centered .pa-doc-layout > .pa-doc-contents a {
+    display: inline;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    color: #555;
+    font-size: 14px;
+    white-space: normal;
+  }
+  .pa-mono .pa-doc-centered .pa-doc-layout > .pa-doc-contents a:hover {
+    background: none;
+    color: #000;
+  }
+  .pa-doc-centered .pa-doc-layout > .pa-doc-body {
+    grid-column: 2;
+    grid-row: 3;
+    max-width: none;
+    margin: 72px 0 0;
+  }
+}
+.pa-mono .pa .pa-doc-contents a.is-current {
+  color: #111;
+}
+
+@media (max-width: 1000px) {
+  .pa-doc-technical .pa-doc-layout > .pa-doc-contents {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    max-width: none;
+    margin-inline: -4vw;
+    padding: 2px 4vw;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
+  }
+  .pa-doc-technical .pa-doc-layout > .pa-doc-contents::-webkit-scrollbar {
+    display: none;
+  }
+  .pa-doc-technical .pa-doc-layout > .pa-doc-contents .pa-doc-contents-head {
+    display: none;
+  }
+  .pa-doc-technical .pa-doc-layout > .pa-doc-contents a {
+    flex: none;
+    white-space: nowrap;
+  }
+  .pa-mono .pa-doc-technical .pa-doc-contents a.is-current {
+    border-color: #bdbdbd;
+    background: #f4f4f4;
+  }
+  .pa-doc-centered .pa-doc-layout > .pa-doc-contents {
+    margin-top: 26px;
+  }
+}

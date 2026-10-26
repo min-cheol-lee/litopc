@@ -6,6 +6,7 @@ import {
   CREATOR_WEBSITE_URL,
   SIMULATOR_URL,
 } from "../../lib/marketing";
+import { ContentsNav } from "./ContentsNav";
 import { ROUTES } from "./routes";
 import { ShellA, Wordmark } from "./ShellA";
 
@@ -45,9 +46,9 @@ export function TechnicalArticleA({
   contents: { id: string; label: string }[];
   children: ReactNode;
   next: { href: string; label: string };
-  /** One centered column with the contents as pills under the title (picture-first pages). */
+  /** Picture-first pages: centered title and sections in the same text column, beside the same rail. */
   centered?: boolean;
-  /** Shown between the title and the contents (centered pages): the guide's opening tour. */
+  /** Shown under the title, above the text (centered pages): the guide's opening line. */
   beforeContents?: ReactNode;
 }) {
   return (
@@ -59,16 +60,7 @@ export function TechnicalArticleA({
             <h1>{introduction}</h1>
           </header>
           {beforeContents}
-          <nav className="pa-doc-contents" aria-label="On this page">
-            <span className="pa-doc-contents-head" aria-hidden="true">
-              On this page
-            </span>
-            {contents.map((item) => (
-              <a href={`#${item.id}`} key={item.id}>
-                {item.label}
-              </a>
-            ))}
-          </nav>
+          <ContentsNav items={contents} />
           <div className="pa-doc-body">
             {children}
             <div className="pa-doc-actions">

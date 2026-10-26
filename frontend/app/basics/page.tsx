@@ -33,7 +33,7 @@ export const metadata = docMetadataA(
 
 const contents = [
   { id: "stencil", label: "A stencil and a lamp" },
-  { id: "print", label: "What you draw vs what prints" },
+  { id: "print", label: "Drawn vs printed" },
   { id: "miss", label: "Where the print misses" },
   { id: "fix", label: "The fix" },
   { id: "tour", label: "Watch it" },
